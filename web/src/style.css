@@ -1,0 +1,141 @@
+/* ==========================================================================
+   # App-wide Styles
+   - 全局CSS变量 (主题、字体、布局)
+   - 基础元素重置
+   - 通用工具类
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   ## CSS Variables (Design Tokens)
+   - 使用 :root 定义浅色主题
+   - 使用 .dark-theme 定义深色主题
+   - 使用 `var(--variable-name)` 在组件中使用
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* -- Font & Text -- */
+  --font-family-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-size-base: 14px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --line-height-base: 1.6;
+
+  /* -- Colors: Light Theme (Airy &灵动) -- */
+  --color-primary: #3b82f6; /* 主色调: 柔和的蓝色 */
+  --color-primary-hover: #2563eb;
+  --color-primary-light: #eff6ff;
+  
+  --color-bg-base: #f8fafc;        /* 主背景色: 非常浅的灰蓝色，几乎是白色 */
+  --color-bg-secondary: #ffffff;  /* 侧边栏/卡片背景: 纯白，营造层次感 */
+  --color-bg-tertiary: #f1f5f9;   /* 悬浮/选中背景: 稍深的灰 */
+
+  --color-border: #e2e8f0;         /* 边框颜色: 非常柔和的灰色 */
+  --color-divider: #f1f5f9;        /* 分割线颜色 */
+  
+  --color-text-primary: #0f172a;    /* 主要文字: 深灰色，非纯黑，更柔和 */
+  --color-text-secondary: #475569;  /* 次要文字 */
+  --color-text-tertiary: #94a3b8;   /* 辅助/占位文字 */
+  --color-text-on-primary: #ffffff; /* 主色调按钮上的文字 */
+
+  /* -- Layout & Spacing -- */
+  --layout-header-height: 60px;
+  --layout-footer-height: 48px;
+  --sidebar-width-open: 260px;
+  --sidebar-width-collapsed: 80px;
+  --sidebar-right-width: 320px;
+  
+  --spacing-unit: 8px;
+  --spacing-xs: calc(var(--spacing-unit) * 0.5);   /* 4px */
+  --spacing-sm: var(--spacing-unit);             /* 8px */
+  --spacing-md: calc(var(--spacing-unit) * 2);   /* 16px */
+  --spacing-lg: calc(var(--spacing-unit) * 3);   /* 24px */
+  --spacing-xl: calc(var(--spacing-unit) * 4);   /* 32px */
+
+  /* -- Borders & Radius -- */
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+
+  /* -- Transitions & Shadows -- */
+  --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+.dark-theme {
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-primary-light: rgba(59, 130, 246, 0.1);
+
+  --color-bg-base: #0f172a;       /* 深邃的蓝黑色 */
+  --color-bg-secondary: #1e293b;  /* 卡片/侧边栏背景 */
+  --color-bg-tertiary: #334155;  /* 悬浮/选中背景 */
+  
+  --color-border: #334155;
+  --color-divider: #334155;
+  
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-tertiary: #64748b;
+  --color-text-on-primary: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   ## Base Element Styling
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-base);
+}
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   ## Utility Classes
+   -------------------------------------------------------------------------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
