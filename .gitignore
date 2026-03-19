@@ -12,3 +12,5 @@
 .output/
 .nitro/
 .claude
+
+/app/.venv
