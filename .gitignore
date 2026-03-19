@@ -6,4 +6,8 @@
 .DS_Store
 */dist/
 *.log
-*.lock
+
+# Nuxt
+.nuxt/
+.output/
+.nitro/
