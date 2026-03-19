@@ -8,6 +8,7 @@ dependencies = [
     "asynchttp>=0.0.4",
     "asyncio>=4.0.0",
     "fastapi>=0.135.1",
+    "minio>=7.2.20",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.2",
 ]
