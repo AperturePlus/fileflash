@@ -35,7 +35,7 @@ const handleDrop = (e: DragEvent, folderId: string | null) => {
   emit('drop-on-folder', { sourceItemIds, targetFolderId: folderId });
 };
 
-const handleDragOver = (e: DragEvent, folderId: string | null) => {
+const handleDragOver = (e: DragEvent) => {
   e.preventDefault();
   if (e.dataTransfer) {
     e.dataTransfer.dropEffect = 'move';
@@ -63,7 +63,7 @@ const handleDragLeave = () => {
           class="breadcrumb-link"
           :class="{ 'drag-over': isBeingDraggedOver === item.folderId }"
           @drop="handleDrop($event, item.folderId)"
-          @dragover="handleDragOver($event, item.folderId)"
+          @dragover="handleDragOver($event)"
           @dragenter="handleDragEnter(item.folderId)"
           @dragleave="handleDragLeave"
         >

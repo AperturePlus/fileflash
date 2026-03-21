@@ -7,6 +7,9 @@
  * @property {number} storageUsed - 已用存储
  * @property {string} createdAt - 创建时间
  */
+export type UserRole = 'user' | 'admin';
+export type UserStatus = 'active' | 'suspended';
+
 export interface User{
     userId: string;
     username: string;
@@ -15,6 +18,8 @@ export interface User{
     storageUsed: number;
     //status: 'active' | 'banned' | 'inactive;
     createdAt: string;
+    role?: UserRole;
+    status?: UserStatus;
 }
 
 /**

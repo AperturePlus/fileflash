@@ -31,4 +31,18 @@ export const getStorageSummary = async () => {
  */
 export const getUsageTrend = (params: GetUsageTrendRequest) => {
   return http.get<StorageUsageTrend>('/storage/usage-trend', params);
-}; 
+};
+
+export const getStorageUsers = () => {
+  return http.get<any>('/admin/storage/users');
+};
+
+export const updateStorageQuota = (userId: string, storageLimit: number) => {
+  return http.patch<{
+    userId: string;
+    storageLimit: number;
+    storageUsed: number;
+    usagePercentage: number;
+    updatedAt: string;
+  }>(`/admin/storage/users/${userId}/quota`, { storageLimit });
+};

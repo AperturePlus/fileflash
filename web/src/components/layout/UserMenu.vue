@@ -43,16 +43,13 @@ const handleLogout = () => {
         </div>
         <hr class="divider" />
         <button @click="goToProfile" class="dropdown-item">
-          <span>👤</span>
           <span>My Profile</span>
         </button>
         <button @click="goToSettings" class="dropdown-item">
-          <span>⚙️</span>
           <span>Settings</span>
         </button>
         <hr class="divider" />
         <button @click="handleLogout" class="dropdown-item danger">
-          <span>🚪</span>
           <span>Logout</span>
         </button>
       </div>

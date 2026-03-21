@@ -1,59 +1,93 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
+import { downloadFile, previewFile } from '../../api/file';
 import { useFileStore } from '../../store/file';
-import { storeToRefs } from 'pinia';
-import { previewFile } from '../../api/file';
-import type { FileItem } from '../../types/file';
+
+defineProps<{ visible: boolean }>();
 
 const fileStore = useFileStore();
-const { selectedFile } = storeToRefs(fileStore);
 
-const fileContent = ref<string | null>(null);
-const fileUrl = ref<string | null>(null);
 const isLoading = ref(false);
-const error = ref<string | null>(null);
+const error = ref('');
+const textContent = ref('');
+const objectUrl = ref('');
 
-const isTextFile = computed(() => {
-  const file = selectedFile.value;
-  if (!file || file.itemType !== 'file') return false;
-  const mime = file.mimeType;
-  return mime && (mime.startsWith('text/') || mime === 'application/json');
+const selectedFile = computed(() => {
+  if (!fileStore.selectedFile || fileStore.selectedFile.itemType !== 'file') return null;
+  return fileStore.selectedFile;
 });
 
-const isPdfFile = computed(() => {
-  const file = selectedFile.value;
-  if (!file || file.itemType !== 'file') return false;
-  return file.mimeType === 'application/pdf';
-});
+const selectedMime = computed(() => selectedFile.value?.mimeType || '');
+const isText = computed(() => selectedMime.value.startsWith('text/') || selectedMime.value.includes('json'));
+const isPdf = computed(() => selectedMime.value === 'application/pdf');
+const isImage = computed(() => selectedMime.value.startsWith('image/'));
+const isAudio = computed(() => selectedMime.value.startsWith('audio/'));
+const isVideo = computed(() => selectedMime.value.startsWith('video/'));
 
-watch(selectedFile, async (newFile) => {
-  // Reset state
-  fileContent.value = null;
-  fileUrl.value = null;
-  error.value = null;
+const formatBytes = (bytes: number | undefined) => {
+  if (!bytes) return '--';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+};
 
-  if (newFile && newFile.itemType === 'file') {
-    isLoading.value = true;
-    try {
-      const blob = await previewFile(newFile.id);
-      
-      if (isPdfFile.value) {
-        // For PDF, create a URL to use in an iframe/embed
-        if (fileUrl.value) URL.revokeObjectURL(fileUrl.value);
-        fileUrl.value = URL.createObjectURL(blob);
-      } else if (isTextFile.value) {
-        // For text-based files, read the content as a string
-        fileContent.value = await blob.text();
-      }
-      
-    } catch (e) {
-      error.value = 'Could not load file preview.';
-      console.error(e);
-    } finally {
-      isLoading.value = false;
-    }
+const resetState = () => {
+  textContent.value = '';
+  error.value = '';
+  if (objectUrl.value) {
+    URL.revokeObjectURL(objectUrl.value);
+    objectUrl.value = '';
   }
+};
+
+const loadPreview = async () => {
+  resetState();
+
+  if (!selectedFile.value) {
+    return;
+  }
+
+  isLoading.value = true;
+  try {
+    const blob = await previewFile(selectedFile.value.id);
+    if (isText.value) {
+      textContent.value = await blob.text();
+    } else {
+      objectUrl.value = URL.createObjectURL(blob);
+    }
+  } catch {
+    error.value = 'Unable to load file preview.';
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+const downloadSelectedFile = async () => {
+  if (!selectedFile.value) return;
+
+  try {
+    const blob = await downloadFile(selectedFile.value.id);
+    const object = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = object;
+    anchor.download = selectedFile.value.name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(object);
+  } catch {
+    error.value = 'Unable to download this file.';
+  }
+};
+
+watch(selectedFile, () => {
+  loadPreview();
 }, { immediate: true });
+
+onUnmounted(() => {
+  resetState();
+});
 
 const closeSidebar = () => {
   fileStore.selectedFile = null;
@@ -61,34 +95,49 @@ const closeSidebar = () => {
 </script>
 
 <template>
-  <aside :class="['right-sidebar', { visible: !!selectedFile }]">
-    <div v-if="selectedFile" class="sidebar-header">
-      <h3 class="filename" :title="selectedFile.name">{{ selectedFile.name }}</h3>
-      <button @click="closeSidebar" class="close-btn" aria-label="Close details">×</button>
-    </div>
-    <div class="sidebar-content">
-      <div v-if="isLoading" class="centered-message">Loading preview...</div>
-      <div v-else-if="error" class="centered-message error-message">{{ error }}</div>
-      
-      <div v-else-if="selectedFile">
-        <!-- Text/JSON Preview -->
-        <pre v-if="isTextFile" class="text-preview">{{ fileContent }}</pre>
-        
-        <!-- PDF Preview -->
-        <div v-else-if="isPdfFile" class="pdf-preview">
-          <iframe :src="fileUrl!" title="PDF Preview" frameborder="0"></iframe>
+  <aside :class="['right-sidebar', { visible }]">
+    <template v-if="selectedFile">
+      <header class="sidebar-header">
+        <div>
+          <h3 class="filename" :title="selectedFile.name">{{ selectedFile.name }}</h3>
+          <p class="meta">{{ selectedMime || 'unknown type' }} | {{ formatBytes(selectedFile.size) }}</p>
         </div>
+        <button class="close-btn" @click="closeSidebar" aria-label="Close preview panel">x</button>
+      </header>
 
-        <!-- Fallback for unsupported types -->
-        <div v-else class="centered-message">
-          <p>No preview available for this file type.</p>
-          <small v-if="selectedFile.itemType === 'file'">{{ selectedFile.mimeType }}</small>
-        </div>
+      <div class="sidebar-actions">
+        <button class="action-btn" @click="downloadSelectedFile">Download</button>
+        <button class="action-btn" @click="loadPreview">Reload Preview</button>
       </div>
 
-       <div v-else class="centered-message">
-        <p>Select a file to see its details.</p>
+      <div class="sidebar-content">
+        <div v-if="isLoading" class="state">Loading preview...</div>
+        <div v-else-if="error" class="state error">{{ error }}</div>
+
+        <pre v-else-if="isText" class="text-preview">{{ textContent }}</pre>
+
+        <div v-else-if="isImage" class="image-preview">
+          <img :src="objectUrl" alt="Image preview" />
+        </div>
+
+        <div v-else-if="isPdf" class="pdf-preview">
+          <iframe :src="objectUrl" title="PDF preview" />
+        </div>
+
+        <div v-else-if="isAudio" class="media-preview">
+          <audio :src="objectUrl" controls preload="metadata" />
+        </div>
+
+        <div v-else-if="isVideo" class="media-preview">
+          <video :src="objectUrl" controls preload="metadata" />
+        </div>
+
+        <div v-else class="state">Preview is not available for this file type.</div>
       </div>
+    </template>
+
+    <div v-else class="sidebar-placeholder">
+      <p>Select a file to preview details.</p>
     </div>
   </aside>
 </template>
@@ -96,80 +145,112 @@ const closeSidebar = () => {
 <style scoped>
 .right-sidebar {
   width: var(--sidebar-right-width);
-  background-color: var(--color-bg-secondary);
-  border-left: 1px solid var(--color-border);
-  flex-shrink: 0;
   margin-right: calc(-1 * var(--sidebar-right-width));
-  transition: margin-right var(--transition-base), background-color var(--transition-base), border-color var(--transition-base);
-  z-index: 900;
+  border-left: 1px solid var(--color-border);
+  background-color: var(--color-bg-secondary);
   display: flex;
   flex-direction: column;
+  transition: margin-right 0.2s ease;
 }
 
 .right-sidebar.visible {
   margin-right: 0;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
 .sidebar-header {
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   border-bottom: 1px solid var(--color-divider);
-  flex-shrink: 0;
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .filename {
-  font-size: 1.1rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-right: var(--spacing-md);
+  font-size: 15px;
+  line-height: 1.35;
+  margin: 0;
+  word-break: break-all;
+}
+
+.meta {
+  margin: 4px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.close-btn,
+.action-btn {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-primary);
+  cursor: pointer;
+  padding: 0 10px;
 }
 
 .close-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: var(--color-text-secondary);
+  width: 32px;
+  padding: 0;
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px var(--spacing-md) 0;
 }
 
 .sidebar-content {
-  padding: var(--spacing-lg);
-  flex-grow: 1;
-  overflow-y: auto;
+  flex: 1;
+  padding: var(--spacing-md);
+  overflow: auto;
 }
 
-.centered-message {
+.sidebar-placeholder,
+.state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  margin-top: 2rem;
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
+  padding: var(--spacing-lg);
 }
 
-.error-message {
+.state.error {
   color: var(--color-danger);
 }
 
 .text-preview {
+  margin: 0;
   white-space: pre-wrap;
-  word-wrap: break-word;
+  word-break: break-word;
   font-family: var(--font-family-mono);
-  font-size: 0.875rem;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
   background-color: var(--color-bg-tertiary);
-  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
+  padding: 12px;
 }
 
-.pdf-preview {
+.image-preview img,
+.media-preview audio,
+.media-preview video,
+.pdf-preview iframe {
   width: 100%;
-  height: 100%;
+  border-radius: var(--border-radius-sm);
+}
+
+.media-preview video {
+  max-height: 320px;
 }
 
 .pdf-preview iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
+  min-height: 520px;
+  border: 1px solid var(--color-border);
+  background-color: #fff;
 }
-</style> 
+</style>

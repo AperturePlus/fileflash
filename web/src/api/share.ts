@@ -6,7 +6,8 @@ import type {
   AccessShareRequest,
   AccessShareResponseData,
   GetSharedItemsRequest,
-  SharedItem
+  SharedItem,
+  UpdateShareSettingsRequest,
 } from '../types/share';
 
 /**
@@ -55,6 +56,10 @@ export const deleteShare = (shareLink: string) => {
   return http.delete<{ shareId: string; shareLink: string; deletedAt: string }>(`/shares/${shareLink}`);
 };
 
+export const updateShareSettings = (shareLink: string, data: UpdateShareSettingsRequest) => {
+  return http.patch<Share>(`/shares/${shareLink}/settings`, data);
+};
+
 /**
  * 获取与我共享的项目列表
  * @param params 查询参数
@@ -62,4 +67,12 @@ export const deleteShare = (shareLink: string) => {
  */
 export const getSharedItems = (params: GetSharedItemsRequest) => {
   return http.get<PaginatedData<SharedItem>>('/shared-items', params);
-}; 
+};
+
+/**
+ * 接受他人共享的文件/文件夹到我的文件
+ * @param itemId 共享项目ID
+ */
+export const acceptSharedItem = (itemId: string) => {
+  return http.post<{ accepted: boolean; acceptedAt: string; itemId: string }>(`/shared-items/${itemId}/accept`);
+};

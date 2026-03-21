@@ -12,12 +12,13 @@ export interface FileItem {
     createdAt: string;
     folderId: string;
     permission?: 'read' | 'write' | 'owner';
+    isStarred?: boolean;
   }
   
   /**
    * 文件夹项的基础结构
    */
-  export interface FolderItem {
+export interface FolderItem {
     itemType: 'folder';
     id: string;
     name: string;
@@ -27,6 +28,7 @@ export interface FileItem {
     createdAt: string;
     parentFolderId: string | null;
     permission?: 'read' | 'write' | 'owner';
+    isStarred?: boolean;
   }
   
   /**
@@ -330,4 +332,26 @@ export interface GetRecycleBinRequest {
   page?: number;
   perPage?: number;
   itemType?: 'file' | 'folder';
+}
+
+export interface AdminFileAuditItem {
+  id: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  hash: string;
+  virusStatus: 'clean' | 'pending' | 'flagged';
+  isShared: boolean;
+  ownerName: string;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface GetAdminFilesRequest {
+  page?: number;
+  perPage?: number;
+  search?: string;
+  virusStatus?: 'clean' | 'pending' | 'flagged';
+  sort?: 'name' | 'size' | 'createdAt' | 'updatedAt';
+  order?: 'asc' | 'desc';
 }

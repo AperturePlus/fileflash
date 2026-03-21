@@ -83,12 +83,12 @@ export function useUpload(currentFolderId: Ref<string | null>) {
         fileStore.items.unshift(fileItem);
         
         // 显示成功提示
-        console.log(`✅ 文件 "${file.name}" 上传成功！`);
+        console.log(`文件 "${file.name}" 上传成功！`);
       } else {
         // If upload completes but no file data is returned (e.g. second upload),
         // refresh the folder to ensure consistency.
         await fileStore.fetchFolderContents(currentFolderId.value || 'root');
-        console.log(`✅ 文件 "${file.name}" 上传完成！`);
+        console.log(`文件 "${file.name}" 上传完成！`);
       }
 
       eventBus.emit('refresh-file-tree');

@@ -12,6 +12,11 @@ export const routes: Array<RouteRecordRaw> = [
     name: 'Register',
     component: () => import('../pages/register/index.ts'),
   },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('../pages/forgot-password/index.ts'),
+  },
   
   {
     path: '/',
@@ -54,7 +59,7 @@ export const routes: Array<RouteRecordRaw> = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../pages/dashboard/index.ts'),
-        meta: { navId: 'dashboard' }
+        meta: { navId: 'dashboard', requiresAdmin: true }
       }
     ],
   },

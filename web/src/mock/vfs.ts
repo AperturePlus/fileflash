@@ -1,6 +1,5 @@
 import Mock from 'mockjs';
 
-// --- Types ---
 export interface VfsNode {
   id: string;
   name: string;
@@ -9,198 +8,496 @@ export interface VfsNode {
   children?: string[];
   size?: number;
   mimeType?: string;
-  content?: string; // Base64 encoded content for files
+  content?: string;
   createdAt: string;
   updatedAt: string;
   permission?: 'read' | 'write' | 'owner';
   isTrashed?: boolean;
   deletedAt?: string;
+  isStarred?: boolean;
+  hash?: string;
+  virusStatus?: 'clean' | 'pending' | 'flagged';
+  thumbnailUrl?: string;
 }
 
 export interface Vfs {
   [key: string]: VfsNode;
 }
 
-// --- Constants ---
-//load from .env file
 const VFS_STORAGE_KEY = import.meta.env.VFS_STORAGE_KEY || 'fileflash-vfs';
 
-// --- Initial Data ---
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function newId() {
+  return Mock.Random.guid();
+}
+
 const initialVfs: Vfs = {
-  'root': { id: 'root', name: 'My Files', type: 'folder', parent: null, children: ['folder1', 'file1', 'file3', 'file4', 'file5', 'file6'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), permission: 'owner' },
-  'folder1': { id: 'folder1', name: 'Work Documents', type: 'folder', parent: 'root', children: ['file2'], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), permission: 'owner' },
-  'file1': { id: 'file1', name: 'notes.txt', type: 'file', parent: 'root', size: 1024, mimeType: 'text/plain', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), permission: 'owner' },
-  'file2': { id: 'file2', name: 'project-brief.docx', type: 'file', parent: 'folder1', size: 20480, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), permission: 'owner' },
-  'file3': { id: 'file3', name: 'main.py', type: 'file', parent: 'root', size: 5120, mimeType: 'text/x-python', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), permission: 'owner' },
-  'file4': { id: 'file4', name: 'archive.zip', type: 'file', parent: 'root', size: 102400, mimeType: 'application/zip', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), permission: 'owner' },
-  'file5': { id: 'file5', name: 'logo.png', type: 'file', parent: 'root', size: 12288, mimeType: 'image/png', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), permission: 'owner' },
-  'file6': { id: 'file6', name: 'installer.exe', type: 'file', parent: 'root', size: 512000, mimeType: 'application/x-msdownload', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), permission: 'owner' },
+  root: {
+    id: 'root',
+    name: 'My Files',
+    type: 'folder',
+    parent: null,
+    children: ['folder1', 'folder2', 'file1', 'file2', 'file3', 'file4', 'file5'],
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+  },
+  folder1: {
+    id: 'folder1',
+    name: 'Work Documents',
+    type: 'folder',
+    parent: 'root',
+    children: ['file6', 'file7'],
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+  },
+  folder2: {
+    id: 'folder2',
+    name: 'Media',
+    type: 'folder',
+    parent: 'root',
+    children: ['file8', 'file9'],
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+  },
+  file1: {
+    id: 'file1',
+    name: 'notes.txt',
+    type: 'file',
+    parent: 'root',
+    size: 1024,
+    mimeType: 'text/plain',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    isStarred: true,
+    hash: 'mock-hash-file1',
+    virusStatus: 'clean',
+  },
+  file2: {
+    id: 'file2',
+    name: 'project-plan.pdf',
+    type: 'file',
+    parent: 'root',
+    size: 256000,
+    mimeType: 'application/pdf',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    hash: 'mock-hash-file2',
+    virusStatus: 'clean',
+  },
+  file3: {
+    id: 'file3',
+    name: 'cover.jpg',
+    type: 'file',
+    parent: 'root',
+    size: 98000,
+    mimeType: 'image/jpeg',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    thumbnailUrl: '/src/assets/image.svg',
+    virusStatus: 'clean',
+  },
+  file4: {
+    id: 'file4',
+    name: 'archive.zip',
+    type: 'file',
+    parent: 'root',
+    size: 102400,
+    mimeType: 'application/zip',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    virusStatus: 'clean',
+  },
+  file5: {
+    id: 'file5',
+    name: 'README.md',
+    type: 'file',
+    parent: 'root',
+    size: 2048,
+    mimeType: 'text/markdown',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    virusStatus: 'clean',
+  },
+  file6: {
+    id: 'file6',
+    name: 'release-notes.docx',
+    type: 'file',
+    parent: 'folder1',
+    size: 30480,
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    virusStatus: 'clean',
+  },
+  file7: {
+    id: 'file7',
+    name: 'budget.xlsx',
+    type: 'file',
+    parent: 'folder1',
+    size: 17890,
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    virusStatus: 'clean',
+  },
+  file8: {
+    id: 'file8',
+    name: 'intro.mp3',
+    type: 'file',
+    parent: 'folder2',
+    size: 4500030,
+    mimeType: 'audio/mpeg',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    isStarred: true,
+    virusStatus: 'clean',
+  },
+  file9: {
+    id: 'file9',
+    name: 'walkthrough.mp4',
+    type: 'file',
+    parent: 'folder2',
+    size: 25000000,
+    mimeType: 'video/mp4',
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    permission: 'owner',
+    virusStatus: 'clean',
+  },
 };
 
-// --- VFS Singleton ---
 let vfs: Vfs;
 
 function saveVfs() {
   localStorage.setItem(VFS_STORAGE_KEY, JSON.stringify(vfs));
 }
 
-function loadVfs(): Vfs {
-  const storedVfs = localStorage.getItem(VFS_STORAGE_KEY);
-  if (storedVfs) {
-    try {
-      const parsed = JSON.parse(storedVfs);
-      
-      // 验证VFS数据完整性
-      if (parsed.root && parsed.root.children) {
-        const rootChildren = parsed.root.children;
-        const childIds = new Set();
-        let hasDuplicates = false;
-        
-        rootChildren.forEach((childId: string) => {
-          if (childIds.has(childId)) {
-            hasDuplicates = true;
-            console.error('🚨 VFS: Duplicate child ID detected:', childId);
-          }
-          childIds.add(childId);
-        });
-        
-        if (hasDuplicates) {
-          console.log('🔧 VFS: Cleaning up duplicate children in root folder');
-          parsed.root.children = [...childIds]; // Remove duplicates
-        }
-      }
-      
-      return parsed;
-    } catch (e) {
-      console.error("Failed to parse VFS from localStorage, resetting.", e);
+function sanitizeVfs(input: Vfs): Vfs {
+  const sanitized: Vfs = { ...input };
+
+  Object.values(sanitized).forEach((node) => {
+    if (node.type === 'folder') {
+      const children = Array.isArray(node.children) ? node.children : [];
+      const deduped = Array.from(new Set(children)).filter((childId) => Boolean(sanitized[childId]));
+      node.children = deduped;
     }
-  }
-  return initialVfs;
+  });
+
+  return sanitized;
 }
 
-// Initialize VFS
-vfs = loadVfs();
-saveVfs(); // Ensure it's saved on first load if it didn't exist
+function loadVfs(): Vfs {
+  const storedVfs = localStorage.getItem(VFS_STORAGE_KEY);
+  if (!storedVfs) {
+    return JSON.parse(JSON.stringify(initialVfs));
+  }
 
-// --- VFS API ---
+  try {
+    const parsed = JSON.parse(storedVfs) as Vfs;
+    if (!parsed.root || parsed.root.type !== 'folder') {
+      return JSON.parse(JSON.stringify(initialVfs));
+    }
+    return sanitizeVfs(parsed);
+  } catch {
+    return JSON.parse(JSON.stringify(initialVfs));
+  }
+}
+
+function ensureFolder(nodeId: string) {
+  const node = vfs[nodeId];
+  if (!node || node.type !== 'folder') {
+    throw new Error(`Folder ${nodeId} not found`);
+  }
+  if (!Array.isArray(node.children)) {
+    node.children = [];
+  }
+  return node;
+}
+
+function removeChild(parentId: string | null, childId: string) {
+  if (!parentId) return;
+  const parent = vfs[parentId];
+  if (!parent || parent.type !== 'folder' || !parent.children) return;
+  parent.children = parent.children.filter((id) => id !== childId);
+}
+
+function appendChild(parentId: string, childId: string) {
+  const parent = ensureFolder(parentId);
+  if (!parent.children!.includes(childId)) {
+    parent.children!.push(childId);
+  }
+}
+
+function cloneNodeRecursively(sourceId: string, targetParentId: string, newName?: string): string {
+  const source = vfs[sourceId];
+  if (!source) throw new Error('Source node not found');
+
+  const nodeId = newId();
+  const timestamp = nowIso();
+  const copy: VfsNode = {
+    ...source,
+    id: nodeId,
+    parent: targetParentId,
+    name: newName ?? source.name,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    isTrashed: false,
+    deletedAt: undefined,
+    isStarred: false,
+  };
+
+  if (copy.type === 'folder') {
+    copy.children = [];
+  }
+
+  vfs[nodeId] = copy;
+  appendChild(targetParentId, nodeId);
+
+  if (source.type === 'folder' && source.children) {
+    source.children.forEach((childId) => {
+      cloneNodeRecursively(childId, nodeId);
+    });
+  }
+
+  return nodeId;
+}
+
+function markSubtree(nodeId: string, updater: (node: VfsNode) => void) {
+  const node = vfs[nodeId];
+  if (!node) return;
+
+  updater(node);
+  if (node.type === 'folder' && node.children) {
+    node.children.forEach((childId) => markSubtree(childId, updater));
+  }
+}
+
+function collectSubtreeStats(nodeId: string): { totalSize: number; fileCount: number; folderCount: number } {
+  const node = vfs[nodeId];
+  if (!node || node.isTrashed) {
+    return { totalSize: 0, fileCount: 0, folderCount: 0 };
+  }
+
+  if (node.type === 'file') {
+    return { totalSize: node.size || 0, fileCount: 1, folderCount: 0 };
+  }
+
+  let totalSize = 0;
+  let fileCount = 0;
+  let folderCount = 1;
+
+  (node.children || []).forEach((childId) => {
+    const childStats = collectSubtreeStats(childId);
+    totalSize += childStats.totalSize;
+    fileCount += childStats.fileCount;
+    folderCount += childStats.folderCount;
+  });
+
+  return { totalSize, fileCount, folderCount };
+}
+
+vfs = loadVfs();
+saveVfs();
+
 export const vfsApi = {
   get: (id: string): VfsNode | undefined => vfs[id],
+
   getAll: (): Vfs => vfs,
-  
+
   getChildren: (folderId: string): VfsNode[] => {
     const parent = vfs[folderId];
-    if (parent && parent.type === 'folder' && parent.children) {
-      return parent.children
-        .map(id => vfs[id])
-        .filter(Boolean)
-        .filter(item => !item.isTrashed); // Filter out trashed items from normal view
+    if (!parent || parent.type !== 'folder' || !parent.children) {
+      return [];
     }
-    return [];
+
+    return parent.children
+      .map((id) => vfs[id])
+      .filter((node): node is VfsNode => Boolean(node))
+      .filter((node) => !node.isTrashed);
   },
-  
+
   getPath: (id: string): VfsNode[] => {
     const path: VfsNode[] = [];
     let current: VfsNode | undefined = vfs[id];
+
     while (current) {
       path.unshift(current);
       current = current.parent ? vfs[current.parent] : undefined;
     }
+
     return path;
   },
 
+  search: (folderId: string, query: string): VfsNode[] => {
+    const lowerQuery = query.trim().toLowerCase();
+    if (!lowerQuery) return [];
+
+    const results: VfsNode[] = [];
+
+    const walk = (nodeId: string) => {
+      const node = vfs[nodeId];
+      if (!node || node.isTrashed) return;
+
+      if (node.id !== folderId && node.name.toLowerCase().includes(lowerQuery)) {
+        results.push(node);
+      }
+
+      if (node.type === 'folder' && node.children) {
+        node.children.forEach((childId) => walk(childId));
+      }
+    };
+
+    walk(folderId);
+    return results;
+  },
+
   createFile: (parentId: string, fileName: string, size: number, mimeType: string, content?: string): VfsNode => {
-    const newId = Mock.Random.guid();
-    const now = new Date().toISOString();
-    const newFile: VfsNode = {
-      id: newId,
+    ensureFolder(parentId);
+
+    const timestamp = nowIso();
+    const file: VfsNode = {
+      id: newId(),
       name: fileName,
       type: 'file',
       parent: parentId,
       size,
       mimeType,
       content,
-      createdAt: now,
-      updatedAt: now,
-      permission: 'owner', // New files created by the user are owned by them
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      permission: 'owner',
+      isStarred: false,
+      hash: `mock-hash-${Mock.Random.string('lower', 12)}`,
+      virusStatus: 'clean',
     };
-    vfs[newId] = newFile;
-    // Ensure parent folder exists and has a children array
-    if (vfs[parentId] && vfs[parentId].children) {
-      vfs[parentId].children?.push(newId);
-    }
+
+    vfs[file.id] = file;
+    appendChild(parentId, file.id);
     saveVfs();
-    return newFile;
+    return file;
   },
-  
+
   createFolder: (parentId: string, folderName: string): VfsNode => {
-    const newId = Mock.Random.guid();
-    const now = new Date().toISOString();
-    const newFolder: VfsNode = {
-      id: newId,
+    ensureFolder(parentId);
+
+    const timestamp = nowIso();
+    const folder: VfsNode = {
+      id: newId(),
       name: folderName,
       type: 'folder',
       parent: parentId,
       children: [],
-      createdAt: now,
-      updatedAt: now,
+      createdAt: timestamp,
+      updatedAt: timestamp,
       permission: 'owner',
+      isStarred: false,
     };
-    vfs[newId] = newFolder;
-    // Ensure parent folder exists and has a children array
-    if (vfs[parentId] && vfs[parentId].children) {
-      vfs[parentId].children?.push(newId);
-    }
+
+    vfs[folder.id] = folder;
+    appendChild(parentId, folder.id);
     saveVfs();
-    return newFolder;
+    return folder;
   },
 
   rename: (id: string, newName: string): VfsNode => {
-    vfs[id].name = newName;
-    vfs[id].updatedAt = new Date().toISOString();
-    saveVfs();
-    return vfs[id];
-  },
-  
-  move: (id: string, targetParentId: string): VfsNode => {
     const node = vfs[id];
-    if (!node) throw new Error("Node to move not found");
-
-    const oldParentId = node.parent;
-    if (oldParentId && vfs[oldParentId]?.children) {
-      const children = vfs[oldParentId].children!;
-      const index = children.indexOf(id);
-      if (index > -1) {
-        children.splice(index, 1);
-      }
+    if (!node) {
+      throw new Error('Node not found');
     }
-    
-    node.parent = targetParentId;
-    vfs[targetParentId].children?.push(id);
-    node.updatedAt = new Date().toISOString();
-    
+
+    node.name = newName;
+    node.updatedAt = nowIso();
     saveVfs();
     return node;
   },
 
-  delete: (id: string) => {
-    const node = vfs[id];
-    if (!node) return;
+  move: (id: string, targetParentId: string): VfsNode => {
+    if (id === 'root') {
+      throw new Error('Root folder cannot be moved');
+    }
 
-    // Remove from parent's children list
-    if (node.parent && vfs[node.parent]?.children) {
-      const children = vfs[node.parent].children!;
-      const index = children.indexOf(id);
-      if (index > -1) {
-        children.splice(index, 1);
+    const node = vfs[id];
+    if (!node) {
+      throw new Error('Node not found');
+    }
+
+    ensureFolder(targetParentId);
+
+    if (node.parent === targetParentId) {
+      return node;
+    }
+
+    if (node.type === 'folder') {
+      let cursor = targetParentId;
+      while (cursor) {
+        if (cursor === id) {
+          throw new Error('Cannot move a folder into itself');
+        }
+        const cursorNode = vfs[cursor];
+        cursor = cursorNode?.parent || '';
       }
     }
 
-    // Mark as trashed
-    node.isTrashed = true;
-    node.deletedAt = new Date().toISOString();
+    removeChild(node.parent, id);
+    node.parent = targetParentId;
+    node.updatedAt = nowIso();
+    appendChild(targetParentId, id);
+    saveVfs();
+    return node;
+  },
 
-    // No recursive action. If a folder is deleted, its children are still in the VFS
-    // but are effectively inaccessible until the parent folder is restored.
+  copy: (id: string, targetParentId: string, newName?: string): VfsNode => {
+    ensureFolder(targetParentId);
+    const newIdValue = cloneNodeRecursively(id, targetParentId, newName);
+    const copied = vfs[newIdValue];
+    saveVfs();
+    return copied;
+  },
+
+  setStarred: (id: string, isStarred: boolean): VfsNode => {
+    const node = vfs[id];
+    if (!node) {
+      throw new Error('Node not found');
+    }
+
+    node.isStarred = isStarred;
+    node.updatedAt = nowIso();
+    saveVfs();
+    return node;
+  },
+
+  getStarred: (): VfsNode[] => {
+    return Object.values(vfs).filter((node) => !node.isTrashed && node.id !== 'root' && node.isStarred);
+  },
+
+  delete: (id: string) => {
+    if (id === 'root') return;
+    const node = vfs[id];
+    if (!node) return;
+
+    removeChild(node.parent, id);
+
+    const deletedAt = nowIso();
+    markSubtree(id, (entry) => {
+      entry.isTrashed = true;
+      entry.deletedAt = deletedAt;
+      entry.updatedAt = deletedAt;
+    });
+
     saveVfs();
   },
 
@@ -208,75 +505,113 @@ export const vfsApi = {
     const node = vfs[id];
     if (!node) return;
 
-    // Un-mark as trashed
-    node.isTrashed = false;
-    delete node.deletedAt;
+    const restoreAncestors = (nodeId: string) => {
+      const current = vfs[nodeId];
+      if (!current || !current.parent) return;
+      const parent = vfs[current.parent];
+      if (!parent) return;
 
-    // Add back to parent's children list
-    if (node.parent && vfs[node.parent]?.children) {
-      if (!vfs[node.parent].children!.includes(id)) {
-        vfs[node.parent].children!.push(id);
+      if (parent.isTrashed) {
+        restoreAncestors(parent.id);
+        parent.isTrashed = false;
+        parent.deletedAt = undefined;
       }
-    }
-    
-    // If a folder is restored, we need to recursively restore its children
-    if (node.type === 'folder' && node.children) {
-        // This is tricky. The simplest way is to not recursively trash.
-        // Let's assume for now children are not marked as trashed when parent is.
-    }
+
+      appendChild(parent.id, current.id);
+    };
+
+    restoreAncestors(id);
+
+    markSubtree(id, (entry) => {
+      entry.isTrashed = false;
+      entry.deletedAt = undefined;
+      entry.updatedAt = nowIso();
+    });
 
     saveVfs();
   },
-  
+
   permanentDelete: (id: string) => {
+    if (id === 'root') return;
     const node = vfs[id];
     if (!node) return;
-    
-    // Recursively delete children if it's a folder
-    if (node.type === 'folder' && node.children) {
-      // Make a copy of children array before iterating
-      [...node.children].forEach(childId => vfsApi.permanentDelete(childId));
-    }
-    
-    // Parent's children list is already updated when item was trashed.
-    
-    delete vfs[id];
+
+    removeChild(node.parent, id);
+
+    const erase = (nodeId: string) => {
+      const target = vfs[nodeId];
+      if (!target) return;
+      if (target.type === 'folder' && target.children) {
+        [...target.children].forEach((childId) => erase(childId));
+      }
+      delete vfs[nodeId];
+    };
+
+    erase(id);
     saveVfs();
   },
 
-  // --- Development helpers ---
-  resetVfs: () => {
-    console.log('🔄 Resetting VFS to initial state...');
-    vfs = JSON.parse(JSON.stringify(initialVfs)); // Deep clone
+  clearRecycleBin: () => {
+    const trashedNodes = Object.values(vfs)
+      .filter((node) => node.isTrashed)
+      .sort((a, b) => (b.type === 'folder' ? 1 : 0) - (a.type === 'folder' ? 1 : 0));
+
+    let fileCount = 0;
+    let folderCount = 0;
+    let totalSize = 0;
+
+    trashedNodes.forEach((node) => {
+      if (!vfs[node.id]) return;
+      if (node.type === 'file') {
+        fileCount += 1;
+        totalSize += node.size || 0;
+      } else {
+        folderCount += 1;
+      }
+      vfsApi.permanentDelete(node.id);
+    });
+
     saveVfs();
-    console.log('✅ VFS reset complete');
+    return {
+      filesDeleted: fileCount,
+      foldersDeleted: folderCount,
+      totalStorageFreed: totalSize,
+    };
+  },
+
+  getFolderStats: (folderId: string) => {
+    const node = vfs[folderId];
+    if (!node || node.type !== 'folder') {
+      throw new Error('Folder not found');
+    }
+
+    const stats = collectSubtreeStats(folderId);
+    return {
+      totalSize: stats.totalSize,
+      fileCount: stats.fileCount,
+      folderCount: Math.max(stats.folderCount - 1, 0),
+    };
+  },
+
+  resetVfs: () => {
+    vfs = JSON.parse(JSON.stringify(initialVfs));
+    saveVfs();
     return vfs;
   },
-  
+
   debugVfs: () => {
-    console.log('🔍 VFS Debug Info:');
-    console.log('Root children:', vfs.root?.children);
-    console.log('All nodes:', Object.keys(vfs));
-    
-    if (vfs.root?.children) {
-      const duplicates = vfs.root.children.filter((id, index, arr) => arr.indexOf(id) !== index);
-      if (duplicates.length > 0) {
-        console.error('❌ Found duplicate children:', duplicates);
-      } else {
-        console.log('✅ No duplicate children found');
-      }
-    }
-    
-    return vfs;
+    return {
+      nodes: Object.keys(vfs).length,
+      rootChildren: vfs.root?.children || [],
+      trashed: Object.values(vfs).filter((node) => node.isTrashed).map((node) => node.id),
+    };
   },
 };
 
-// 在开发环境中暴露调试功能到全局
 if (import.meta.env.DEV) {
   (window as any).vfsDebug = {
     reset: vfsApi.resetVfs,
     debug: vfsApi.debugVfs,
-    getVfs: vfsApi.getAll
+    getVfs: vfsApi.getAll,
   };
-  console.log('🛠️ VFS Debug tools available: vfsDebug.reset(), vfsDebug.debug(), vfsDebug.getVfs()');
-} 
+}

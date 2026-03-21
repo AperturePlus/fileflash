@@ -1,10 +1,10 @@
 import http from '../utils/http';
 import type {
-  PaginatedData,
-  ApiResponse
+  PaginatedData
 } from '../types/base';
 import type {
   FileItem,
+  ContentItem,
   FileDetails,
   GetFilesRequest,
   RenameFileRequest,
@@ -14,7 +14,9 @@ import type {
   UploadPreflightRequest,
   UploadPreflightResponse,
   MergeChunksRequest,
-  MergeChunksResponse
+  MergeChunksResponse,
+  AdminFileAuditItem,
+  GetAdminFilesRequest,
 } from '../types/file';
 
 // 上传相关API
@@ -51,6 +53,13 @@ export const mergeChunks = (uploadId: string, data: MergeChunksRequest) => {
 // 文件管理API
 export const getFiles = (params: GetFilesRequest) => {
   return http.get<PaginatedData<FileItem>>('/files', params);
+};
+
+/**
+ * 获取已星标文件与文件夹
+ */
+export const getStarredFiles = () => {
+  return http.get<PaginatedData<ContentItem>>('/files/starred');
 };
 
 /**
@@ -113,6 +122,15 @@ export const moveFile = (fileId: string, data: MoveFileRequest) => {
 };
 
 /**
+ * 设置文件星标状态
+ * @param fileId 文件ID
+ * @param isStarred 是否星标
+ */
+export const toggleFileStar = (fileId: string, isStarred: boolean) => {
+  return http.patch<FileDetails>(`/files/${fileId}/star`, { isStarred });
+};
+
+/**
  * 复制文件
  * @param fileId 文件ID
  * @param data 复制请求数据
@@ -154,3 +172,11 @@ interface ResponseData {
   action: string; 
   succeeded: number;
 }
+
+export const getAdminFiles = (params: GetAdminFilesRequest) => {
+  return http.get<PaginatedData<AdminFileAuditItem>>('/admin/files', params);
+};
+
+export const rescanAdminFile = (fileId: string) => {
+  return http.post<{ fileId: string; virusStatus: 'clean' | 'pending' | 'flagged'; scannedAt: string }>(`/admin/files/${fileId}/rescan`);
+};

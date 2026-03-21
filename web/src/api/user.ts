@@ -75,6 +75,23 @@ export const register = (data: RegisterRequest) => {
 };
 
 /**
+ * 找回密码 - 发送重置邮件
+ * @param email 邮箱地址
+ */
+export const forgotPassword = (email: string) => {
+  return http.post<{ requestId: string; expiresInMinutes: number }>('/auth/forgot-password', { email });
+};
+
+/**
+ * 重置密码
+ * @param token 重置令牌
+ * @param newPassword 新密码
+ */
+export const resetPassword = (token: string, newPassword: string) => {
+  return http.post<void>('/auth/reset-password', { token, newPassword });
+};
+
+/**
  * 用户登录
  * @param data 登录凭据
  * @returns 登录响应数据
@@ -151,4 +168,20 @@ export const getActivityLog = async (params: GetActivityLogRequest) => {
  */
 export const getUsers = (params: { search?: string; page?: number; perPage?: number }) => {
   return http.get<PaginatedData<User>>('/users', params);
-}; 
+};
+
+export const getAdminUsers = (params: { page?: number; perPage?: number }) => {
+  return http.get<PaginatedData<any>>('/admin/users', params);
+};
+
+export const updateUserStatus = (userId: string, status: 'active' | 'suspended') => {
+  return http.patch<{ userId: string; status: string; updatedAt: string }>(`/admin/users/${userId}/status`, { status });
+};
+
+export const getViolations = () => {
+  return http.get<PaginatedData<any>>('/admin/violations');
+};
+
+export const resolveViolation = (violationId: string) => {
+  return http.post<{ violationId: string; resolvedAt: string }>(`/admin/violations/${violationId}/resolve`);
+};

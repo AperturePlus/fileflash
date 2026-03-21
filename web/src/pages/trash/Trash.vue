@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { getRecycleBin, restoreItem, permanentDelete } from '../../api/recycle';
+import { onMounted, ref } from 'vue';
+import { clearRecycleBin, getRecycleBin, permanentDelete, restoreItem } from '../../api/recycle';
 import type { RecycleBinItem } from '../../types/file';
 import { getIconForFile } from '../../utils/fileIcons';
 import { eventBus } from '../../utils/eventBus';
@@ -14,190 +14,224 @@ const fetchItems = async () => {
     const response = await getRecycleBin({});
     items.value = response.items;
   } catch (error) {
-    console.error('Failed to fetch recycle bin items:', error);
-    alert('Could not load trash items.');
+    console.error('Failed to load recycle bin items', error);
   } finally {
     isLoading.value = false;
   }
 };
 
 const handleRestore = async (item: RecycleBinItem) => {
-  if (!confirm(`Are you sure you want to restore "${item.name}"?`)) return;
+  const confirmed = window.confirm(`Restore \"${item.name}\"?`);
+  if (!confirmed) return;
+
   try {
     await restoreItem(item.id, { itemType: item.itemType });
-    items.value = items.value.filter(i => i.id !== item.id);
+    items.value = items.value.filter((entry) => entry.id !== item.id);
     eventBus.emit('refresh-file-tree');
-    alert('Item restored successfully.');
   } catch (error) {
-    console.error('Failed to restore item:', error);
-    alert('Could not restore item.');
+    console.error('Restore failed', error);
   }
 };
 
 const handlePermanentDelete = async (item: RecycleBinItem) => {
-  if (!confirm(`This action is permanent. Are you sure you want to permanently delete "${item.name}"?`)) return;
+  const confirmed = window.confirm(`Permanently delete \"${item.name}\"? This cannot be undone.`);
+  if (!confirmed) return;
+
   try {
     await permanentDelete(item.id, item.itemType);
-    items.value = items.value.filter(i => i.id !== item.id);
-    alert('Item permanently deleted.');
+    items.value = items.value.filter((entry) => entry.id !== item.id);
   } catch (error) {
-    console.error('Failed to permanently delete item:', error);
-    alert('Could not permanently delete item.');
+    console.error('Permanent delete failed', error);
   }
 };
 
-onMounted(() => {
-  fetchItems();
-});
+const handleClearAll = async () => {
+  if (!items.value.length) return;
+  const confirmed = window.confirm('Clear entire recycle bin? This cannot be undone.');
+  if (!confirmed) return;
+
+  try {
+    await clearRecycleBin();
+    items.value = [];
+  } catch (error) {
+    console.error('Clear recycle bin failed', error);
+  }
+};
+
+onMounted(fetchItems);
 </script>
 
 <template>
-  <div class="trash-page">
+  <section class="trash-page">
     <header class="page-header">
-      <h1>Recycle Bin</h1>
-      <p>Items in the recycle bin will be permanently deleted after 30 days.</p>
-    </header>
-    
-    <div class="trash-list-container">
-      <div v-if="isLoading" class="loading-indicator">Loading...</div>
-      
-      <div v-else-if="items.length === 0" class="empty-trash">
-        <div class="empty-trash-icon">🗑️</div>
-        <p>Your recycle bin is empty.</p>
+      <div>
+        <h1>Recycle Bin</h1>
+        <p>Items are kept for up to 30 days before automatic cleanup.</p>
       </div>
+      <button class="clear-btn" :disabled="!items.length" @click="handleClearAll">Clear Bin</button>
+    </header>
+
+    <div class="trash-card">
+      <div v-if="isLoading" class="state">Loading...</div>
+
+      <div v-else-if="items.length === 0" class="state">Recycle bin is empty.</div>
 
       <div v-else class="trash-list">
-        <!-- List Header -->
         <div class="list-header">
-          <div class="list-cell name">Name</div>
-          <div class="list-cell path">Original Location</div>
-          <div class="list-cell deleted-at">Date Deleted</div>
-          <div class="list-cell expires-in">Expires In</div>
-          <div class="list-cell actions"></div>
+          <div class="col name">Name</div>
+          <div class="col path">Original location</div>
+          <div class="col deleted">Deleted at</div>
+          <div class="col expire">Expires in</div>
+          <div class="col action" />
         </div>
-        <!-- List Body -->
-        <div v-for="item in items" :key="item.id" class="list-item">
-          <div class="list-cell name-cell">
-            <img :src="getIconForFile(item.name)" alt="" class="item-icon-small" />
-            <span class="item-name">{{ item.name }}</span>
+
+        <div v-for="item in items" :key="item.id" class="list-row">
+          <div class="col name name-cell">
+            <img :src="getIconForFile(item.name)" alt="" class="icon" />
+            <span>{{ item.name }}</span>
           </div>
-          <div class="list-cell path-cell">{{ item.originalPath }}</div>
-          <div class="list-cell deleted-at-cell">{{ new Date(item.deletedAt).toLocaleDateString() }}</div>
-          <div class="list-cell expires-in-cell">{{ item.daysUntilPermanentDelete }} days</div>
-          <div class="list-cell actions-cell">
-            <button @click="handleRestore(item)" class="action-btn restore-btn" title="Restore">
-              <span>♻️</span>
-            </button>
-            <button @click="handlePermanentDelete(item)" class="action-btn delete-btn" title="Delete Permanently">
-              <span>❌</span>
-            </button>
+          <div class="col path">{{ item.originalPath }}</div>
+          <div class="col deleted">{{ new Date(item.deletedAt).toLocaleString() }}</div>
+          <div class="col expire">{{ item.daysUntilPermanentDelete }} days</div>
+          <div class="col action action-cell">
+            <button class="secondary-btn" @click="handleRestore(item)">Restore</button>
+            <button class="danger-btn" @click="handlePermanentDelete(item)">Delete</button>
           </div>
         </div>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
 .trash-page {
-  padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-md);
   height: 100%;
 }
 
 .page-header {
-  margin-bottom: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
 }
-.page-header h1 {
-    font-size: 1.8rem;
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-}
+
 .page-header p {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-base);
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
 }
 
-.trash-list-container {
-  flex-grow: 1;
+.clear-btn,
+.secondary-btn,
+.danger-btn {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.clear-btn,
+.secondary-btn {
+  background-color: var(--color-bg-primary);
+  border-color: var(--color-border);
+}
+
+.danger-btn {
+  background-color: var(--color-danger-light);
+  color: var(--color-danger-dark);
+  border-color: #fca5a5;
+}
+
+.trash-card {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
   background-color: var(--color-bg-secondary);
-  border-radius: var(--border-radius-lg);
   padding: var(--spacing-md);
-  overflow-y: auto;
+  overflow: auto;
 }
 
-.empty-trash {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: var(--color-text-secondary);
-}
-.empty-trash-icon {
-    font-size: 4rem;
-    margin-bottom: var(--spacing-md);
+.state {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
 }
 
 .trash-list {
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
-.list-header, .list-item {
+.list-header,
+.list-row {
   display: grid;
-  grid-template-columns: 2fr 2fr 1fr 1fr 100px;
-  gap: var(--spacing-md);
+  grid-template-columns: 1.4fr 1.3fr 1fr 0.7fr 220px;
+  gap: var(--spacing-sm);
   align-items: center;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-bottom: 1px solid var(--color-border);
 }
 
 .list-header {
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  padding: 0 8px;
 }
 
-.list-item:hover {
+.list-row {
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.list-row:hover {
   background-color: var(--color-bg-tertiary);
 }
 
 .name-cell {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  font-weight: var(--font-weight-medium);
-}
-.item-icon-small {
-  width: 24px;
-  height: 24px;
-}
-.path-cell {
-    color: var(--color-text-secondary);
-}
-.deleted-at-cell {
-    color: var(--color-text-secondary);
-}
-.expires-in-cell {
-    color: var(--color-danger);
+  gap: 8px;
+  min-width: 0;
 }
 
-.actions-cell {
+.name-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon {
+  width: 22px;
+  height: 22px;
+}
+
+.action-cell {
   display: flex;
   justify-content: flex-end;
-  gap: var(--spacing-sm);
+  gap: 8px;
 }
-.action-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--border-radius-sm);
-  padding: var(--spacing-xs);
-  cursor: pointer;
-  transition: all var(--transition-base);
+
+@media (max-width: 980px) {
+  .list-header,
+  .list-row {
+    grid-template-columns: 1.3fr 1fr 0.8fr 0;
+  }
+
+  .col.action {
+    display: none;
+  }
+
+  .action-cell {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
 }
-.action-btn:hover {
-  background-color: var(--color-bg-tertiary);
-  border-color: var(--color-border-hover);
-}
-</style> 
+</style>

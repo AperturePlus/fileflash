@@ -3,7 +3,6 @@ import type { PaginatedData } from '../types/base';
 import type {
   ContentItem,
   GetFolderContentsRequest,
-  FolderPathResponse,
   FolderItem,
   CreateFolderRequest,
   RenameFolderRequest,
@@ -113,4 +112,13 @@ export const getFolderSize = (folderId: string) => {
  */
 export const copyFolder = (folderId: string, data: { targetParentId: string; newName?: string }) => {
   return http.post<FolderItem>(`/folders/${folderId}/copy`, data);
-}; 
+};
+
+/**
+ * 设置文件夹星标状态
+ * @param folderId 文件夹ID
+ * @param isStarred 是否星标
+ */
+export const toggleFolderStar = (folderId: string, isStarred: boolean) => {
+  return http.patch<FolderItem>(`/folders/${folderId}/star`, { isStarred });
+};

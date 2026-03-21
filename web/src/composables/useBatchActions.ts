@@ -46,7 +46,7 @@ export function useBatchActions(
       window.URL.revokeObjectURL(url);
       clearSelection();
       
-      console.log(`✅ 成功下载 ${idsToDownload.length} 个文件`);
+      console.log(`成功下载 ${idsToDownload.length} 个文件`);
     } catch (error) {
       console.error('Batch download failed:', error);
       
@@ -96,7 +96,7 @@ export function useBatchActions(
         console.log('重新获取当前目录内容...');
         await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root');
         
-        console.log(`✅ 成功删除 ${idsToDelete.length} 个项目，已刷新目录`);
+        console.log(`成功删除 ${idsToDelete.length} 个项目，已刷新目录`);
         // 可选：显示成功提示
         // alert(`Successfully moved ${idsToDelete.length} item(s) to trash.`);
       } else {

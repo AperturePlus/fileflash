@@ -1,4 +1,3 @@
-import { ref } from 'vue';
 import mitt from 'mitt';
 
 type Events = {

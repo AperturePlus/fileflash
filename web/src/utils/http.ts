@@ -2,7 +2,6 @@ import axios from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import qs from 'qs';
 import { useUserStore } from '../store/user';
-import type { ApiResponse } from '../types/base';
 
 // 通过模块扩展为 AxiosRequestConfig 添加自定义属性
 declare module 'axios' {
@@ -61,7 +60,7 @@ instance.interceptors.response.use(
         return response.data;
       }
       // 如果HTTP状态码不是200, Blob中可能包含错误信息
-      return new Promise((resolve, reject) => {
+      return new Promise((_resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
           try {
@@ -109,7 +108,7 @@ instance.interceptors.response.use(
         case 401:
           console.error(`[401] 认证失败: ${errorMessage}`);
           const userStore = useUserStore();
-          userStore.removeToken();
+          userStore.logout();
           // 此处可以添加重定向到登录页的逻辑
           // import router from '../router';
           // router.push('/login');
