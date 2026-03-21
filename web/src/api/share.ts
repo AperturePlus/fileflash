@@ -6,7 +6,8 @@ import type {
   AccessShareRequest,
   AccessShareResponseData,
   GetSharedItemsRequest,
-  SharedItem
+  SharedItem,
+  UpdateShareSettingsRequest,
 } from '../types/share';
 
 /**
@@ -53,6 +54,10 @@ export const accessShare = (shareLink: string, data: AccessShareRequest) => {
  */
 export const deleteShare = (shareLink: string) => {
   return http.delete<{ shareId: string; shareLink: string; deletedAt: string }>(`/shares/${shareLink}`);
+};
+
+export const updateShareSettings = (shareLink: string, data: UpdateShareSettingsRequest) => {
+  return http.patch<Share>(`/shares/${shareLink}/settings`, data);
 };
 
 /**

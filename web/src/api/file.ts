@@ -14,7 +14,9 @@ import type {
   UploadPreflightRequest,
   UploadPreflightResponse,
   MergeChunksRequest,
-  MergeChunksResponse
+  MergeChunksResponse,
+  AdminFileAuditItem,
+  GetAdminFilesRequest,
 } from '../types/file';
 
 // 上传相关API
@@ -170,3 +172,11 @@ interface ResponseData {
   action: string; 
   succeeded: number;
 }
+
+export const getAdminFiles = (params: GetAdminFilesRequest) => {
+  return http.get<PaginatedData<AdminFileAuditItem>>('/admin/files', params);
+};
+
+export const rescanAdminFile = (fileId: string) => {
+  return http.post<{ fileId: string; virusStatus: 'clean' | 'pending' | 'flagged'; scannedAt: string }>(`/admin/files/${fileId}/rescan`);
+};

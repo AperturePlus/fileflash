@@ -36,3 +36,13 @@ export const getUsageTrend = (params: GetUsageTrendRequest) => {
 export const getStorageUsers = () => {
   return http.get<any>('/admin/storage/users');
 };
+
+export const updateStorageQuota = (userId: string, storageLimit: number) => {
+  return http.patch<{
+    userId: string;
+    storageLimit: number;
+    storageUsed: number;
+    usagePercentage: number;
+    updatedAt: string;
+  }>(`/admin/storage/users/${userId}/quota`, { storageLimit });
+};

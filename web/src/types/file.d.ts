@@ -333,3 +333,25 @@ export interface GetRecycleBinRequest {
   perPage?: number;
   itemType?: 'file' | 'folder';
 }
+
+export interface AdminFileAuditItem {
+  id: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  hash: string;
+  virusStatus: 'clean' | 'pending' | 'flagged';
+  isShared: boolean;
+  ownerName: string;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface GetAdminFilesRequest {
+  page?: number;
+  perPage?: number;
+  search?: string;
+  virusStatus?: 'clean' | 'pending' | 'flagged';
+  sort?: 'name' | 'size' | 'createdAt' | 'updatedAt';
+  order?: 'asc' | 'desc';
+}

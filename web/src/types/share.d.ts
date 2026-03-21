@@ -138,3 +138,10 @@ export interface GetSharedItemsRequest {
   sort?: 'name' | 'size' | 'sharedAt' | 'sharedBy';
   order?: 'asc' | 'desc';
 }
+
+export interface UpdateShareSettingsRequest {
+  passwordProtected?: boolean;
+  expireAt?: string | null;
+  allowDownload?: boolean;
+  allowPreview?: boolean;
+}
