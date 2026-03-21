@@ -8,6 +8,7 @@ import type { User } from '../types/user';
 export type MockUserRecord = User & {
   status: 'active' | 'suspended';
   role: 'user' | 'admin';
+  password: string;
 };
 
 const now = () => new Date().toISOString();
@@ -23,16 +24,28 @@ let logId = 1000;
 export const mockUsers: MockUserRecord[] = [
   {
     userId: 'user1',
-    username: 'Demo User',
-    email: 'demo@example.com',
+    username: 'admin',
+    email: 'admin@fileflash.mock',
     storageLimit: 107374182400,
     storageUsed: 21474836480,
     createdAt: '2025-01-10T09:30:00.000Z',
     status: 'active',
     role: 'admin',
+    password: 'admin123',
   },
   {
     userId: 'user2',
+    username: 'demo',
+    email: 'demo@example.com',
+    storageLimit: 53687091200,
+    storageUsed: 10737418240,
+    createdAt: '2025-02-18T10:10:00.000Z',
+    status: 'active',
+    role: 'user',
+    password: 'demo123',
+  },
+  {
+    userId: 'user3',
     username: 'Alice Chen',
     email: 'alice@example.com',
     storageLimit: 53687091200,
@@ -40,9 +53,10 @@ export const mockUsers: MockUserRecord[] = [
     createdAt: '2025-03-12T11:20:00.000Z',
     status: 'active',
     role: 'user',
+    password: 'alice123',
   },
   {
-    userId: 'user3',
+    userId: 'user4',
     username: 'Bob Wang',
     email: 'bob@example.com',
     storageLimit: 53687091200,
@@ -50,9 +64,10 @@ export const mockUsers: MockUserRecord[] = [
     createdAt: '2025-06-02T08:15:00.000Z',
     status: 'active',
     role: 'user',
+    password: 'bob123',
   },
   {
-    userId: 'user4',
+    userId: 'user5',
     username: 'Charlie Li',
     email: 'charlie@example.com',
     storageLimit: 53687091200,
@@ -60,6 +75,7 @@ export const mockUsers: MockUserRecord[] = [
     createdAt: '2025-08-01T06:05:00.000Z',
     status: 'suspended',
     role: 'user',
+    password: 'charlie123',
   },
 ];
 
@@ -267,6 +283,16 @@ export function paginate<T>(items: T[], page = 1, perPage = 20) {
   };
 }
 
+let currentUserId = mockUsers[0].userId;
+
+export function setCurrentUser(userId: string) {
+  const target = mockUsers.find((user) => user.userId === userId);
+  if (target) {
+    currentUserId = target.userId;
+  }
+}
+
 export function getCurrentUser() {
-  return mockUsers[0];
+  const target = mockUsers.find((user) => user.userId === currentUserId);
+  return target || mockUsers[0];
 }

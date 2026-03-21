@@ -1,5 +1,5 @@
 import Mock from 'mockjs';
-import { addLog, addNotification, mockLogs, mockUsers, paginate } from '../state';
+import { addLog, addNotification, getCurrentUser, mockLogs, mockUsers, paginate } from '../state';
 
 const profileGroups = [
   {
@@ -36,7 +36,16 @@ export const setupUserMocks = () => {
     const filtered = mockUsers.filter((user) => {
       if (!search) return true;
       return user.username.toLowerCase().includes(search) || user.email.toLowerCase().includes(search);
-    });
+    }).map((user) => ({
+      userId: user.userId,
+      username: user.username,
+      email: user.email,
+      storageLimit: user.storageLimit,
+      storageUsed: user.storageUsed,
+      createdAt: user.createdAt,
+      role: user.role,
+      status: user.status,
+    }));
 
     return {
       success: true,
@@ -51,7 +60,12 @@ export const setupUserMocks = () => {
     const perPage = Number(url.searchParams.get('perPage') || 20);
 
     const users = mockUsers.map((user) => ({
-      ...user,
+      userId: user.userId,
+      username: user.username,
+      email: user.email,
+      storageLimit: user.storageLimit,
+      storageUsed: user.storageUsed,
+      createdAt: user.createdAt,
       role: user.role,
       status: user.status,
       lastActiveAt: new Date(Date.now() - Mock.Random.integer(1, 72) * 3600000).toISOString(),
@@ -146,7 +160,7 @@ export const setupUserMocks = () => {
   });
 
   Mock.mock(/\/api\/v1\/me\/profile$/, 'get', () => {
-    const user = mockUsers[0];
+    const user = getCurrentUser();
 
     return {
       success: true,
@@ -158,6 +172,8 @@ export const setupUserMocks = () => {
         storageLimit: user.storageLimit,
         storageUsed: user.storageUsed,
         createdAt: user.createdAt,
+        role: user.role,
+        status: user.status,
         updatedAt: new Date().toISOString(),
         lastLogin: new Date(Date.now() - 2 * 3600000).toISOString(),
         groups: profileGroups,
@@ -167,7 +183,7 @@ export const setupUserMocks = () => {
 
   Mock.mock(/\/api\/v1\/me\/update-profile$/, 'put', (options) => {
     const { username, email } = JSON.parse(options.body || '{}');
-    const user = mockUsers[0];
+    const user = getCurrentUser();
 
     if (username) user.username = username;
     if (email) user.email = email;
@@ -182,6 +198,8 @@ export const setupUserMocks = () => {
         storageLimit: user.storageLimit,
         storageUsed: user.storageUsed,
         createdAt: user.createdAt,
+        role: user.role,
+        status: user.status,
         updatedAt: new Date().toISOString(),
         lastLogin: new Date(Date.now() - 2 * 3600000).toISOString(),
         groups: profileGroups,
@@ -200,7 +218,7 @@ export const setupUserMocks = () => {
   });
 
   Mock.mock(/\/api\/v1\/me\/storage-stats$/, 'get', () => {
-    const user = mockUsers[0];
+    const user = getCurrentUser();
     const percentage = Number(((user.storageUsed / user.storageLimit) * 100).toFixed(2));
 
     return {

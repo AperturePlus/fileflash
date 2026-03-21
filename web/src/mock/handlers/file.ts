@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import Mock from 'mockjs';
-import { addLog, addNotification } from '../state';
+import { addLog, addNotification, mockShares } from '../state';
 import { vfsApi, type VfsNode } from '../vfs';
 
 function parseUrl(url: string) {
@@ -97,7 +97,126 @@ function getSortedItems(items: VfsNode[], sort: string | null, order: string | n
   });
 }
 
+function paginateItems<T>(items: T[], page = 1, perPage = 20) {
+  const normalizedPage = Math.max(1, Number(page) || 1);
+  const normalizedPerPage = Math.max(1, Number(perPage) || 20);
+  const start = (normalizedPage - 1) * normalizedPerPage;
+  const sliced = items.slice(start, start + normalizedPerPage);
+  const totalPages = Math.max(1, Math.ceil(items.length / normalizedPerPage));
+
+  return {
+    items: sliced,
+    pagination: {
+      totalItems: items.length,
+      totalPages,
+      perPage: normalizedPerPage,
+      currentPage: normalizedPage,
+      hasPrev: normalizedPage > 1,
+      hasNext: normalizedPage < totalPages,
+    },
+  };
+}
+
+function toAdminFileAuditItem(node: VfsNode) {
+  return {
+    id: node.id,
+    name: node.name,
+    size: node.size || 0,
+    mimeType: node.mimeType || 'application/octet-stream',
+    hash: node.hash || `mock-hash-${node.id}`,
+    virusStatus: node.virusStatus || 'pending',
+    isShared: mockShares.some((share) => share.itemType === 'file' && share.itemInfo.id === node.id),
+    ownerName: 'You',
+    updatedAt: node.updatedAt,
+    createdAt: node.createdAt,
+  };
+}
+
 export const setupFileMocks = () => {
+  Mock.mock(/\/api\/v1\/admin\/files(?:\?.*)?$/, 'get', (options) => {
+    const url = parseUrl(options.url);
+    const search = (url.searchParams.get('search') || '').trim().toLowerCase();
+    const virusStatus = url.searchParams.get('virusStatus');
+    const sort = url.searchParams.get('sort');
+    const order = url.searchParams.get('order');
+    const page = Number(url.searchParams.get('page') || 1);
+    const perPage = Number(url.searchParams.get('perPage') || 20);
+
+    const files = Object.values(vfsApi.getAll()).filter((node) => node.type === 'file' && !node.isTrashed);
+    const sortedNodes = getSortedItems(files, sort, order);
+    const filtered = sortedNodes.filter((node) => {
+      if (search && !node.name.toLowerCase().includes(search)) {
+        return false;
+      }
+      if (virusStatus && (node.virusStatus || 'pending') !== virusStatus) {
+        return false;
+      }
+      return true;
+    });
+
+    return {
+      success: true,
+      code: 200,
+      data: paginateItems(filtered.map(toAdminFileAuditItem), page, perPage),
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/files\/([^/]+)$/, 'get', (options) => {
+    const fileId = (options.url.match(/\/api\/v1\/admin\/files\/([^/?]+)/) || [])[1];
+    const node = vfsApi.get(fileId);
+
+    if (!node || node.type !== 'file' || node.isTrashed) {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    return {
+      success: true,
+      code: 200,
+      data: toAdminFileAuditItem(node),
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/files\/([^/]+)\/rescan$/, 'post', (options) => {
+    const fileId = (options.url.match(/\/api\/v1\/admin\/files\/([^/]+)\/rescan/) || [])[1];
+    const node = vfsApi.get(fileId);
+
+    if (!node || node.type !== 'file' || node.isTrashed) {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    const normalizedName = node.name.toLowerCase();
+    let nextStatus: 'clean' | 'pending' | 'flagged' = 'clean';
+    if (normalizedName.includes('virus') || normalizedName.includes('suspicious')) {
+      nextStatus = 'flagged';
+    } else if (Math.random() < 0.15) {
+      nextStatus = 'pending';
+    }
+
+    node.virusStatus = nextStatus;
+    node.updatedAt = new Date().toISOString();
+    addLog('virus_scan', { fileId: node.id, fileName: node.name, status: node.virusStatus });
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        fileId: node.id,
+        virusStatus: node.virusStatus,
+        scannedAt: node.updatedAt,
+      },
+    };
+  });
+
   Mock.mock(/\/api\/v1\/files\/?(\?.*)?$/, 'get', (options) => {
     const url = parseUrl(options.url);
     const folderId = url.searchParams.get('folderId') || 'root';

@@ -1,5 +1,5 @@
 import Mock from 'mockjs';
-import { mockUsers } from '../state';
+import { addLog, getCurrentUser, mockUsers } from '../state';
 import { vfsApi } from '../vfs';
 
 function computeStorageStats() {
@@ -8,7 +8,8 @@ function computeStorageStats() {
   const folders = nodes.filter((node) => node.type === 'folder' && node.id !== 'root');
 
   const storageUsed = files.reduce((sum, node) => sum + (node.size || 0), 0);
-  const storageLimit = mockUsers[0]?.storageLimit || 100 * 1024 * 1024 * 1024;
+  const currentUser = getCurrentUser();
+  const storageLimit = currentUser.storageLimit || 100 * 1024 * 1024 * 1024;
 
   const bucket = {
     documents: { size: 0, count: 0 },
@@ -121,6 +122,45 @@ export const setupStorageMocks = () => {
           hasPrev: false,
           hasNext: false,
         },
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/storage\/users\/([^/]+)\/quota$/, 'patch', (options) => {
+    const userId = (options.url.match(/\/api\/v1\/admin\/storage\/users\/([^/]+)\/quota/) || [])[1];
+    const { storageLimit } = JSON.parse(options.body || '{}');
+
+    if (!Number.isFinite(storageLimit) || Number(storageLimit) <= 0) {
+      return {
+        success: false,
+        code: 400,
+        message: 'storageLimit must be a positive number',
+        data: null,
+      };
+    }
+
+    const target = mockUsers.find((user) => user.userId === userId);
+    if (!target) {
+      return {
+        success: false,
+        code: 404,
+        message: 'User not found',
+        data: null,
+      };
+    }
+
+    target.storageLimit = Number(storageLimit);
+    addLog('admin_storage_quota_update', { userId: target.userId, storageLimit: target.storageLimit });
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        userId: target.userId,
+        storageLimit: target.storageLimit,
+        storageUsed: target.storageUsed,
+        usagePercentage: Number(((target.storageUsed / target.storageLimit) * 100).toFixed(2)),
+        updatedAt: new Date().toISOString(),
       },
     };
   });

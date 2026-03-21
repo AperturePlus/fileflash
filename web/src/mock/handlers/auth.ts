@@ -1,5 +1,5 @@
 import Mock from 'mockjs';
-import { addLog, addNotification, createMockId, mockUsers } from '../state';
+import { addLog, addNotification, createMockId, getCurrentUser, mockUsers, setCurrentUser } from '../state';
 
 export const setupAuthMocks = () => {
   Mock.mock(/\/api\/v1\/auth\/login/, 'post', (options) => {
@@ -9,7 +9,7 @@ export const setupAuthMocks = () => {
       user.email.toLowerCase() === String(username || '').toLowerCase(),
     );
 
-    if (!targetUser || !password) {
+    if (!targetUser || !password || targetUser.password !== password) {
       return {
         success: false,
         code: 401,
@@ -27,6 +27,7 @@ export const setupAuthMocks = () => {
       };
     }
 
+    setCurrentUser(targetUser.userId);
     addLog('user_login', { userId: targetUser.userId, username: targetUser.username });
 
     return {
@@ -45,19 +46,21 @@ export const setupAuthMocks = () => {
           storageLimit: targetUser.storageLimit,
           storageUsed: targetUser.storageUsed,
           createdAt: targetUser.createdAt,
+          role: targetUser.role,
+          status: targetUser.status,
         },
       },
     };
   });
 
   Mock.mock(/\/api\/v1\/auth\/register/, 'post', (options) => {
-    const { username, email } = JSON.parse(options.body || '{}');
+    const { username, email, password } = JSON.parse(options.body || '{}');
 
-    if (!username || !email) {
+    if (!username || !email || !password) {
       return {
         success: false,
         code: 400,
-        message: 'Username and email are required',
+        message: 'Username, email and password are required',
         data: null,
       };
     }
@@ -85,6 +88,7 @@ export const setupAuthMocks = () => {
       createdAt: new Date().toISOString(),
       status: 'active' as const,
       role: 'user' as const,
+      password,
     };
 
     mockUsers.push(createdUser);
@@ -143,6 +147,7 @@ export const setupAuthMocks = () => {
   });
 
   Mock.mock(/\/api\/v1\/auth\/refresh/, 'post', () => {
+    const user = getCurrentUser();
     return {
       success: true,
       code: 200,
@@ -153,18 +158,21 @@ export const setupAuthMocks = () => {
         expiresIn: 3600,
         refreshToken: `mock-refresh-${createMockId('token')}`,
         user: {
-          userId: mockUsers[0].userId,
-          username: mockUsers[0].username,
-          email: mockUsers[0].email,
-          storageLimit: mockUsers[0].storageLimit,
-          storageUsed: mockUsers[0].storageUsed,
-          createdAt: mockUsers[0].createdAt,
+          userId: user.userId,
+          username: user.username,
+          email: user.email,
+          storageLimit: user.storageLimit,
+          storageUsed: user.storageUsed,
+          createdAt: user.createdAt,
+          role: user.role,
+          status: user.status,
         },
       },
     };
   });
 
   Mock.mock(/\/api\/v1\/auth\/logout/, 'post', () => {
+    setCurrentUser(mockUsers[0].userId);
     addLog('user_logout', { status: 'ok' });
 
     return {

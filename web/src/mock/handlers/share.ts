@@ -125,6 +125,15 @@ export const setupShareMocks = () => {
       };
     }
 
+    if (share.settings.expireAt && new Date(share.settings.expireAt).getTime() < Date.now()) {
+      return {
+        success: false,
+        code: 410,
+        message: 'Share link expired',
+        data: null,
+      };
+    }
+
     share.visitCount = (share.visitCount || 0) + 1;
 
     return {
@@ -136,10 +145,49 @@ export const setupShareMocks = () => {
         itemType: share.itemType,
         itemInfo: share.itemInfo,
         accessUrls: {
-          download: `/api/v1/files/${share.itemInfo.id}/download`,
-          preview: `/api/v1/files/${share.itemInfo.id}/preview`,
+          download: share.settings.allowDownload ? `/api/v1/files/${share.itemInfo.id}/download` : '',
+          preview: share.settings.allowPreview ? `/api/v1/files/${share.itemInfo.id}/preview` : '',
         },
       },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/shares\/([^/]+)\/settings$/, 'patch', (options) => {
+    const shareLink = (options.url.match(/\/api\/v1\/shares\/([^/]+)\/settings/) || [])[1];
+    const payload = JSON.parse(options.body || '{}') as Partial<{
+      passwordProtected: boolean;
+      expireAt: string | null;
+      allowDownload: boolean;
+      allowPreview: boolean;
+    }>;
+    const share = mockShares.find((item) => item.shareLink === shareLink || item.shareId === shareLink);
+
+    if (!share) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Share not found',
+        data: null,
+      };
+    }
+
+    share.settings = {
+      passwordProtected: payload.passwordProtected ?? share.settings.passwordProtected,
+      expireAt: payload.expireAt === undefined ? share.settings.expireAt : payload.expireAt,
+      allowDownload: payload.allowDownload ?? share.settings.allowDownload,
+      allowPreview: payload.allowPreview ?? share.settings.allowPreview,
+    };
+
+    addLog('share_settings_update', {
+      shareId: share.shareId,
+      allowDownload: share.settings.allowDownload ? 1 : 0,
+      allowPreview: share.settings.allowPreview ? 1 : 0,
+    });
+
+    return {
+      success: true,
+      code: 200,
+      data: share,
     };
   });
 
