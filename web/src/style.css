@@ -1,94 +1,107 @@
-/* ==========================================================================
-   # App-wide Styles
-   - 全局CSS变量 (主题、字体、布局)
-   - 基础元素重置
-   - 通用工具类
-   ========================================================================== */
-
-/* --------------------------------------------------------------------------
-   ## CSS Variables (Design Tokens)
-   - 使用 :root 定义浅色主题
-   - 使用 .dark-theme 定义深色主题
-   - 使用 `var(--variable-name)` 在组件中使用
-   -------------------------------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* -- Font & Text -- */
-  --font-family-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-sans: 'Manrope', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
   --font-size-base: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
   --font-weight-normal: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
+  --font-weight-bold: 700;
   --line-height-base: 1.6;
 
-  /* -- Colors: Light Theme (Airy &灵动) -- */
-  --color-primary: #3b82f6; /* 主色调: 柔和的蓝色 */
-  --color-primary-hover: #2563eb;
-  --color-primary-light: #eff6ff;
-  
-  --color-bg-base: #f8fafc;        /* 主背景色: 非常浅的灰蓝色，几乎是白色 */
-  --color-bg-secondary: #ffffff;  /* 侧边栏/卡片背景: 纯白，营造层次感 */
-  --color-bg-tertiary: #f1f5f9;   /* 悬浮/选中背景: 稍深的灰 */
+  --color-primary: #0b6cff;
+  --color-primary-rgb: 11, 108, 255;
+  --color-primary-hover: #0054d1;
+  --color-primary-light: #e7f0ff;
+  --color-primary-dark: #0d3a8c;
+  --color-success: #15a06a;
+  --color-warning: #f59e0b;
+  --color-danger: #dc2626;
+  --color-danger-dark: #b91c1c;
+  --color-danger-light: #fee2e2;
 
-  --color-border: #e2e8f0;         /* 边框颜色: 非常柔和的灰色 */
-  --color-divider: #f1f5f9;        /* 分割线颜色 */
-  
-  --color-text-primary: #0f172a;    /* 主要文字: 深灰色，非纯黑，更柔和 */
-  --color-text-secondary: #475569;  /* 次要文字 */
-  --color-text-tertiary: #94a3b8;   /* 辅助/占位文字 */
-  --color-text-on-primary: #ffffff; /* 主色调按钮上的文字 */
+  --color-bg-base: #f4f7fb;
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #edf2fb;
+  --color-bg-quaternary: #dde6f3;
 
-  /* -- Layout & Spacing -- */
-  --layout-header-height: 60px;
-  --layout-footer-height: 48px;
-  --sidebar-width-open: 260px;
-  --sidebar-width-collapsed: 80px;
-  --sidebar-right-width: 320px;
-  
+  --color-border: #d9e3f0;
+  --color-border-hover: #b8c8df;
+  --color-divider: #e6eef9;
+
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #334155;
+  --color-text-tertiary: #64748b;
+  --color-text-quaternary: #94a3b8;
+  --color-text-on-primary: #ffffff;
+
+  --layout-header-height: 64px;
+  --layout-footer-height: 42px;
+  --sidebar-left-width: 276px;
+  --sidebar-left-collapsed-width: 86px;
+  --sidebar-right-width: 360px;
+
   --spacing-unit: 8px;
-  --spacing-xs: calc(var(--spacing-unit) * 0.5);   /* 4px */
-  --spacing-sm: var(--spacing-unit);             /* 8px */
-  --spacing-md: calc(var(--spacing-unit) * 2);   /* 16px */
-  --spacing-lg: calc(var(--spacing-unit) * 3);   /* 24px */
-  --spacing-xl: calc(var(--spacing-unit) * 4);   /* 32px */
+  --spacing-xs: calc(var(--spacing-unit) * 0.5);
+  --spacing-sm: var(--spacing-unit);
+  --spacing-md: calc(var(--spacing-unit) * 2);
+  --spacing-lg: calc(var(--spacing-unit) * 3);
+  --spacing-xl: calc(var(--spacing-unit) * 4);
 
-  /* -- Borders & Radius -- */
-  --border-radius-sm: 4px;
-  --border-radius-md: 8px;
-  --border-radius-lg: 12px;
+  --border-radius-sm: 6px;
+  --border-radius-md: 10px;
+  --border-radius-lg: 14px;
 
-  /* -- Transitions & Shadows -- */
-  --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --transition-base: all 0.2s ease;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 18px 32px rgba(15, 23, 42, 0.12);
+  --shadow-xl: 0 26px 48px rgba(15, 23, 42, 0.16);
 }
 
 .dark-theme {
-  --color-primary: #60a5fa;
-  --color-primary-hover: #93c5fd;
-  --color-primary-light: rgba(59, 130, 246, 0.1);
+  --color-primary: #5ca4ff;
+  --color-primary-rgb: 92, 164, 255;
+  --color-primary-hover: #3d90f5;
+  --color-primary-light: rgba(92, 164, 255, 0.18);
+  --color-primary-dark: #9dc8ff;
 
-  --color-bg-base: #0f172a;       /* 深邃的蓝黑色 */
-  --color-bg-secondary: #1e293b;  /* 卡片/侧边栏背景 */
-  --color-bg-tertiary: #334155;  /* 悬浮/选中背景 */
-  
-  --color-border: #334155;
-  --color-divider: #334155;
-  
-  --color-text-primary: #f8fafc;
-  --color-text-secondary: #cbd5e1;
-  --color-text-tertiary: #64748b;
-  --color-text-on-primary: #ffffff;
+  --color-bg-base: #0b1220;
+  --color-bg-primary: #101a2b;
+  --color-bg-secondary: #111c2f;
+  --color-bg-tertiary: #1a2840;
+  --color-bg-quaternary: #243653;
+
+  --color-border: #24364f;
+  --color-border-hover: #34507a;
+  --color-divider: #1d2e47;
+
+  --color-text-primary: #eef5ff;
+  --color-text-secondary: #d0def2;
+  --color-text-tertiary: #9eb4d3;
+  --color-text-quaternary: #7d95b7;
+  --color-text-on-primary: #081427;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 18px 32px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 26px 48px rgba(0, 0, 0, 0.48);
 }
-
-/* --------------------------------------------------------------------------
-   ## Base Element Styling
-   -------------------------------------------------------------------------- */
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
 }
 
 body {
@@ -97,10 +110,13 @@ body {
   font-size: var(--font-size-base);
   line-height: var(--line-height-base);
   color: var(--color-text-primary);
-  background-color: var(--color-bg-base);
+  background:
+    radial-gradient(1200px 800px at 0% -20%, rgba(var(--color-primary-rgb), 0.1), transparent 60%),
+    radial-gradient(1000px 700px at 100% 120%, rgba(var(--color-primary-rgb), 0.08), transparent 55%),
+    var(--color-bg-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color var(--transition-base), color var(--transition-base);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #app {
@@ -112,21 +128,31 @@ body {
 a {
   color: var(--color-primary);
   text-decoration: none;
-  transition: color var(--transition-base);
+  transition: color 0.2s ease;
 }
+
 a:hover {
   color: var(--color-primary-hover);
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   margin: 0;
-  font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
 }
 
-/* --------------------------------------------------------------------------
-   ## Utility Classes
-   -------------------------------------------------------------------------- */
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
 
 .visually-hidden {
   position: absolute;

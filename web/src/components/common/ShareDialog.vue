@@ -1,94 +1,190 @@
 <script setup lang="ts">
-import { ref, watch} from 'vue';
+import { computed, ref, watch } from 'vue';
+import { useDebounceFn } from '@vueuse/core';
 import type { ContentItem } from '../../types/file';
-import type { Collaborator, CreateShareRequest } from '../../types/share';
+import type { Collaborator } from '../../types/share';
+import type { PermissionItem } from '../../types/permission';
+import type { User, UserGroup } from '../../types/user';
 import { createShare } from '../../api/share';
+import { getUsers } from '../../api/user';
+import { getUserGroups } from '../../api/usergroup';
+import { createPermission, deletePermission, getPermissions, updatePermission } from '../../api/permission';
 
 interface Props {
   isVisible: boolean;
   itemToShare: ContentItem | null;
 }
+
 const props = defineProps<Props>();
-defineEmits(['close']);
+const emit = defineEmits(['close']);
 
-// --- State for internal sharing (ACL) ---
-const searchInput = ref('');
+const searchKeyword = ref('');
 const searchResults = ref<Collaborator[]>([]);
-const selectedCollaborators = ref<Collaborator[]>([]);
+const collaborators = ref<Collaborator[]>([]);
+const isSearching = ref(false);
 
-// --- State for public link sharing ---
 const publicLinkEnabled = ref(false);
-const publicLink = ref(''); 
+const publicLink = ref('');
 const isCreatingShare = ref(false);
 
-// --- Share creation function ---
-const createPublicShare = async () => {
-  if (!props.itemToShare) {
-    console.error('No item to share provided');
+const currentItemPayload = computed(() => {
+  if (!props.itemToShare) return null;
+
+  if (props.itemToShare.itemType === 'file') {
+    return { fileId: props.itemToShare.id };
+  }
+
+  return { folderId: props.itemToShare.id };
+});
+
+const fetchPermissions = async () => {
+  if (!currentItemPayload.value) return;
+
+  try {
+    const response = await getPermissions({ ...currentItemPayload.value, page: 1, perPage: 50 });
+    collaborators.value = response.items.map((permission: PermissionItem) => ({
+      id: permission.grantedTo.id,
+      name: permission.grantedTo.name,
+      type: permission.grantedTo.type,
+      permission: permission.permission,
+      permissionId: permission.permissionId,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch permissions', error);
+    collaborators.value = [];
+  }
+};
+
+const searchCollaborators = async (keyword: string) => {
+  const query = keyword.trim();
+  if (!query) {
+    searchResults.value = [];
     return;
   }
-  
+
+  isSearching.value = true;
+  try {
+    const [users, groups] = await Promise.all([
+      getUsers({ search: query, page: 1, perPage: 8 }),
+      getUserGroups({ search: query, page: 1, perPage: 8 }),
+    ]);
+
+    const userResults: Collaborator[] = users.items.map((user: User) => ({
+      id: user.userId,
+      name: user.username,
+      type: 'user',
+      email: user.email,
+    }));
+
+    const groupResults: Collaborator[] = groups.items.map((group: UserGroup) => ({
+      id: group.groupId,
+      name: group.name,
+      type: 'group',
+    }));
+
+    const existingIds = new Set(collaborators.value.map((item) => `${item.type}:${item.id}`));
+    searchResults.value = [...userResults, ...groupResults].filter((item) => !existingIds.has(`${item.type}:${item.id}`));
+  } finally {
+    isSearching.value = false;
+  }
+};
+
+const debouncedSearch = useDebounceFn(searchCollaborators, 260);
+
+const addCollaborator = async (target: Collaborator) => {
+  if (!currentItemPayload.value) return;
+
+  try {
+    const created = await createPermission({
+      ...currentItemPayload.value,
+      userId: target.type === 'user' ? target.id : undefined,
+      groupId: target.type === 'group' ? target.id : undefined,
+      permission: 'read',
+    });
+
+    collaborators.value.push({
+      ...target,
+      permission: created.permission,
+      permissionId: created.permissionId,
+    });
+
+    searchKeyword.value = '';
+    searchResults.value = [];
+  } catch (error) {
+    console.error('Failed to add collaborator', error);
+  }
+};
+
+const changePermission = async (collaborator: Collaborator, permission: 'read' | 'write' | 'admin') => {
+  if (!collaborator.permissionId) return;
+
+  try {
+    await updatePermission(collaborator.permissionId, { permission });
+    collaborator.permission = permission;
+  } catch (error) {
+    console.error('Failed to update permission', error);
+  }
+};
+
+const removeCollaborator = async (collaborator: Collaborator) => {
+  if (!collaborator.permissionId) return;
+
+  try {
+    await deletePermission(collaborator.permissionId);
+    collaborators.value = collaborators.value.filter((item) => item.permissionId !== collaborator.permissionId);
+  } catch (error) {
+    console.error('Failed to remove permission', error);
+  }
+};
+
+const createPublicShare = async () => {
+  if (!props.itemToShare) return;
+
   isCreatingShare.value = true;
   try {
-    const shareRequest: CreateShareRequest = {
+    const share = await createShare({
       resourceType: props.itemToShare.itemType,
       resourceId: props.itemToShare.id,
-    };
+    });
 
-    const shareResponse = await createShare(shareRequest);
-    
-    if (shareResponse && shareResponse.shareLink) {
-      publicLink.value = shareResponse.shareLink;
-      console.log('Share created successfully');
-    } else {
-      throw new Error('No share link in response');
-    }
-    
+    publicLink.value = `${window.location.origin}/share/${share.shareLink}`;
   } catch (error) {
-    console.error('Failed to create share:', error);
-    alert('创建分享失败，请重试');
+    console.error('Failed to create share link', error);
     publicLinkEnabled.value = false;
   } finally {
     isCreatingShare.value = false;
   }
 };
-// -------------------------
 
-const fetchExistingCollaborators = async () => {
-  // 暂时禁用权限获取，因为后端没有实现 permissions API
-  console.log('fetchExistingCollaborators disabled for now');
-  selectedCollaborators.value = [];
+const copyLink = async () => {
+  if (!publicLink.value) return;
+
+  try {
+    await navigator.clipboard.writeText(publicLink.value);
+  } catch {
+    window.prompt('Copy this link', publicLink.value);
+  }
 };
 
-// Reset state when the dialog is closed/opened
-watch(() => props.isVisible, async (newValue) => {
-  if (newValue) {
-    // Reset all fields to default when dialog opens
-    searchInput.value = '';
+watch(
+  () => props.isVisible,
+  async (visible) => {
+    if (!visible) return;
+
+    searchKeyword.value = '';
     searchResults.value = [];
     publicLinkEnabled.value = false;
     publicLink.value = '';
-    
-    // 获取现有的协作者信息
-    await fetchExistingCollaborators();
-  }
-});
-// 分享组件 抽象版
-//------------------
-// Watch for public link toggle to create share automatically
-watch(publicLinkEnabled, (newValue) => {
-  console.log('Public link enabled changed:', newValue);
-  if (newValue && props.itemToShare) {
-    console.log('Creating public share automatically...');
+
+    await fetchPermissions();
+  },
+);
+
+watch(publicLinkEnabled, (enabled) => {
+  if (enabled && !publicLink.value) {
     createPublicShare();
   }
 });
-// --------------
-const copyLink = () => {
-    navigator.clipboard.writeText(publicLink.value)
-        .then(() => alert('Link copied to clipboard!'))
-        .catch(err => console.error('Failed to copy link: ', err));
-};
 </script>
 
 <template>
@@ -96,53 +192,82 @@ const copyLink = () => {
     <div v-if="isVisible" class="modal-overlay" @click.self="$emit('close')">
       <div class="modal-dialog">
         <header class="modal-header">
-          <div class="title-section">
-            <span class="header-icon">🤝</span>
-            <h3 class="modal-title">Share '{{ itemToShare?.name }}'</h3>
+          <div>
+            <h3 class="modal-title">Share: {{ itemToShare?.name }}</h3>
+            <p class="subtitle">Manage access and generate a public link.</p>
           </div>
-          <button class="modal-close" @click="$emit('close')">&times;</button>
+          <button class="modal-close" @click="$emit('close')" aria-label="Close dialog">×</button>
         </header>
 
         <div class="modal-body">
-          <!-- 暂时隐藏内部分享功能
-          <div class="share-section internal-sharing">
-            Internal sharing content
-          </div>
-          <hr class="divider" />
-          -->
+          <section class="section">
+            <h4>Collaborator Permissions</h4>
 
-          <!-- Public Link Sharing Section -->
-          <div class="share-section public-sharing">
-            <div class="public-link-header">
-              <span class="header-icon">🔗</span>
-              <div class="public-link-info">
-                <h4>Get public link</h4>
-                <p>Anyone with this link can view</p>
+            <div class="search-box">
+              <input
+                v-model="searchKeyword"
+                type="text"
+                placeholder="Search users or groups"
+                @input="debouncedSearch(searchKeyword)"
+              />
+              <div v-if="isSearching" class="hint">Searching...</div>
+            </div>
+
+            <div v-if="searchResults.length" class="search-list">
+              <button v-for="result in searchResults" :key="`${result.type}-${result.id}`" class="search-item" @click="addCollaborator(result)">
+                <span>{{ result.name }}</span>
+                <small>{{ result.type === 'user' ? result.email : 'User group' }}</small>
+              </button>
+            </div>
+
+            <div v-if="!collaborators.length" class="empty-hint">No collaborators configured.</div>
+
+            <div v-else class="collaborator-list">
+              <div v-for="collaborator in collaborators" :key="collaborator.permissionId || `${collaborator.type}-${collaborator.id}`" class="collaborator-item">
+                <div class="collaborator-meta">
+                  <strong>{{ collaborator.name }}</strong>
+                  <small>{{ collaborator.type === 'user' ? collaborator.email || 'User' : 'Group' }}</small>
+                </div>
+
+                <select
+                  :value="collaborator.permission"
+                  @change="changePermission(collaborator, ($event.target as HTMLSelectElement).value as 'read' | 'write' | 'admin')"
+                >
+                  <option value="read">Read</option>
+                  <option value="write">Write</option>
+                  <option value="admin">Admin</option>
+                </select>
+
+                <button class="remove-btn" @click="removeCollaborator(collaborator)">Remove</button>
               </div>
+            </div>
+          </section>
+
+          <section class="section public-share">
+            <div class="public-head">
+              <div>
+                <h4>Public Link</h4>
+                <p>Anyone with the link can access according to permission rules.</p>
+              </div>
+
               <label class="switch">
-                <input type="checkbox" v-model="publicLinkEnabled" :disabled="isCreatingShare">
-                <span class="slider round"></span>
+                <input v-model="publicLinkEnabled" type="checkbox" :disabled="isCreatingShare" />
+                <span class="slider" />
               </label>
             </div>
-            
-            <transition name="slide-fade">
-              <div v-if="publicLinkEnabled" class="public-link-settings">
-                <div v-if="isCreatingShare" class="loading-indicator">
-                  <span>Creating share link...</span>
-                </div>
-                <div v-else>
-                  <div class="link-display">
-                    <input type="text" :value="publicLink" readonly />
-                    <button class="btn btn-secondary" @click="copyLink">Copy</button>
-                  </div>
-                </div>
+
+            <div v-if="publicLinkEnabled" class="public-content">
+              <div v-if="isCreatingShare" class="hint">Generating link...</div>
+              <div v-else class="link-row">
+                <input type="text" :value="publicLink" readonly />
+                <button @click="copyLink">Copy</button>
               </div>
-            </transition>
-          </div>
+            </div>
+          </section>
         </div>
 
         <footer class="modal-footer">
-          <button class="btn btn-primary" @click="$emit('close')">Done</button>
+          <button class="done-btn" @click="$emit('close')">Done</button>
         </footer>
       </div>
     </div>
@@ -150,229 +275,274 @@ const copyLink = () => {
 </template>
 
 <style scoped>
-/* Base Modal Styles */
 .modal-overlay {
-  position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5);
-  display: flex; justify-content: center; align-items: center; z-index: 2000;
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
 }
+
 .modal-dialog {
-  background-color: var(--color-bg-secondary);
-  border-radius: var(--border-radius-lg);
+  width: min(700px, calc(100vw - 24px));
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background-color: var(--color-bg-primary);
   box-shadow: var(--shadow-xl);
-  width: 100%;
-  max-width: 560px; /* Wider for share dialog */
-  display: flex; flex-direction: column;
-  border: 1px solid var(--color-border);
 }
+
 .modal-header {
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border);
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-divider);
 }
-.title-section {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
+
+.modal-title {
+  margin: 0;
+  font-size: 17px;
 }
-.header-icon { font-size: 1.5rem; }
-.modal-title { margin: 0; font-size: 1.125rem; font-weight: var(--font-weight-semibold); }
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
 .modal-close {
-  background: none; border: none; font-size: 1.75rem; line-height: 1;
-  cursor: pointer; color: var(--color-text-secondary); padding: 0;
-}
-.modal-body { padding: 0; max-height: 70vh; overflow-y: auto; }
-.modal-footer {
-  padding: var(--spacing-lg);
-  border-top: 1px solid var(--color-border);
-  display: flex; justify-content: flex-end;
-  background-color: var(--color-bg-tertiary);
-  border-bottom-left-radius: var(--border-radius-lg);
-  border-bottom-right-radius: var(--border-radius-lg);
-}
-
-/* Share Sections */
-.share-section { padding: var(--spacing-lg); }
-.divider { border: none; border-top: 1px solid var(--color-divider); margin: 0; }
-
-/* Internal Sharing */
-.search-and-add { position: relative; }
-.search-input {
-  width: 100%;
-  padding: var(--spacing-md);
-  border-radius: var(--border-radius-md);
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   border: 1px solid var(--color-border);
   background-color: var(--color-bg-primary);
-  font-size: 1rem;
-}
-.search-results-container {
-  position: absolute;
-  background: var(--color-bg-secondary);
-  width: 100%;
-  border: 1px solid var(--color-border);
-  border-top: none;
-  border-radius: 0 0 var(--border-radius-md) var(--border-radius-md);
-  box-shadow: var(--shadow-md);
-  z-index: 10;
-  max-height: 200px;
-  overflow-y: auto;
-}
-.search-result-item {
-  padding: var(--spacing-sm) var(--spacing-md);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
 }
-.search-result-item:hover { background: var(--color-bg-tertiary); }
-.result-icon { font-size: 1.25rem; }
-.result-info { display: flex; flex-direction: column; }
-.result-name { font-weight: var(--font-weight-medium); }
-.result-detail { color: var(--color-text-tertiary); font-size: 0.875rem; }
 
-.collaborators-list {
-  margin-top: var(--spacing-lg);
-}
-.collaborators-list > p {
-    font-size: .875rem;
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-sm);
-}
-.collaborator-item {
+.modal-body {
+  overflow: auto;
+  padding: 16px;
   display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-sm) 0;
+  flex-direction: column;
+  gap: 14px;
 }
-.collab-icon { font-size: 1.5rem; }
-.collab-info { flex-grow: 1; display: flex; flex-direction: column; }
-.collab-name { font-weight: var(--font-weight-medium); }
-.collab-detail { color: var(--color-text-tertiary); font-size: 0.875rem; }
 
-.permission-select {
-  background: var(--color-bg-secondary);
+.section {
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  padding: var(--spacing-xs) var(--spacing-sm);
-}
-.remove-btn {
-  background: none; border: none; color: var(--color-text-tertiary); cursor: pointer;
-  font-size: 1.25rem;
+  border-radius: 10px;
+  background-color: var(--color-bg-secondary);
+  padding: 12px;
 }
 
-/* Public Sharing */
-.public-link-header {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-}
-.public-link-info {
-    flex-grow: 1;
-}
-.public-link-info h4, .public-link-info p {
-    margin: 0;
-}
-.public-link-info p {
-    font-size: .875rem;
-    color: var(--color-text-secondary);
+.section h4 {
+  margin: 0 0 10px;
 }
 
-.public-link-settings {
-  margin-top: var(--spacing-lg);
-  padding: var(--spacing-lg);
-  background-color: var(--color-bg-tertiary);
-  border-radius: var(--border-radius-md);
-}
-.link-display {
-  display: flex;
-  gap: var(--spacing-sm);
-}
-.link-display input {
-  flex-grow: 1;
+.search-box input {
+  width: 100%;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
   background-color: var(--color-bg-primary);
+  padding: 0 10px;
+}
+
+.search-list {
+  margin-top: 8px;
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  padding: var(--spacing-sm);
+  border-radius: 8px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.search-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.search-item:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.search-item small {
+  color: var(--color-text-tertiary);
+}
+
+.empty-hint,
+.hint {
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+}
+
+.collaborator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.collaborator-item {
+  display: grid;
+  grid-template-columns: 1fr 120px auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px;
+  background-color: var(--color-bg-primary);
+}
+
+.collaborator-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.collaborator-meta strong,
+.collaborator-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaborator-meta small {
+  color: var(--color-text-tertiary);
+}
+
+.collaborator-item select {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  padding: 0 8px;
+}
+
+.remove-btn {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #fca5a5;
+  background-color: var(--color-danger-light);
+  color: var(--color-danger-dark);
+  cursor: pointer;
+}
+
+.public-share .public-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.public-share .public-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+.public-content {
+  margin-top: 10px;
+}
+
+.link-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.link-row input {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-primary);
+  padding: 0 10px;
   font-family: var(--font-family-mono);
-}
-.settings-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing-lg);
-    margin-top: var(--spacing-lg);
-}
-.settings-option {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-sm);
-}
-.checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    cursor: pointer;
-}
-.settings-input {
-    width: 100%;
-    padding: var(--spacing-sm);
-    border-radius: var(--border-radius-md);
-    border: 1px solid var(--color-border);
-    background-color: var(--color-bg-primary);
+  font-size: 12px;
 }
 
-.loading-indicator {
-    text-align: center;
-    padding: var(--spacing-lg);
-    color: var(--color-text-secondary);
-    font-style: italic;
-}
-
-/* Generic Button */
-.btn {
-  padding: var(--spacing-sm) var(--spacing-lg); 
-  border-radius: var(--border-radius-md);
-  border: 1px solid transparent; 
-  cursor: pointer; 
-  font-weight: var(--font-weight-medium);
-  transition: all var(--transition-base);
-}
-.btn-primary {
-  background-color: var(--color-primary); 
-  color: var(--color-text-on-primary);
-  border-color: var(--color-primary);
-}
-.btn-primary:hover:not(:disabled) { 
-  background-color: var(--color-primary-hover); 
-}
-.btn-secondary {
-  background-color: var(--color-bg-primary); 
-  color: var(--color-text-primary);
+.link-row button {
+  height: 36px;
+  border-radius: 8px;
   border: 1px solid var(--color-border);
-}
-.btn-secondary:hover:not(:disabled) { 
-  border-color: var(--color-border-hover); 
+  background-color: var(--color-bg-primary);
+  cursor: pointer;
+  padding: 0 12px;
 }
 
-/* Switch CSS */
-.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-.switch input { opacity: 0; width: 0; height: 0; }
+.modal-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-divider);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.done-btn {
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  padding: 0 14px;
+  color: var(--color-text-on-primary);
+  background-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.switch {
+  width: 44px;
+  height: 24px;
+  position: relative;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
 .slider {
-  position: absolute; cursor: pointer; inset: 0;
-  background-color: var(--color-border); transition: .4s;
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background-color: var(--color-border);
+  transition: 0.2s;
 }
-.slider:before {
-  position: absolute; content: ""; height: 16px; width: 16px;
-  left: 4px; bottom: 4px;
-  background-color: white; transition: .4s;
-}
-input:checked + .slider { background-color: var(--color-primary); }
-input:checked + .slider:before { transform: translateX(20px); }
-.slider.round { border-radius: 24px; }
-.slider.round:before { border-radius: 50%; }
 
-/* Transitions */
-.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.2s ease; }
-.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
-.slide-fade-enter-active { transition: all .3s ease-out; }
-.slide-fade-leave-active { transition: all .3s cubic-bezier(1.0, 0.5, 0.8, 1.0); }
-.slide-fade-enter-from, .slide-fade-leave-to { transform: translateY(-10px); opacity: 0; }
+.slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background-color: #fff;
+  transition: 0.2s;
+}
+
+.switch input:checked + .slider {
+  background-color: var(--color-primary);
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(20px);
+}
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
 </style>

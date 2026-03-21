@@ -49,15 +49,15 @@ const formatFileSize = (bytes: number) => {
 
 const getActivityIcon = (operation: string) => {
   const iconMap: Record<string, string> = {
-    file_upload: '⬆️',
-    file_download: '⬇️',
-    file_delete: '🗑️',
-    folder_create: '📁',
-    file_share: '🔗',
-    user_login: '🔑',
-    login: '🔑'
+    file_upload: 'UP',
+    file_download: 'DL',
+    file_delete: 'DEL',
+    folder_create: 'DIR',
+    file_share: 'SHR',
+    user_login: 'LOG',
+    login: 'LOG'
   };
-  return iconMap[operation] || '📄';
+  return iconMap[operation] || 'EVT';
 };
 
 const getActivityText = (activity: ActivityItem) => {
@@ -87,6 +87,11 @@ const getBrowserName = (userAgent: string) => {
   if (userAgent.includes('Opera')) return 'Opera';
   if (userAgent.includes('MSIE') || userAgent.includes('Trident')) return 'Internet Explorer';
   return '未知浏览器';
+};
+
+const getActivityUserAgent = (activity: ActivityItem) => {
+  const value = activity.details.user_agent;
+  return typeof value === 'string' ? value : '';
 };
 </script>
 
@@ -197,8 +202,8 @@ const getBrowserName = (userAgent: string) => {
                 <div class="activity-meta">
                   <span class="activity-time">{{ new Date(activity.performedAt).toLocaleString('zh-CN') }}</span>
                   <span class="activity-ip">{{ activity.ipAddress }}</span>
-                  <span v-if="activity.details.user_agent" class="activity-browser" :title="activity.details.user_agent">
-                    🌐 {{ getBrowserName(activity.details.user_agent) }}
+                  <span v-if="getActivityUserAgent(activity)" class="activity-browser" :title="getActivityUserAgent(activity)">
+                    {{ getBrowserName(getActivityUserAgent(activity)) }}
                   </span>
                 </div>
               </div>

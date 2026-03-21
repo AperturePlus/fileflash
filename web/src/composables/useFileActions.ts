@@ -97,7 +97,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
       await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root');
       eventBus.emit('refresh-file-tree');
       
-      console.log(`✅ 成功删除 "${item.name}"，已刷新目录`);
+      console.log(`成功删除 "${item.name}"，已刷新目录`);
     } catch (error) {
       console.error(`Failed to delete ${item.name}:`, error);
       alert('Failed to move to trash!');

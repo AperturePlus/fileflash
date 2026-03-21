@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useFileStore } from '../../store/file';
 import { storeToRefs } from 'pinia';
 import AppHeader from './Header.vue';
@@ -11,40 +11,54 @@ const fileStore = useFileStore();
 const { selectedFile } = storeToRefs(fileStore);
 
 const leftSidebarCollapsed = ref(false);
+const rightSidebarHidden = ref(false);
 
-// The right sidebar should be visible if a file is selected for preview
-const rightSidebarVisible = computed(() => selectedFile.value !== null);
+const rightSidebarVisible = computed(() => !!selectedFile.value && !rightSidebarHidden.value);
+
+watch(selectedFile, (value) => {
+  if (!value) {
+    rightSidebarHidden.value = false;
+  }
+});
 
 const toggleLeftSidebar = () => {
   leftSidebarCollapsed.value = !leftSidebarCollapsed.value;
+};
+
+const toggleRightSidebar = () => {
+  if (!selectedFile.value) return;
+  rightSidebarHidden.value = !rightSidebarHidden.value;
 };
 </script>
 
 <template>
   <div class="main-layout">
-    <AppHeader 
+    <AppHeader
       :left-sidebar-collapsed="leftSidebarCollapsed"
       :right-sidebar-visible="rightSidebarVisible"
       @toggle-left-sidebar="toggleLeftSidebar"
-      @toggle-right-sidebar="console.log('toggle right')"
+      @toggle-right-sidebar="toggleRightSidebar"
     />
+
     <div class="layout-body">
       <LeftSidebar :collapsed="leftSidebarCollapsed" />
+
       <main class="main-content">
-        <div class="content-wrapper">
+        <section class="content-wrapper">
           <router-view v-slot="{ Component }">
             <template v-if="Component">
               <Suspense>
-                <component :is="Component"></component>
+                <component :is="Component" />
                 <template #fallback>
-                  <div>Loading...</div>
+                  <div class="loading-fallback">Loading...</div>
                 </template>
               </Suspense>
             </template>
           </router-view>
-        </div>
+        </section>
         <AppFooter />
       </main>
+
       <RightSidebar :visible="rightSidebarVisible" />
     </div>
   </div>
@@ -54,29 +68,41 @@ const toggleLeftSidebar = () => {
 .main-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
   width: 100vw;
-  background-color: var(--color-bg-base);
+  height: 100vh;
 }
 
 .layout-body {
   display: flex;
-  flex-direction: row; /* Changed from flex to row for clarity */
-  flex-grow: 1;
-  overflow: hidden;
-  position: relative;
+  min-height: 0;
+  flex: 1;
 }
 
 .main-content {
-  flex-grow: 1;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  transition: width var(--transition-base);
+  overflow: hidden;
 }
 
 .content-wrapper {
-  padding: var(--spacing-xl);
-  flex-grow: 1;
+  flex: 1;
+  overflow: auto;
+  padding: var(--spacing-lg);
 }
-</style> 
+
+.loading-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  color: var(--color-text-tertiary);
+}
+
+@media (max-width: 960px) {
+  .content-wrapper {
+    padding: var(--spacing-md);
+  }
+}
+</style>

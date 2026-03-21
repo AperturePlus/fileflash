@@ -15,24 +15,21 @@ const isLoading = ref(false);
 const errorMessage = ref('');
 const showPassword = ref(false);
 
-/**
- * Handle login
- */
 const handleLogin = async () => {
   if (isLoading.value) return;
 
   isLoading.value = true;
   errorMessage.value = '';
-  
+
   try {
     const response = await login({
       username: username.value,
       password: password.value,
     });
-    userStore.setToken(response.token);
+
+    userStore.setToken(response.token, response.refreshToken);
     userStore.user = response.user;
-    
-    // 如果选择了记住我，保存到localStorage
+
     if (rememberMe.value) {
       localStorage.setItem('rememberMe', 'true');
       localStorage.setItem('savedUsername', username.value);
@@ -40,421 +37,205 @@ const handleLogin = async () => {
       localStorage.removeItem('rememberMe');
       localStorage.removeItem('savedUsername');
     }
-    
-    router.push('/');
+
+    router.push('/files');
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '登录失败，请检查用户名和密码。';
+    errorMessage.value = error instanceof Error ? error.message : '登录失败，请检查账号信息。';
   } finally {
     isLoading.value = false;
   }
 };
 
-/**
- * Toggle password visibility
- */
-const togglePasswordVisibility = () => {
-  showPassword.value = !showPassword.value;
-};
-
-/**
- * Load saved credentials on component mount
- */
 const loadSavedCredentials = () => {
   const savedRememberMe = localStorage.getItem('rememberMe');
   const savedUsername = localStorage.getItem('savedUsername');
-  
+
   if (savedRememberMe === 'true' && savedUsername) {
     rememberMe.value = true;
     username.value = savedUsername;
   }
 };
 
-// 组件挂载时加载保存的凭据
 loadSavedCredentials();
 </script>
 
 <template>
   <AuthLayout>
-    <div class="login-container">
-      <div class="login-header">
-        <h1 class="title">欢迎使用 fileflash</h1>
-        <p class="subtitle">登录以继续使用</p>
-      </div>
+    <div class="auth-card">
+      <header class="auth-header">
+        <h1>欢迎登录 FileFlash</h1>
+        <p>高效管理你的云端文件与共享协作</p>
+      </header>
 
-      <form @submit.prevent="handleLogin" class="login-form">
-        <div class="form-group">
-          <label for="username">用户名</label>
-          <div class="input-wrapper">
-            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-            <input 
-              id="username" 
-              type="text" 
-              v-model="username" 
-              placeholder="请输入用户名"
-              required 
-            />
-          </div>
-        </div>
+      <form class="auth-form" @submit.prevent="handleLogin">
+        <label class="field">
+          <span>用户名 / 邮箱</span>
+          <input v-model="username" type="text" placeholder="请输入用户名或邮箱" required />
+        </label>
 
-        <div class="form-group">
-          <label for="password">密码</label>
-          <div class="input-wrapper">
-            <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <circle cx="12" cy="16" r="1"></circle>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-            <input 
-              id="password" 
-              :type="showPassword ? 'text' : 'password'"
-              v-model="password" 
-              placeholder="请输入密码"
-              required 
-            />
-            <button 
-              type="button" 
-              class="password-toggle" 
-              @click="togglePasswordVisibility"
-              tabindex="-1"
-            >
-              <svg v-if="showPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                <line x1="1" y1="1" x2="23" y2="23"></line>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
+        <label class="field">
+          <span>密码</span>
+          <div class="password-wrap">
+            <input v-model="password" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" required />
+            <button type="button" class="password-toggle" @click="showPassword = !showPassword">
+              {{ showPassword ? '隐藏' : '显示' }}
             </button>
           </div>
-        </div>
+        </label>
 
-        <div class="form-group checkbox-group">
-          <label class="checkbox-label">
-            <input 
-              type="checkbox" 
-              v-model="rememberMe"
-              class="checkbox-input"
-            />
-            <span class="checkbox-custom"></span>
-            <span class="checkbox-text">记住我</span>
+        <div class="extra-row">
+          <label class="remember">
+            <input v-model="rememberMe" type="checkbox" />
+            <span>记住我</span>
           </label>
+          <router-link to="/forgot-password">忘记密码</router-link>
         </div>
 
-        <div v-if="errorMessage" class="error-message">
-          <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="15" y1="9" x2="9" y2="15"></line>
-            <line x1="9" y1="9" x2="15" y2="15"></line>
-          </svg>
-          {{ errorMessage }}
-        </div>
+        <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
-        <button type="submit" class="login-button" :disabled="isLoading">
-          <svg v-if="isLoading" class="loading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 11-6.219-8.56"/>
-          </svg>
-          <span v-if="isLoading">登录中...</span>
-          <span v-else>登录</span>
+        <button class="submit-btn" type="submit" :disabled="isLoading">
+          {{ isLoading ? '登录中...' : '登录' }}
         </button>
       </form>
 
-      <div class="login-footer">
-        <p>
-          还没有账户？ <a href="/register">立即注册</a>
-        </p>
-      </div>
+      <footer class="auth-footer">
+        <span>还没有账号？</span>
+        <router-link to="/register">立即注册</router-link>
+      </footer>
     </div>
   </AuthLayout>
 </template>
 
 <style scoped>
-.login-container {
+.auth-card {
   width: 100%;
-  max-width: 100%;
-  padding: 2.5rem;
-  background: rgba(255, 255, 255, 0.98);
+  padding: 28px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(20px);
-  border-radius: 20px;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15), 
-              0 10px 30px rgba(0, 0, 0, 0.1);
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  position: relative;
+  box-shadow: 0 24px 44px rgba(15, 23, 42, 0.2);
 }
 
-.login-container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 20px 20px 0 0;
+.auth-header {
+  margin-bottom: 20px;
 }
 
-.login-header {
-  margin-bottom: 2rem;
+.auth-header h1 {
+  font-size: 28px;
+  margin-bottom: 6px;
 }
 
-.title {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin-bottom: 0.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.auth-header p {
+  margin: 0;
+  color: #52667f;
 }
 
-.subtitle {
-  color: var(--color-text-secondary);
-  font-size: 1rem;
-  opacity: 0.8;
-}
-
-.login-form {
-  max-width: 100%;
-  margin: 0 auto;
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-  text-align: left;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-size: 0.9rem;
-}
-
-.input-wrapper {
-  position: relative;
+.auth-form {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.input-icon {
-  position: absolute;
-  left: 12px;
-  width: 20px;
-  height: 20px;
-  color: #9ca3af;
-  z-index: 1;
-  transition: color 0.3s ease;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.input-wrapper:focus-within .input-icon {
-  color: #667eea;
+.field span {
+  font-size: 13px;
+  color: #334155;
 }
 
-.form-group input {
-  width: 100%;
-  padding: 0.9rem 0.9rem 0.9rem 2.8rem;
-  font-size: 1rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  background-color: rgba(255, 255, 255, 0.9);
-  color: var(--color-text-primary);
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+.field input {
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background-color: #fff;
+  padding: 0 12px;
 }
 
-.form-group input:focus {
+.field input:focus {
   outline: none;
-  border-color: #667eea;
-  background-color: rgba(255, 255, 255, 1);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-  transform: translateY(-1px);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.14);
+}
+
+.password-wrap {
+  position: relative;
+}
+
+.password-wrap input {
+  width: 100%;
+  padding-right: 64px;
 }
 
 .password-toggle {
   position: absolute;
-  right: 12px;
-  background: none;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   border: none;
+  background: transparent;
+  color: var(--color-primary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  transition: background-color 0.2s ease;
 }
 
-.password-toggle:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-}
-
-.password-toggle svg {
-  width: 20px;
-  height: 20px;
-  color: #9ca3af;
-}
-
-.checkbox-group {
-  margin-bottom: 2rem;
-}
-
-.checkbox-label {
+.extra-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
-.checkbox-input {
-  display: none;
-}
-
-.checkbox-custom {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #d1d5db;
-  border-radius: 4px;
-  margin-right: 8px;
-  position: relative;
-  transition: all 0.3s ease;
-  background-color: white;
-  flex-shrink: 0;
-  display: inline-block;
-}
-
-.checkbox-input:checked + .checkbox-custom {
-  background-color: #667eea;
-  border-color: #667eea;
-}
-
-.checkbox-input:checked + .checkbox-custom::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 5px;
-  width: 6px;
-  height: 10px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-
-.checkbox-text {
-  user-select: none;
+.remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .error-message {
-  display: flex;
-  align-items: center;
-  color: #ef4444;
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
-  padding: 1rem;
-  border-radius: 12px;
-  margin-bottom: 1.5rem;
-  font-size: 0.9rem;
-  border-left: 4px solid #ef4444;
+  margin: 0;
+  color: var(--color-danger-dark);
+  background-color: var(--color-danger-light);
+  border: 1px solid #fca5a5;
+  border-radius: 10px;
+  padding: 8px 10px;
 }
 
-.error-icon {
-  width: 20px;
-  height: 20px;
-  margin-right: 8px;
-  flex-shrink: 0;
-}
-
-.login-button {
-  width: 100%;
-  padding: 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: white;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.submit-btn {
+  margin-top: 4px;
+  height: 44px;
+  border-radius: 10px;
   border: none;
-  border-radius: 12px;
+  background: linear-gradient(135deg, var(--color-primary), #3b82f6);
+  color: var(--color-text-on-primary);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
 }
 
-.login-button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s;
-}
-
-.login-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-}
-
-.login-button:hover:not(:disabled)::before {
-  left: 100%;
-}
-
-.login-button:disabled {
+.submit-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-  transform: none;
 }
 
-.loading-icon {
-  width: 20px;
-  height: 20px;
-  animation: spin 1s linear infinite;
+.auth-footer {
+  margin-top: 18px;
+  font-size: 13px;
+  color: #475569;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.login-footer {
-  margin-top: 2rem;
-  font-size: 0.9rem;
-  color: var(--color-text-tertiary);
-}
-
-a {
-  color: #667eea;
-  text-decoration: none;
-  font-weight: 600;
-  transition: color 0.3s ease;
-}
-
-a:hover {
-  color: #764ba2;
-  text-decoration: underline;
-}
-
-/* 响应式设计 */
 @media (max-width: 480px) {
-  .login-container {
-    padding: 2rem 1.5rem;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(15px);
+  .auth-card {
+    padding: 22px 18px;
   }
-  
-  .title {
-    font-size: 1.6rem;
-  }
-  
-  .form-group input {
-    padding: 0.8rem 0.8rem 0.8rem 2.6rem;
+
+  .auth-header h1 {
+    font-size: 23px;
   }
 }
 </style>

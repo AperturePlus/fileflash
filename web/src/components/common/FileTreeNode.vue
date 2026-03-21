@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { FolderItem, FileItem, ContentItem } from '../../types/file';
+import type { ContentItem } from '../../types/file';
 import { getFolderContents } from '../../api/folder';
 import { getIconForFile } from '../../utils/fileIcons';
+import folderIcon from '../../assets/generic/folder.svg';
 
 const props = defineProps<{
   node: ContentItem;
@@ -110,7 +111,7 @@ const handleClick = () => {
         {{ isExpanded ? '▼' : '►' }}
       </span>
       <span v-else class="arrow-placeholder"></span>
-      <img :src="isFolder ? '/src/assets/generic/folder.svg' : getIconForFile(node.name)" alt="" class="icon" />
+      <img :src="isFolder ? folderIcon : getIconForFile(node.name)" alt="" class="icon" />
       <span class="name">{{ node.name }}</span>
     </div>
     <div v-if="isExpanded" class="node-children">

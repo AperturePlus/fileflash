@@ -12,12 +12,12 @@ const { settings } = storeToRefs(settingsStore);
 const activeTab = ref('appearance');
 
 const tabs = [
-  { id: 'appearance', name: '外观', icon: '🎨' },
-  { id: 'uploads', name: '上传', icon: '⬆️' },
-  { id: 'files', name: '文件管理', icon: '📁' },
-  { id: 'notifications', name: '通知', icon: '🔔' },
-  { id: 'security', name: '安全', icon: '🔒' },
-  { id: 'advanced', name: '高级', icon: '⚙️' }
+  { id: 'appearance', name: '外观', icon: 'APP' },
+  { id: 'uploads', name: '上传', icon: 'UPL' },
+  { id: 'files', name: '文件管理', icon: 'FILE' },
+  { id: 'notifications', name: '通知', icon: 'NOTE' },
+  { id: 'security', name: '安全', icon: 'SAFE' },
+  { id: 'advanced', name: '高级', icon: 'ADV' }
 ];
 
 const resetSettings = () => {
