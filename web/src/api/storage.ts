@@ -31,4 +31,8 @@ export const getStorageSummary = async () => {
  */
 export const getUsageTrend = (params: GetUsageTrendRequest) => {
   return http.get<StorageUsageTrend>('/storage/usage-trend', params);
-}; 
+};
+
+export const getStorageUsers = () => {
+  return http.get<any>('/admin/storage/users');
+};

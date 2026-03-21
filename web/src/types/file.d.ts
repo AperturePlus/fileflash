@@ -12,12 +12,13 @@ export interface FileItem {
     createdAt: string;
     folderId: string;
     permission?: 'read' | 'write' | 'owner';
+    isStarred?: boolean;
   }
   
   /**
    * 文件夹项的基础结构
    */
-  export interface FolderItem {
+export interface FolderItem {
     itemType: 'folder';
     id: string;
     name: string;
@@ -27,6 +28,7 @@ export interface FileItem {
     createdAt: string;
     parentFolderId: string | null;
     permission?: 'read' | 'write' | 'owner';
+    isStarred?: boolean;
   }
   
   /**

@@ -1,10 +1,10 @@
 import http from '../utils/http';
 import type {
-  PaginatedData,
-  ApiResponse
+  PaginatedData
 } from '../types/base';
 import type {
   FileItem,
+  ContentItem,
   FileDetails,
   GetFilesRequest,
   RenameFileRequest,
@@ -51,6 +51,13 @@ export const mergeChunks = (uploadId: string, data: MergeChunksRequest) => {
 // 文件管理API
 export const getFiles = (params: GetFilesRequest) => {
   return http.get<PaginatedData<FileItem>>('/files', params);
+};
+
+/**
+ * 获取已星标文件与文件夹
+ */
+export const getStarredFiles = () => {
+  return http.get<PaginatedData<ContentItem>>('/files/starred');
 };
 
 /**
@@ -110,6 +117,15 @@ export const renameFile = (fileId: string, data: RenameFileRequest) => {
  */
 export const moveFile = (fileId: string, data: MoveFileRequest) => {
   return http.patch<{ fileId: string; targetFolderId: string; movedAt: string }>(`/files/${fileId}/move`, data);
+};
+
+/**
+ * 设置文件星标状态
+ * @param fileId 文件ID
+ * @param isStarred 是否星标
+ */
+export const toggleFileStar = (fileId: string, isStarred: boolean) => {
+  return http.patch<FileDetails>(`/files/${fileId}/star`, { isStarred });
 };
 
 /**

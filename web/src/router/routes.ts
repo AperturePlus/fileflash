@@ -12,6 +12,11 @@ export const routes: Array<RouteRecordRaw> = [
     name: 'Register',
     component: () => import('../pages/register/index.ts'),
   },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: () => import('../pages/forgot-password/index.ts'),
+  },
   
   {
     path: '/',

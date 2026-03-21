@@ -1,5 +1,5 @@
 import http from '../utils/http';
-import type { NotificationsList, GetNotificationsRequest } from '../types/notification';
+import type { NotificationsList, GetNotificationsRequest, NotificationItem } from '../types/notification';
 
 export const getNotifications = (params: GetNotificationsRequest) => {
   return http.get<NotificationsList>('/notifications', params);
@@ -15,4 +15,8 @@ export const markAllAsRead = () => {
 
 export const deleteNotification = (notificationId: string) => {
   return http.delete<{ notificationId: string }>(`/notifications/${notificationId}`);
-}; 
+};
+
+export const broadcastNotification = (message: string) => {
+  return http.post<NotificationItem>('/notifications/broadcast', { message });
+};

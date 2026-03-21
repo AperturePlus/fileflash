@@ -62,4 +62,12 @@ export const deleteShare = (shareLink: string) => {
  */
 export const getSharedItems = (params: GetSharedItemsRequest) => {
   return http.get<PaginatedData<SharedItem>>('/shared-items', params);
-}; 
+};
+
+/**
+ * 接受他人共享的文件/文件夹到我的文件
+ * @param itemId 共享项目ID
+ */
+export const acceptSharedItem = (itemId: string) => {
+  return http.post<{ accepted: boolean; acceptedAt: string; itemId: string }>(`/shared-items/${itemId}/accept`);
+};

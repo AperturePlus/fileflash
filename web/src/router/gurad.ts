@@ -5,7 +5,7 @@ const LOGIN_ROUTE_NAME = 'Login';
 const HOME_ROUTE_NAME = 'Home';
 
 export function createRouterGuard(router: Router) {
-  router.beforeEach((to, from, next) => {
+  router.beforeEach((to, _from, next) => {
     const userStore = useUserStore();
     const isLoggedIn = !!userStore.token;
 
