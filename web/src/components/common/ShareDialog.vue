@@ -2,10 +2,10 @@
 import { computed, ref, watch } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import type { ContentItem } from '../../types/file';
-import type { Collaborator } from '../../types/share';
+import type { Collaborator, Share } from '../../types/share';
 import type { PermissionItem } from '../../types/permission';
 import type { User, UserGroup } from '../../types/user';
-import { createShare } from '../../api/share';
+import { createShare, getShares, updateShareSettings } from '../../api/share';
 import { getUsers } from '../../api/user';
 import { getUserGroups } from '../../api/usergroup';
 import { createPermission, deletePermission, getPermissions, updatePermission } from '../../api/permission';
@@ -25,7 +25,17 @@ const isSearching = ref(false);
 
 const publicLinkEnabled = ref(false);
 const publicLink = ref('');
+const currentShareLink = ref('');
 const isCreatingShare = ref(false);
+const isSavingSettings = ref(false);
+const settingsMessage = ref('');
+
+const shareSettings = ref({
+  passwordProtected: false,
+  expireAt: '' as string,
+  allowDownload: true,
+  allowPreview: true,
+});
 
 const currentItemPayload = computed(() => {
   if (!props.itemToShare) return null;
@@ -52,6 +62,48 @@ const fetchPermissions = async () => {
   } catch (error) {
     console.error('Failed to fetch permissions', error);
     collaborators.value = [];
+  }
+};
+
+const hydrateShareSettings = (share: Share) => {
+  shareSettings.value = {
+    passwordProtected: share.settings.passwordProtected,
+    expireAt: share.settings.expireAt ? share.settings.expireAt.slice(0, 10) : '',
+    allowDownload: share.settings.allowDownload,
+    allowPreview: share.settings.allowPreview,
+  };
+};
+
+const loadExistingShare = async () => {
+  if (!props.itemToShare) {
+    return;
+  }
+
+  try {
+    const response = await getShares({ page: 1, perPage: 100 });
+    const matched = response.items.find(
+      (item) => item.itemType === props.itemToShare?.itemType && item.itemInfo.id === props.itemToShare?.id,
+    );
+
+    if (!matched) {
+      currentShareLink.value = '';
+      publicLink.value = '';
+      publicLinkEnabled.value = false;
+      shareSettings.value = {
+        passwordProtected: false,
+        expireAt: '',
+        allowDownload: true,
+        allowPreview: true,
+      };
+      return;
+    }
+
+    currentShareLink.value = matched.shareLink;
+    publicLink.value = `${window.location.origin}/share/${matched.shareLink}`;
+    publicLinkEnabled.value = true;
+    hydrateShareSettings(matched);
+  } catch (error) {
+    console.error('Failed to load existing share', error);
   }
 };
 
@@ -141,13 +193,16 @@ const createPublicShare = async () => {
   if (!props.itemToShare) return;
 
   isCreatingShare.value = true;
+  settingsMessage.value = '';
   try {
     const share = await createShare({
       resourceType: props.itemToShare.itemType,
       resourceId: props.itemToShare.id,
     });
 
+    currentShareLink.value = share.shareLink;
     publicLink.value = `${window.location.origin}/share/${share.shareLink}`;
+    hydrateShareSettings(share);
   } catch (error) {
     console.error('Failed to create share link', error);
     publicLinkEnabled.value = false;
@@ -156,11 +211,40 @@ const createPublicShare = async () => {
   }
 };
 
+const saveShareSettings = async () => {
+  if (!currentShareLink.value) return;
+
+  isSavingSettings.value = true;
+  settingsMessage.value = '';
+
+  try {
+    const updated = await updateShareSettings(currentShareLink.value, {
+      passwordProtected: shareSettings.value.passwordProtected,
+      allowDownload: shareSettings.value.allowDownload,
+      allowPreview: shareSettings.value.allowPreview,
+      expireAt: shareSettings.value.expireAt ? `${shareSettings.value.expireAt}T23:59:59.000Z` : null,
+    });
+
+    hydrateShareSettings(updated);
+    settingsMessage.value = 'Share settings saved.';
+  } catch (error) {
+    console.error('Failed to save share settings', error);
+    settingsMessage.value = 'Failed to save settings.';
+  } finally {
+    isSavingSettings.value = false;
+  }
+};
+
+const clearExpireDate = () => {
+  shareSettings.value.expireAt = '';
+};
+
 const copyLink = async () => {
   if (!publicLink.value) return;
 
   try {
     await navigator.clipboard.writeText(publicLink.value);
+    settingsMessage.value = 'Link copied.';
   } catch {
     window.prompt('Copy this link', publicLink.value);
   }
@@ -173,16 +257,19 @@ watch(
 
     searchKeyword.value = '';
     searchResults.value = [];
-    publicLinkEnabled.value = false;
-    publicLink.value = '';
+    settingsMessage.value = '';
 
-    await fetchPermissions();
+    await Promise.all([fetchPermissions(), loadExistingShare()]);
   },
 );
 
 watch(publicLinkEnabled, (enabled) => {
-  if (enabled && !publicLink.value) {
+  if (enabled && !currentShareLink.value) {
     createPublicShare();
+  }
+
+  if (!enabled) {
+    settingsMessage.value = 'Public link hidden in this dialog. Existing links are kept.';
   }
 });
 </script>
@@ -194,9 +281,9 @@ watch(publicLinkEnabled, (enabled) => {
         <header class="modal-header">
           <div>
             <h3 class="modal-title">Share: {{ itemToShare?.name }}</h3>
-            <p class="subtitle">Manage access and generate a public link.</p>
+            <p class="subtitle">Manage collaborator permissions and public link access.</p>
           </div>
-          <button class="modal-close" @click="$emit('close')" aria-label="Close dialog">×</button>
+          <button class="modal-close" @click="$emit('close')" aria-label="Close dialog">x</button>
         </header>
 
         <div class="modal-body">
@@ -247,7 +334,7 @@ watch(publicLinkEnabled, (enabled) => {
             <div class="public-head">
               <div>
                 <h4>Public Link</h4>
-                <p>Anyone with the link can access according to permission rules.</p>
+                <p>Configure password, expiry date, and download/preview permissions.</p>
               </div>
 
               <label class="switch">
@@ -258,10 +345,42 @@ watch(publicLinkEnabled, (enabled) => {
 
             <div v-if="publicLinkEnabled" class="public-content">
               <div v-if="isCreatingShare" class="hint">Generating link...</div>
-              <div v-else class="link-row">
-                <input type="text" :value="publicLink" readonly />
-                <button @click="copyLink">Copy</button>
-              </div>
+              <template v-else>
+                <div class="link-row">
+                  <input type="text" :value="publicLink" readonly />
+                  <button @click="copyLink">Copy</button>
+                </div>
+
+                <div class="settings-grid">
+                  <label class="setting-check">
+                    <input v-model="shareSettings.passwordProtected" type="checkbox" />
+                    <span>Password protected</span>
+                  </label>
+                  <label class="setting-check">
+                    <input v-model="shareSettings.allowDownload" type="checkbox" />
+                    <span>Allow download</span>
+                  </label>
+                  <label class="setting-check">
+                    <input v-model="shareSettings.allowPreview" type="checkbox" />
+                    <span>Allow preview</span>
+                  </label>
+
+                  <div class="setting-date-row">
+                    <label for="share-expire-date">Expire date</label>
+                    <div class="date-input-wrap">
+                      <input id="share-expire-date" v-model="shareSettings.expireAt" type="date" />
+                      <button type="button" class="ghost-btn" @click="clearExpireDate">Clear</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="settings-actions">
+                  <button class="save-btn" :disabled="isSavingSettings" @click="saveShareSettings">
+                    {{ isSavingSettings ? 'Saving...' : 'Save settings' }}
+                  </button>
+                  <span v-if="settingsMessage" class="hint">{{ settingsMessage }}</span>
+                </div>
+              </template>
             </div>
           </section>
         </div>
@@ -286,7 +405,7 @@ watch(publicLinkEnabled, (enabled) => {
 }
 
 .modal-dialog {
-  width: min(700px, calc(100vw - 24px));
+  width: min(760px, calc(100vw - 24px));
   max-height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
@@ -452,6 +571,8 @@ watch(publicLinkEnabled, (enabled) => {
 
 .public-content {
   margin-top: 10px;
+  display: grid;
+  gap: 12px;
 }
 
 .link-row {
@@ -470,13 +591,62 @@ watch(publicLinkEnabled, (enabled) => {
   font-size: 12px;
 }
 
-.link-row button {
+.link-row button,
+.save-btn,
+.ghost-btn {
   height: 36px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
   background-color: var(--color-bg-primary);
   cursor: pointer;
   padding: 0 12px;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.setting-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-date-row {
+  display: grid;
+  gap: 6px;
+}
+
+.setting-date-row label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.date-input-wrap {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) auto;
+  gap: 8px;
+}
+
+.date-input-wrap input {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-primary);
+  padding: 0 10px;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.save-btn {
+  border: none;
+  background-color: var(--color-primary);
+  color: var(--color-text-on-primary);
 }
 
 .modal-footer {
@@ -544,5 +714,18 @@ watch(publicLinkEnabled, (enabled) => {
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
+}
+
+@media (max-width: 760px) {
+  .collaborator-item {
+    grid-template-columns: 1fr;
+  }
+
+  .link-row,
+  .date-input-wrap,
+  .settings-actions {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
 }
 </style>

@@ -59,7 +59,7 @@ export const routes: Array<RouteRecordRaw> = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../pages/dashboard/index.ts'),
-        meta: { navId: 'dashboard' }
+        meta: { navId: 'dashboard', requiresAdmin: true }
       }
     ],
   },

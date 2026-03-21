@@ -294,7 +294,7 @@ onUnmounted(() => {
             />
             <span v-else>{{ item.name }}</span>
 
-            <button class="star-btn" :class="{ active: item.isStarred }" @click.stop="handleToggleStar(item)">`r`n              Star`r`n            </button>
+            <button class="star-btn" :class="{ active: item.isStarred }" @click.stop="handleToggleStar(item)">Star</button>
           </div>
 
           <div class="col size">{{ item.itemType === 'file' ? `${(item.size / 1024).toFixed(1)} KB` : '--' }}</div>

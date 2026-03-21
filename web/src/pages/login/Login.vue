@@ -2,14 +2,13 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../../store/user';
-import { login } from '../../api/user';
 import AuthLayout from '../../components/layout/AuthLayout.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
 
 const username = ref('admin');
-const password = ref('password');
+const password = ref('admin123');
 const rememberMe = ref(false);
 const isLoading = ref(false);
 const errorMessage = ref('');
@@ -22,13 +21,10 @@ const handleLogin = async () => {
   errorMessage.value = '';
 
   try {
-    const response = await login({
+    await userStore.login({
       username: username.value,
       password: password.value,
     });
-
-    userStore.setToken(response.token, response.refreshToken);
-    userStore.user = response.user;
 
     if (rememberMe.value) {
       localStorage.setItem('rememberMe', 'true');
@@ -40,7 +36,7 @@ const handleLogin = async () => {
 
     router.push('/files');
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '登录失败，请检查账号信息。';
+    errorMessage.value = error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
   } finally {
     isLoading.value = false;
   }
@@ -63,22 +59,28 @@ loadSavedCredentials();
   <AuthLayout>
     <div class="auth-card">
       <header class="auth-header">
-        <h1>欢迎登录 FileFlash</h1>
-        <p>高效管理你的云端文件与共享协作</p>
+        <h1>Sign in to FileFlash</h1>
+        <p>Manage cloud files, team sharing, recycle restore, and admin operations.</p>
+
+        <div class="test-account">
+          <strong>Mock Test Accounts</strong>
+          <small>admin / admin123 (administrator)</small>
+          <small>demo / demo123 (regular user)</small>
+        </div>
       </header>
 
       <form class="auth-form" @submit.prevent="handleLogin">
         <label class="field">
-          <span>用户名 / 邮箱</span>
-          <input v-model="username" type="text" placeholder="请输入用户名或邮箱" required />
+          <span>Username or Email</span>
+          <input v-model="username" type="text" placeholder="Enter username or email" required />
         </label>
 
         <label class="field">
-          <span>密码</span>
+          <span>Password</span>
           <div class="password-wrap">
-            <input v-model="password" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" required />
+            <input v-model="password" :type="showPassword ? 'text' : 'password'" placeholder="Enter password" required />
             <button type="button" class="password-toggle" @click="showPassword = !showPassword">
-              {{ showPassword ? '隐藏' : '显示' }}
+              {{ showPassword ? 'Hide' : 'Show' }}
             </button>
           </div>
         </label>
@@ -86,21 +88,21 @@ loadSavedCredentials();
         <div class="extra-row">
           <label class="remember">
             <input v-model="rememberMe" type="checkbox" />
-            <span>记住我</span>
+            <span>Remember me</span>
           </label>
-          <router-link to="/forgot-password">忘记密码</router-link>
+          <router-link to="/forgot-password">Forgot password</router-link>
         </div>
 
         <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
         <button class="submit-btn" type="submit" :disabled="isLoading">
-          {{ isLoading ? '登录中...' : '登录' }}
+          {{ isLoading ? 'Signing in...' : 'Sign in' }}
         </button>
       </form>
 
       <footer class="auth-footer">
-        <span>还没有账号？</span>
-        <router-link to="/register">立即注册</router-link>
+        <span>Need an account?</span>
+        <router-link to="/register">Create one</router-link>
       </footer>
     </div>
   </AuthLayout>
@@ -129,6 +131,26 @@ loadSavedCredentials();
 .auth-header p {
   margin: 0;
   color: #52667f;
+}
+
+.test-account {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.22);
+  background-color: rgba(var(--color-primary-rgb), 0.09);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.test-account strong {
+  font-size: 12px;
+}
+
+.test-account small {
+  font-size: 12px;
+  color: #415978;
 }
 
 .auth-form {

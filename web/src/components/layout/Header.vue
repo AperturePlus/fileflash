@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import { useThemeStore } from '../../store/theme';
@@ -13,6 +13,7 @@ const themeStore = useThemeStore();
 const userStore = useUserStore();
 const router = useRouter();
 const searchQuery = ref('');
+const isAdmin = computed(() => userStore.user?.role === 'admin');
 
 defineProps<{
   leftSidebarCollapsed: boolean;
@@ -102,12 +103,15 @@ const handleSearchInput = (event: Event) => {
         <template #content>
           <div class="menu">
             <div class="menu-header">
-              <strong>{{ userStore.user?.username || 'User' }}</strong>
+              <div class="menu-user-row">
+                <strong>{{ userStore.user?.username || 'User' }}</strong>
+                <span v-if="isAdmin" class="role-tag">Admin</span>
+              </div>
               <small>{{ userStore.user?.email || 'user@example.com' }}</small>
             </div>
             <router-link class="menu-item" to="/profile">Profile</router-link>
             <router-link class="menu-item" to="/settings">Settings</router-link>
-            <router-link class="menu-item" to="/dashboard">Dashboard</router-link>
+            <router-link v-if="isAdmin" class="menu-item" to="/dashboard">Dashboard</router-link>
             <button class="menu-item danger" @click="handleLogout">Log out</button>
           </div>
         </template>
@@ -280,6 +284,22 @@ const handleSearchInput = (event: Event) => {
   background-color: var(--color-bg-tertiary);
   display: flex;
   flex-direction: column;
+}
+
+.menu-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.role-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.28);
+  color: var(--color-primary-dark);
+  background-color: rgba(var(--color-primary-rgb), 0.12);
 }
 
 .menu-header strong {

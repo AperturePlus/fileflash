@@ -1,24 +1,23 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { storeToRefs } from 'pinia';
-import { previewFile } from '../../api/file';
+import { downloadFile, previewFile } from '../../api/file';
 import { useFileStore } from '../../store/file';
 
 defineProps<{ visible: boolean }>();
 
 const fileStore = useFileStore();
-const { selectedFile } = storeToRefs(fileStore);
 
 const isLoading = ref(false);
 const error = ref('');
 const textContent = ref('');
 const objectUrl = ref('');
 
-const selectedMime = computed(() => {
-  if (!selectedFile.value || selectedFile.value.itemType !== 'file') return '';
-  return selectedFile.value.mimeType || '';
+const selectedFile = computed(() => {
+  if (!fileStore.selectedFile || fileStore.selectedFile.itemType !== 'file') return null;
+  return fileStore.selectedFile;
 });
 
+const selectedMime = computed(() => selectedFile.value?.mimeType || '');
 const isText = computed(() => selectedMime.value.startsWith('text/') || selectedMime.value.includes('json'));
 const isPdf = computed(() => selectedMime.value === 'application/pdf');
 const isImage = computed(() => selectedMime.value.startsWith('image/'));
@@ -45,7 +44,7 @@ const resetState = () => {
 const loadPreview = async () => {
   resetState();
 
-  if (!selectedFile.value || selectedFile.value.itemType !== 'file') {
+  if (!selectedFile.value) {
     return;
   }
 
@@ -64,6 +63,24 @@ const loadPreview = async () => {
   }
 };
 
+const downloadSelectedFile = async () => {
+  if (!selectedFile.value) return;
+
+  try {
+    const blob = await downloadFile(selectedFile.value.id);
+    const object = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = object;
+    anchor.download = selectedFile.value.name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(object);
+  } catch {
+    error.value = 'Unable to download this file.';
+  }
+};
+
 watch(selectedFile, () => {
   loadPreview();
 }, { immediate: true });
@@ -79,14 +96,19 @@ const closeSidebar = () => {
 
 <template>
   <aside :class="['right-sidebar', { visible }]">
-    <template v-if="selectedFile && selectedFile.itemType === 'file'">
+    <template v-if="selectedFile">
       <header class="sidebar-header">
         <div>
           <h3 class="filename" :title="selectedFile.name">{{ selectedFile.name }}</h3>
-          <p class="meta">{{ selectedMime || 'unknown type' }} · {{ formatBytes(selectedFile.size) }}</p>
+          <p class="meta">{{ selectedMime || 'unknown type' }} | {{ formatBytes(selectedFile.size) }}</p>
         </div>
-        <button class="close-btn" @click="closeSidebar" aria-label="Close preview panel">×</button>
+        <button class="close-btn" @click="closeSidebar" aria-label="Close preview panel">x</button>
       </header>
+
+      <div class="sidebar-actions">
+        <button class="action-btn" @click="downloadSelectedFile">Download</button>
+        <button class="action-btn" @click="loadPreview">Reload Preview</button>
+      </div>
 
       <div class="sidebar-content">
         <div v-if="isLoading" class="state">Loading preview...</div>
@@ -158,13 +180,25 @@ const closeSidebar = () => {
   font-size: 12px;
 }
 
-.close-btn {
-  width: 32px;
+.close-btn,
+.action-btn {
   height: 32px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
   background-color: var(--color-bg-primary);
   cursor: pointer;
+  padding: 0 10px;
+}
+
+.close-btn {
+  width: 32px;
+  padding: 0;
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px var(--spacing-md) 0;
 }
 
 .sidebar-content {

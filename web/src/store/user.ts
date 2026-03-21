@@ -3,14 +3,39 @@ import { ref, computed } from 'vue';
 import { login as apiLogin, getProfile, getStorageStats, refreshToken as apiRefreshToken } from '../api/user';
 import type { LoginRequest, User, UserProfile, StorageStats } from '../types/user';
 
+const STORED_USER_KEY = 'authUser';
+
+function loadStoredUser(): UserProfile | User | null {
+  const raw = localStorage.getItem(STORED_USER_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as UserProfile | User;
+  } catch {
+    localStorage.removeItem(STORED_USER_KEY);
+    return null;
+  }
+}
 
 export const useUserStore = defineStore('user', () => {
   const token = ref<string | null>(localStorage.getItem('authToken'));
   const refreshToken = ref<string | null>(localStorage.getItem('refreshToken'));
-  const user = ref<UserProfile | User | null>(null);
+  const user = ref<UserProfile | User | null>(loadStoredUser());
   const storageStats = ref<StorageStats | null>(null);
 
   const isAuthenticated = computed(() => !!token.value);
+  const isAdmin = computed(() => user.value?.role === 'admin');
+
+  function setUser(nextUser: UserProfile | User | null) {
+    user.value = nextUser;
+    if (nextUser) {
+      localStorage.setItem(STORED_USER_KEY, JSON.stringify(nextUser));
+    } else {
+      localStorage.removeItem(STORED_USER_KEY);
+    }
+  }
 
   /**
    * Set the token
@@ -44,7 +69,7 @@ export const useUserStore = defineStore('user', () => {
   async function login(credentials: LoginRequest) {
     const response = await apiLogin(credentials);
     setToken(response.token, response.refreshToken);
-    user.value = response.user as UserProfile; // Assuming login returns full profile for now
+    setUser(response.user as UserProfile);
     await fetchUserProfile();
   }
 
@@ -56,7 +81,7 @@ export const useUserStore = defineStore('user', () => {
     if (!isAuthenticated.value) return;
     try {
       const profile = await getProfile();
-      user.value = profile;
+      setUser(profile);
     } catch (error) {
       console.error('Failed to fetch user profile:', error);
       // Maybe handle token expiration
@@ -89,7 +114,7 @@ export const useUserStore = defineStore('user', () => {
     try {
       const response = await apiRefreshToken();
       setToken(response.token, response.refreshToken);
-      user.value = response.user as UserProfile;
+      setUser(response.user as UserProfile);
       return response;
     } catch (error) {
       // If refresh fails, logout the user
@@ -100,7 +125,7 @@ export const useUserStore = defineStore('user', () => {
 
   function logout() {
     setToken(null, null);
-    user.value = null;
+    setUser(null);
     storageStats.value = null;
     // In a real app, you'd probably want to redirect to the login page
     // router.push('/login');
@@ -118,7 +143,9 @@ export const useUserStore = defineStore('user', () => {
     user, 
     storageStats,
     isAuthenticated,
+    isAdmin,
     setToken, 
+    setUser,
     login,
     logout,
     refreshAccessToken,
