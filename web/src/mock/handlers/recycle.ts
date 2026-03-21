@@ -1,81 +1,133 @@
 import Mock from 'mockjs';
-import { vfsApi } from '../vfs';
 import type { RecycleBinItem } from '../../types/file';
+import { addLog } from '../state';
+import { vfsApi } from '../vfs';
+
+function buildPagination(count: number) {
+  return {
+    totalItems: count,
+    totalPages: 1,
+    perPage: count,
+    currentPage: 1,
+    hasPrev: false,
+    hasNext: false,
+  };
+}
 
 export const setupRecycleMocks = () => {
-  // Get Recycle Bin Contents
-  Mock.mock(/\/api\/v1\/recycle-bin/, 'get', () => {
-    const allItems = vfsApi.getAll();
-    const trashedItems: RecycleBinItem[] = Object.values(allItems)
-      .filter(item => item.isTrashed)
-      .map(item => {
-        const path = vfsApi.getPath(item.id);
-        const originalPath = path.slice(0, -1).map(p => p.name).join('/');
+  Mock.mock(/\/api\/v1\/recycle-bin$/, 'get', () => {
+    const all = Object.values(vfsApi.getAll());
 
-        const daysUntilPermanentDelete = 30 - Math.floor((Date.now() - new Date(item.deletedAt!).getTime()) / (1000 * 60 * 60 * 24));
+    const trashedItems: RecycleBinItem[] = all
+      .filter((node) => node.isTrashed)
+      .map((node) => {
+        const path = vfsApi.getPath(node.id);
+        const originalPath = path.slice(0, -1).map((item) => item.name).join('/') || 'My Files';
+        const deletedAt = node.deletedAt || new Date().toISOString();
+        const expireAt = new Date(new Date(deletedAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+        const daysUntilPermanentDelete = Math.max(
+          0,
+          Math.ceil((expireAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)),
+        );
 
         return {
-          itemType: item.type,
-          id: item.id,
-          name: item.name,
-          originalPath: originalPath || 'My Files',
-          size: item.size || 0,
-          mimeType: item.mimeType,
-          deletedAt: item.deletedAt!,
-          autoDeleteAt: new Date(new Date(item.deletedAt!).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          daysUntilPermanentDelete: daysUntilPermanentDelete > 0 ? daysUntilPermanentDelete : 0,
-          canRestore: true, // Mock logic, always true for now
-          restoreConflicts: false, // Mock logic, always false for now
+          itemType: node.type,
+          id: node.id,
+          name: node.name,
+          originalPath,
+          size: node.size || 0,
+          mimeType: node.mimeType,
+          deletedAt,
+          autoDeleteAt: expireAt.toISOString(),
+          daysUntilPermanentDelete,
+          canRestore: true,
+          restoreConflicts: false,
         };
-      });
+      })
+      .sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 
     return {
       success: true,
       code: 200,
       data: {
-        items: trashedItems.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime()),
-        pagination: { totalItems: trashedItems.length, totalPages: 1, perPage: trashedItems.length, currentPage: 1 },
+        items: trashedItems,
+        pagination: buildPagination(trashedItems.length),
       },
     };
   });
 
-  // Restore Item
-  Mock.mock(/\/api\/v1\/recycle-bin\/(.+)\/restore/, 'post', (options) => {
-    const itemId = (options.url.match(/\/api\/v1\/recycle-bin\/(.+)\/restore/) || [])[1];
+  Mock.mock(/\/api\/v1\/recycle-bin\/([^/]+)\/restore$/, 'post', (options) => {
+    const itemId = (options.url.match(/\/api\/v1\/recycle-bin\/([^/]+)\/restore/) || [])[1];
+    const node = vfsApi.get(itemId);
+
+    if (!node) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Item not found',
+        data: null,
+      };
+    }
+
     vfsApi.restore(itemId);
-    const restoredItem = vfsApi.get(itemId);
+    addLog('recycle_restore', { itemId, itemName: node.name });
+
     return {
       success: true,
       code: 200,
-      message: 'Item restored successfully.',
+      message: 'Item restored successfully',
       data: {
-        itemType: restoredItem?.type,
-        id: restoredItem?.id,
-        name: restoredItem?.name,
-        restoredTo: restoredItem?.parent,
+        itemType: node.type,
+        id: node.id,
+        name: node.name,
+        restoredTo: node.parent,
         restoredAt: new Date().toISOString(),
       },
     };
   });
 
-  // Permanent Delete
-  Mock.mock(/\/api\/v1\/recycle-bin\/(.+)/, 'delete', (options) => {
-    const itemId = (options.url.match(/\/api\/v1\/recycle-bin\/(.+)/) || [])[1];
-    const item = vfsApi.get(itemId);
-    if (!item) {
-        return { success: false, code: 404, message: 'Item not found.' };
+  Mock.mock(/\/api\/v1\/recycle-bin\/([^/]+)$/, 'delete', (options) => {
+    const itemId = (options.url.match(/\/api\/v1\/recycle-bin\/([^/?]+)/) || [])[1];
+    const node = vfsApi.get(itemId);
+
+    if (!node) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Item not found',
+        data: null,
+      };
     }
+
     vfsApi.permanentDelete(itemId);
+    addLog('recycle_permanent_delete', { itemId, itemName: node.name });
+
     return {
-        success: true,
-        code: 200,
-        message: 'Item permanently deleted.',
-        data: {
-            itemType: item.type,
-            id: item.id,
-            name: item.name,
-            permanentlyDeletedAt: new Date().toISOString(),
-        },
+      success: true,
+      code: 200,
+      message: 'Item permanently deleted',
+      data: {
+        itemType: node.type,
+        id: node.id,
+        name: node.name,
+        permanentlyDeletedAt: new Date().toISOString(),
+      },
     };
   });
-}; 
+
+  Mock.mock(/\/api\/v1\/recycle-bin$/, 'delete', () => {
+    const result = vfsApi.clearRecycleBin();
+    addLog('recycle_clear', { filesDeleted: result.filesDeleted, foldersDeleted: result.foldersDeleted });
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        filesDeleted: result.filesDeleted,
+        foldersDeleted: result.foldersDeleted,
+        totalStorageFreed: result.totalStorageFreed,
+        cleanupCompletedAt: new Date().toISOString(),
+      },
+    };
+  });
+};

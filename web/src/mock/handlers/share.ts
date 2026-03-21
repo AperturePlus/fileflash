@@ -1,48 +1,220 @@
 import Mock from 'mockjs';
+import { addLog, createMockId, mockSharedItems, mockShares, paginate } from '../state';
+import { vfsApi } from '../vfs';
 
-const sharedItems = [
-  {
-    itemType: 'file',
-    id: 'shared_file_1',
-    name: 'Q3 Financial Report.xlsx',
-    size: 1572864,
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    sharedBy: 'Alice',
-    permission: 'write',
-    sharedAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-  },
-  {
-    itemType: 'folder',
-    id: 'shared_folder_1',
-    name: 'Project Phoenix Assets',
-    size: 268435456,
-    sharedBy: 'Bob',
-    permission: 'read',
-    sharedAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-  },
-  {
-    itemType: 'file',
-    id: 'shared_file_2',
-    name: 'Design Mockups.fig',
-    size: 25165824,
-    mimeType: 'application/figma',
-    sharedBy: 'Charlie',
-    permission: 'read',
-    sharedAt: new Date(Date.now() - 259200000).toISOString(), // 3 days ago
-  },
-];
+function sortSharedItems<T extends { [key: string]: any }>(items: T[], sort: string | null, order: string | null) {
+  const sortField = sort || 'sharedAt';
+  const direction = order === 'asc' ? 1 : -1;
+
+  return [...items].sort((a, b) => {
+    const av = a[sortField];
+    const bv = b[sortField];
+
+    if (typeof av === 'number' && typeof bv === 'number') {
+      return (av - bv) * direction;
+    }
+
+    return String(av || '').localeCompare(String(bv || ''), undefined, { sensitivity: 'base' }) * direction;
+  });
+}
 
 export const setupShareMocks = () => {
-  // Get Shared Items
-  Mock.mock(/\/api\/v1\/shared-items/, 'get', (options) => {
-    // Basic mock, no sorting/paging for now
+  Mock.mock(/\/api\/v1\/shares$/, 'post', (options) => {
+    const { resourceType, resourceId } = JSON.parse(options.body || '{}');
+    const resource = vfsApi.get(resourceId);
+
+    if (!resource || resource.type !== resourceType) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Resource not found',
+        data: null,
+      };
+    }
+
+    const shareLink = Mock.Random.string('upper', 6);
+    const share = {
+      shareId: createMockId('share'),
+      shareLink,
+      ownerUserId: 'user1',
+      itemType: resourceType,
+      itemInfo: {
+        id: resource.id,
+        name: resource.name,
+        size: resource.type === 'folder' ? vfsApi.getFolderStats(resource.id).totalSize : resource.size || 0,
+        mimeType: resource.mimeType || (resource.type === 'folder' ? 'inode/directory' : 'application/octet-stream'),
+        folderPath: vfsApi
+          .getPath(resource.id)
+          .slice(0, -1)
+          .map((node) => node.name)
+          .join('/'),
+      },
+      settings: {
+        passwordProtected: false,
+        expireAt: null,
+        allowDownload: true,
+        allowPreview: true,
+      },
+      createdAt: new Date().toISOString(),
+      visitCount: 0,
+      downloadCount: 0,
+    };
+
+    mockShares.unshift(share);
+    addLog('file_share', { resourceId, shareId: share.shareId, shareLink });
+
+    return {
+      success: true,
+      code: 201,
+      data: share,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/shares(?:\?.*)?$/, 'get', (options) => {
+    const url = new URL(options.url, 'http://localhost');
+    const page = Number(url.searchParams.get('page') || 1);
+    const perPage = Number(url.searchParams.get('perPage') || 20);
+
+    return {
+      success: true,
+      code: 200,
+      data: paginate(mockShares, page, perPage),
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/shares\/([^/]+)$/, 'get', (options) => {
+    const shareLink = (options.url.match(/\/api\/v1\/shares\/([^/?]+)/) || [])[1];
+    const share = mockShares.find((item) => item.shareLink === shareLink || item.shareId === shareLink);
+
+    if (!share) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Share not found',
+        data: null,
+      };
+    }
+
+    return {
+      success: true,
+      code: 200,
+      data: share,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/shares\/([^/]+)\/access$/, 'post', (options) => {
+    const shareLink = (options.url.match(/\/api\/v1\/shares\/([^/]+)\/access/) || [])[1];
+    const { password } = JSON.parse(options.body || '{}');
+    const share = mockShares.find((item) => item.shareLink === shareLink || item.shareId === shareLink);
+
+    if (!share) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Share not found',
+        data: null,
+      };
+    }
+
+    if (share.settings.passwordProtected && password !== '123456') {
+      return {
+        success: false,
+        code: 403,
+        message: 'Invalid share password',
+        data: null,
+      };
+    }
+
+    share.visitCount = (share.visitCount || 0) + 1;
+
     return {
       success: true,
       code: 200,
       data: {
-        items: sharedItems,
-        pagination: { totalItems: sharedItems.length, totalPages: 1, perPage: sharedItems.length, currentPage: 1 },
+        accessToken: createMockId('access'),
+        expiresIn: 1800,
+        itemType: share.itemType,
+        itemInfo: share.itemInfo,
+        accessUrls: {
+          download: `/api/v1/files/${share.itemInfo.id}/download`,
+          preview: `/api/v1/files/${share.itemInfo.id}/preview`,
+        },
       },
     };
   });
-}; 
+
+  Mock.mock(/\/api\/v1\/shares\/([^/]+)$/, 'delete', (options) => {
+    const shareLink = (options.url.match(/\/api\/v1\/shares\/([^/?]+)/) || [])[1];
+    const index = mockShares.findIndex((item) => item.shareLink === shareLink || item.shareId === shareLink);
+
+    if (index === -1) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Share not found',
+        data: null,
+      };
+    }
+
+    const removed = mockShares.splice(index, 1)[0];
+    addLog('share_delete', { shareId: removed.shareId, shareLink: removed.shareLink });
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        shareId: removed.shareId,
+        shareLink: removed.shareLink,
+        deletedAt: new Date().toISOString(),
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/shared-items(?:\?.*)?$/, 'get', (options) => {
+    const url = new URL(options.url, 'http://localhost');
+    const page = Number(url.searchParams.get('page') || 1);
+    const perPage = Number(url.searchParams.get('perPage') || 20);
+    const sort = url.searchParams.get('sort');
+    const order = url.searchParams.get('order');
+
+    const sorted = sortSharedItems(mockSharedItems, sort, order);
+
+    return {
+      success: true,
+      code: 200,
+      data: paginate(sorted, page, perPage),
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/shared-items\/([^/]+)\/accept$/, 'post', (options) => {
+    const itemId = (options.url.match(/\/api\/v1\/shared-items\/([^/]+)\/accept/) || [])[1];
+    const item = mockSharedItems.find((entry) => entry.id === itemId);
+
+    if (!item) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Shared item not found',
+        data: null,
+      };
+    }
+
+    if (item.itemType === 'folder') {
+      vfsApi.createFolder('root', `${item.name} (Shared)`);
+    } else {
+      vfsApi.createFile('root', `${item.name}`, item.size, item.mimeType || 'application/octet-stream');
+    }
+
+    addLog('shared_item_accept', { itemId, itemName: item.name });
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        accepted: true,
+        acceptedAt: new Date().toISOString(),
+        itemId,
+      },
+    };
+  });
+};

@@ -1,134 +1,266 @@
 import Mock from 'mockjs';
-import { vfsApi } from '../vfs'; // We might not need vfs here, but good to have.
+import { addLog, addNotification, mockLogs, mockUsers, paginate } from '../state';
 
-const users = [
-  { userId: 'user1', username: 'Alice', email: 'alice@example.com' },
-  { userId: 'user2', username: 'Bob', email: 'bob@example.com' },
-  { userId: 'user3', username: 'Charlie', email: 'charlie@example.com' },
-  { userId: 'user4', username: 'David', email: 'david@example.com' },
+const profileGroups = [
+  {
+    groupId: 'group1',
+    groupName: 'Developers',
+    role: 'admin' as const,
+  },
+  {
+    groupId: 'group2',
+    groupName: 'Product Team',
+    role: 'member' as const,
+  },
 ];
 
+function toDateArray(isoString: string) {
+  const date = new Date(isoString);
+  return [
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+  ];
+}
+
 export const setupUserMocks = () => {
-  // Get Users (with search)
-  Mock.mock(/\/api\/v1\/users/, 'get', (options) => {
+  Mock.mock(/\/api\/v1\/users(?:\?.*)?$/, 'get', (options) => {
     const url = new URL(options.url, 'http://localhost');
-    const search = url.searchParams.get('search') || '';
-    
-    const filteredUsers = users.filter(user => 
-      user.username.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase())
-    );
+    const search = (url.searchParams.get('search') || '').toLowerCase();
+    const page = Number(url.searchParams.get('page') || 1);
+    const perPage = Number(url.searchParams.get('perPage') || 20);
 
-    return {
-      success: true,
-      code: 200,
-      data: {
-        items: filteredUsers,
-        pagination: { totalItems: filteredUsers.length, totalPages: 1, perPage: filteredUsers.length, currentPage: 1 },
-      },
-    };
-  });
-
-  // Get User Profile
-  Mock.mock(/\/api\/v1\/me\/profile/, 'get', {
-    success: true,
-    code: 200,
-    data: {
-      userId: 'user1', 
-      username: 'Demo User', 
-      email: 'demo@example.com',
-      storageLimit: 107374182400, // 100GB
-      storageUsed: 21474836480,   // 20GB
-      createdAt: '@datetime("yyyy-MM-dd HH:mm:ss")',
-      updatedAt: '@datetime("yyyy-MM-dd HH:mm:ss")',
-      lastLogin: '@datetime("yyyy-MM-dd HH:mm:ss")',
-      groups: [
-        {
-          groupId: 1,
-          groupName: '开发团队',
-          role: 'admin'
-        },
-        {
-          groupId: 2,
-          groupName: '项目管理',
-          role: 'member'
-        }
-      ]
-    }
-  });
-
-  // Get Storage Stats
-  Mock.mock(/\/api\/v1\/me\/storage-stats/, 'get', {
-    success: true,
-    code: 200,
-    data: {
-      storageLimit: 107374182400, // 100GB
-      storageUsed: 21474836480,   // 20GB
-      storageAvailable: 85899345920, // 80GB
-      storagePercentage: 20,
-      fileCount: 1247,
-      folderCount: 86,
-      breakdown: {
-        documents: {
-          size: 5368709120, // 5GB
-          count: 234
-        },
-        images: {
-          size: 10737418240, // 10GB
-          count: 567
-        },
-        videos: {
-          size: 4294967296, // 4GB
-          count: 12
-        },
-        audio: {
-          size: 1073741824, // 1GB
-          count: 89
-        },
-        archives: {
-          size: 268435456, // 256MB
-          count: 15
-        },
-        others: {
-          size: 268435456, // 256MB
-          count: 330
-        }
-      }
-    },
-  });
-
-  // Get Activity Log
-  Mock.mock(/\/api\/v1\/me\/activity-log/, 'get', (options) => {
-    const url = new URL(options.url, 'http://localhost');
-    const page = parseInt(url.searchParams.get('page') || '1');
-    const perPage = parseInt(url.searchParams.get('perPage') || '20');
-    
-    const activities = Mock.mock({
-      [`items|${perPage}`]: [{
-        'id|+1': 1,
-        'operation|1': ['file_upload', 'file_download', 'file_delete', 'folder_create', 'file_share', 'login'],
-        details: {
-          fileName: '@word.txt',
-          fileSize: '@integer(1024, 10485760)',
-          'action|1': ['创建', '上传', '下载', '删除', '分享']
-        },
-        ipAddress: '@ip',
-        performedAt: '@datetime("yyyy-MM-dd HH:mm:ss")'
-      }]
+    const filtered = mockUsers.filter((user) => {
+      if (!search) return true;
+      return user.username.toLowerCase().includes(search) || user.email.toLowerCase().includes(search);
     });
 
     return {
       success: true,
       code: 200,
-      data: {
-        items: activities.items,
-        pagination: {
-          currentPage: page,
-          perPage: perPage,
-          totalItems: 156,
-          totalPages: Math.ceil(156 / perPage)
-        }
-      }
+      data: paginate(filtered, page, perPage),
     };
   });
-}; 
+
+  Mock.mock(/\/api\/v1\/admin\/users(?:\?.*)?$/, 'get', (options) => {
+    const url = new URL(options.url, 'http://localhost');
+    const page = Number(url.searchParams.get('page') || 1);
+    const perPage = Number(url.searchParams.get('perPage') || 20);
+
+    const users = mockUsers.map((user) => ({
+      ...user,
+      role: user.role,
+      status: user.status,
+      lastActiveAt: new Date(Date.now() - Mock.Random.integer(1, 72) * 3600000).toISOString(),
+    }));
+
+    return {
+      success: true,
+      code: 200,
+      data: paginate(users, page, perPage),
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/users\/([^/]+)\/status$/, 'patch', (options) => {
+    const userId = (options.url.match(/\/api\/v1\/admin\/users\/([^/]+)\/status/) || [])[1];
+    const { status } = JSON.parse(options.body || '{}');
+
+    const target = mockUsers.find((user) => user.userId === userId);
+    if (!target) {
+      return {
+        success: false,
+        code: 404,
+        message: 'User not found',
+        data: null,
+      };
+    }
+
+    target.status = status;
+    addLog('admin_user_status_update', { userId, status });
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        userId,
+        status,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/violations(?:\?.*)?$/, 'get', () => {
+    const items = [
+      {
+        id: 'vio_1',
+        fileId: 'file8',
+        fileName: 'intro.mp3',
+        type: 'copyright',
+        level: 'medium',
+        reportedAt: new Date(Date.now() - 36 * 3600000).toISOString(),
+        status: 'pending',
+      },
+      {
+        id: 'vio_2',
+        fileId: 'file9',
+        fileName: 'walkthrough.mp4',
+        type: 'sensitive_content',
+        level: 'high',
+        reportedAt: new Date(Date.now() - 12 * 3600000).toISOString(),
+        status: 'under_review',
+      },
+    ];
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        items,
+        pagination: {
+          totalItems: items.length,
+          totalPages: 1,
+          perPage: items.length,
+          currentPage: 1,
+          hasPrev: false,
+          hasNext: false,
+        },
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/violations\/([^/]+)\/resolve$/, 'post', (options) => {
+    const violationId = (options.url.match(/\/api\/v1\/admin\/violations\/([^/]+)\/resolve/) || [])[1];
+    addLog('admin_violation_resolve', { violationId });
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        violationId,
+        resolvedAt: new Date().toISOString(),
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/profile$/, 'get', () => {
+    const user = mockUsers[0];
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        userId: user.userId,
+        username: user.username,
+        email: user.email,
+        storageLimit: user.storageLimit,
+        storageUsed: user.storageUsed,
+        createdAt: user.createdAt,
+        updatedAt: new Date().toISOString(),
+        lastLogin: new Date(Date.now() - 2 * 3600000).toISOString(),
+        groups: profileGroups,
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/update-profile$/, 'put', (options) => {
+    const { username, email } = JSON.parse(options.body || '{}');
+    const user = mockUsers[0];
+
+    if (username) user.username = username;
+    if (email) user.email = email;
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        userId: user.userId,
+        username: user.username,
+        email: user.email,
+        storageLimit: user.storageLimit,
+        storageUsed: user.storageUsed,
+        createdAt: user.createdAt,
+        updatedAt: new Date().toISOString(),
+        lastLogin: new Date(Date.now() - 2 * 3600000).toISOString(),
+        groups: profileGroups,
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/password$/, 'put', () => {
+    addNotification('Password updated successfully', true);
+
+    return {
+      success: true,
+      code: 200,
+      data: null,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/storage-stats$/, 'get', () => {
+    const user = mockUsers[0];
+    const percentage = Number(((user.storageUsed / user.storageLimit) * 100).toFixed(2));
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        storageLimit: user.storageLimit,
+        storageUsed: user.storageUsed,
+        storageAvailable: user.storageLimit - user.storageUsed,
+        storagePercentage: percentage,
+        fileCount: 1247,
+        folderCount: 86,
+        breakdown: {
+          documents: { size: 5368709120, count: 234 },
+          images: { size: 10737418240, count: 567 },
+          videos: { size: 4294967296, count: 12 },
+          audio: { size: 1073741824, count: 89 },
+          archives: { size: 268435456, count: 15 },
+          others: { size: 268435456, count: 330 },
+        },
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/activity-log(?:\?.*)?$/, 'get', (options) => {
+    const url = new URL(options.url, 'http://localhost');
+    const page = Number(url.searchParams.get('page') || 1);
+    const perPage = Number(url.searchParams.get('perPage') || 20);
+    const operation = url.searchParams.get('operation');
+
+    const filtered = mockLogs.filter((item) => (operation ? item.operation === operation : true));
+    const paged = paginate(filtered, page, perPage);
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        items: paged.items.map((item) => ({
+          id: Number(String(item.id).replace('log_', '')),
+          operation: item.operation,
+          details: {
+            ...item.details,
+            user_agent: Mock.Random.pick([
+              'Mozilla/5.0 Chrome/123.0 Safari/537.36',
+              'Mozilla/5.0 Firefox/120.0',
+              'Mozilla/5.0 Edg/122.0',
+            ]),
+          },
+          ip_address: item.ipAddress,
+          performed_at: toDateArray(item.performedAt),
+        })),
+        pagination: {
+          total_items: paged.pagination.totalItems,
+          total_pages: paged.pagination.totalPages,
+          per_page: paged.pagination.perPage,
+          current_page: paged.pagination.currentPage,
+          has_prev: paged.pagination.hasPrev,
+          has_next: paged.pagination.hasNext,
+        },
+      },
+    };
+  });
+};
