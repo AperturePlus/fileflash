@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import { useThemeStore } from '../../store/theme';
 import { useUserStore } from '../../store/user';
+import { useLocaleStore } from '../../store/locale';
 import { eventBus } from '../../utils/eventBus';
 import DropdownMenu from '../common/DropdownMenu.vue';
 import logoLight from '../../assets/logo/icon_white.png';
@@ -11,9 +12,11 @@ import logoDark from '../../assets/logo/icon_dark.png';
 
 const themeStore = useThemeStore();
 const userStore = useUserStore();
+const localeStore = useLocaleStore();
 const router = useRouter();
 const searchQuery = ref('');
 const isAdmin = computed(() => userStore.user?.role === 'admin');
+const t = localeStore.t;
 
 defineProps<{
   leftSidebarCollapsed: boolean;
@@ -42,7 +45,7 @@ const handleSearchInput = (event: Event) => {
     <div class="header-left">
       <button
         class="icon-btn"
-        :aria-label="leftSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :aria-label="leftSidebarCollapsed ? t('header.expandSidebar') : t('header.collapseSidebar')"
         @click="$emit('toggle-left-sidebar')"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -54,7 +57,7 @@ const handleSearchInput = (event: Event) => {
         <img :src="themeStore.theme === 'light' ? logoLight : logoDark" alt="FileFlash" class="brand-logo" />
         <div class="brand-text">
           <strong>FileFlash</strong>
-          <span>Cloud Workspace</span>
+          <span>{{ t('header.brandSubtitle') }}</span>
         </div>
       </div>
     </div>
@@ -67,14 +70,14 @@ const handleSearchInput = (event: Event) => {
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search files, folders, and shared content"
+          :placeholder="t('header.searchPlaceholder')"
           @input="handleSearchInput"
         />
       </div>
     </div>
 
     <div class="header-right">
-      <button class="icon-btn" aria-label="Toggle theme" @click="themeStore.toggleTheme">
+      <button class="icon-btn" :aria-label="t('header.toggleTheme')" @click="themeStore.toggleTheme">
         <svg v-if="themeStore.theme === 'light'" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 5V2m0 20v-3m7-7h3M2 12h3m11.3 4.3l2.1 2.1M5.6 5.6l2.1 2.1m8.6 0l2.1-2.1m-12.8 12.8l2.1-2.1M12 8a4 4 0 1 0 0 8a4 4 0 0 0 0-8" />
         </svg>
@@ -85,7 +88,7 @@ const handleSearchInput = (event: Event) => {
 
       <button
         class="icon-btn"
-        :aria-label="rightSidebarVisible ? 'Hide preview panel' : 'Show preview panel'"
+        :aria-label="rightSidebarVisible ? t('header.hidePreviewPanel') : t('header.showPreviewPanel')"
         @click="$emit('toggle-right-sidebar')"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -95,24 +98,24 @@ const handleSearchInput = (event: Event) => {
 
       <DropdownMenu>
         <template #trigger>
-          <button class="profile-trigger" aria-label="User menu">
+          <button class="profile-trigger" :aria-label="t('header.userMenu')">
             <img src="../../assets/generic/user.svg" alt="User avatar" class="avatar" />
-            <span class="name">{{ userStore.user?.username || 'User' }}</span>
+            <span class="name">{{ userStore.user?.username || t('header.menu.defaultUserName') }}</span>
           </button>
         </template>
         <template #content>
           <div class="menu">
             <div class="menu-header">
               <div class="menu-user-row">
-                <strong>{{ userStore.user?.username || 'User' }}</strong>
-                <span v-if="isAdmin" class="role-tag">Admin</span>
+                <strong>{{ userStore.user?.username || t('header.menu.defaultUserName') }}</strong>
+                <span v-if="isAdmin" class="role-tag">{{ t('header.menu.admin') }}</span>
               </div>
-              <small>{{ userStore.user?.email || 'user@example.com' }}</small>
+              <small>{{ userStore.user?.email || t('header.menu.defaultEmail') }}</small>
             </div>
-            <router-link class="menu-item" to="/profile">Profile</router-link>
-            <router-link class="menu-item" to="/settings">Settings</router-link>
-            <router-link v-if="isAdmin" class="menu-item" to="/dashboard">Dashboard</router-link>
-            <button class="menu-item danger" @click="handleLogout">Log out</button>
+            <router-link class="menu-item" to="/profile">{{ t('header.menu.profile') }}</router-link>
+            <router-link class="menu-item" to="/settings">{{ t('header.menu.settings') }}</router-link>
+            <router-link v-if="isAdmin" class="menu-item" to="/dashboard">{{ t('header.menu.dashboard') }}</router-link>
+            <button class="menu-item danger" @click="handleLogout">{{ t('header.menu.logout') }}</button>
           </div>
         </template>
       </DropdownMenu>
