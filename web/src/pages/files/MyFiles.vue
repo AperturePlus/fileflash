@@ -294,7 +294,17 @@ onUnmounted(() => {
             />
             <span v-else>{{ item.name }}</span>
 
-            <button class="star-btn" :class="{ active: item.isStarred }" @click.stop="handleToggleStar(item)">Star</button>
+            <button
+              class="star-btn"
+              :class="{ active: item.isStarred }"
+              :title="item.isStarred ? '取消星标' : '设为星标'"
+              :aria-label="item.isStarred ? '取消星标' : '设为星标'"
+              @click.stop="handleToggleStar(item)"
+            >
+              <svg class="star-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.8l2.92 5.91 6.52.95-4.72 4.6 1.11 6.49L12 17.66l-5.83 3.07 1.11-6.49-4.72-4.6 6.52-.95z" />
+              </svg>
+            </button>
           </div>
 
           <div class="col size">{{ item.itemType === 'file' ? `${(item.size / 1024).toFixed(1)} KB` : '--' }}</div>
@@ -311,7 +321,12 @@ onUnmounted(() => {
                   <button @click="startRename(item)">Rename</button>
                   <button @click="startMove(item)">Move</button>
                   <button @click="startShare(item)">Share</button>
-                  <button @click="handleToggleStar(item)">{{ item.isStarred ? 'Unstar' : 'Star' }}</button>
+                  <button class="star-menu-btn" @click="handleToggleStar(item)">
+                    <svg class="star-icon" :class="{ active: item.isStarred }" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 2.8l2.92 5.91 6.52.95-4.72 4.6 1.11 6.49L12 17.66l-5.83 3.07 1.11-6.49-4.72-4.6 6.52-.95z" />
+                    </svg>
+                    <span>{{ item.isStarred ? '取消星标' : '设为星标' }}</span>
+                  </button>
                   <button class="danger" @click="handleDelete(item)">Delete</button>
                 </div>
               </template>
@@ -336,7 +351,17 @@ onUnmounted(() => {
             <input type="checkbox" :checked="isSelected(item.id)" @change.stop="toggleSelection(item.id)" />
           </div>
 
-          <button class="star-btn floating" :class="{ active: item.isStarred }" @click.stop="handleToggleStar(item)">Star</button>
+          <button
+            class="star-btn floating"
+            :class="{ active: item.isStarred }"
+            :title="item.isStarred ? '取消星标' : '设为星标'"
+            :aria-label="item.isStarred ? '取消星标' : '设为星标'"
+            @click.stop="handleToggleStar(item)"
+          >
+            <svg class="star-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2.8l2.92 5.91 6.52.95-4.72 4.6 1.11 6.49L12 17.66l-5.83 3.07 1.11-6.49-4.72-4.6 6.52-.95z" />
+            </svg>
+          </button>
 
           <img v-if="item.itemType === 'folder'" src="../../assets/generic/folder.svg" alt="Folder" class="grid-icon" />
           <img v-else :src="getIconForFile(item.name)" alt="File" class="grid-icon" />
@@ -365,7 +390,12 @@ onUnmounted(() => {
                   <button @click="startRename(item)">Rename</button>
                   <button @click="startMove(item)">Move</button>
                   <button @click="startShare(item)">Share</button>
-                  <button @click="handleToggleStar(item)">{{ item.isStarred ? 'Unstar' : 'Star' }}</button>
+                  <button class="star-menu-btn" @click="handleToggleStar(item)">
+                    <svg class="star-icon" :class="{ active: item.isStarred }" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 2.8l2.92 5.91 6.52.95-4.72 4.6 1.11 6.49L12 17.66l-5.83 3.07 1.11-6.49-4.72-4.6 6.52-.95z" />
+                    </svg>
+                    <span>{{ item.isStarred ? '取消星标' : '设为星标' }}</span>
+                  </button>
                   <button class="danger" @click="handleDelete(item)">Delete</button>
                 </div>
               </template>
@@ -638,14 +668,38 @@ onUnmounted(() => {
   background: transparent;
   color: var(--color-text-quaternary);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.star-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.star-icon path {
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  transition: fill 0.2s ease, stroke 0.2s ease;
 }
 
 .star-btn.active {
   color: #f59e0b;
 }
 
+.star-btn.active .star-icon path {
+  fill: #f59e0b;
+  stroke: #f59e0b;
+}
+
 .star-btn:hover {
   border-color: var(--color-border);
+  transform: translateY(-1px);
 }
 
 .menu-btn {
@@ -677,6 +731,22 @@ onUnmounted(() => {
 
 .item-menu button:hover {
   background-color: var(--color-bg-tertiary);
+}
+
+.star-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.star-menu-btn .star-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.star-menu-btn .star-icon.active path {
+  fill: #f59e0b;
+  stroke: #f59e0b;
 }
 
 .item-menu button.danger {
