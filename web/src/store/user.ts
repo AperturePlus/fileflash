@@ -1,7 +1,20 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { login as apiLogin, getProfile, getStorageStats, refreshToken as apiRefreshToken } from '../api/user';
-import type { LoginRequest, User, UserProfile, StorageStats } from '../types/user';
+import {
+  login as apiLogin,
+  getProfile,
+  getStorageStats,
+  refreshToken as apiRefreshToken,
+  updatePreference as apiUpdatePreference,
+} from '../api/user';
+import type {
+  LoginRequest,
+  User,
+  UserProfile,
+  StorageStats,
+  UpdateUserPreferenceRequest,
+} from '../types/user';
+import { useLocaleStore } from './locale';
 
 const STORED_USER_KEY = 'authUser';
 
@@ -28,8 +41,18 @@ export const useUserStore = defineStore('user', () => {
   const isAuthenticated = computed(() => !!token.value);
   const isAdmin = computed(() => user.value?.role === 'admin');
 
+  function applyUserLocale(nextUser: UserProfile | User | null) {
+    const preferredLanguage = nextUser?.preference?.language;
+    if (preferredLanguage) {
+      const localeStore = useLocaleStore();
+      localeStore.setLocale(preferredLanguage);
+    }
+  }
+
   function setUser(nextUser: UserProfile | User | null) {
     user.value = nextUser;
+    applyUserLocale(nextUser);
+
     if (nextUser) {
       localStorage.setItem(STORED_USER_KEY, JSON.stringify(nextUser));
     } else {
@@ -123,6 +146,22 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  async function updatePreference(changes: UpdateUserPreferenceRequest) {
+    if (!isAuthenticated.value) {
+      throw new Error('User is not authenticated');
+    }
+
+    const nextPreference = await apiUpdatePreference(changes);
+    const currentUser = user.value;
+    if (currentUser) {
+      setUser({
+        ...currentUser,
+        preference: nextPreference,
+      });
+    }
+    return nextPreference;
+  }
+
   function logout() {
     setToken(null, null);
     setUser(null);
@@ -132,6 +171,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   // Fetch initial data if authenticated
+  applyUserLocale(user.value);
   if (isAuthenticated.value) {
     fetchUserProfile();
     fetchStorageStats();
@@ -149,6 +189,7 @@ export const useUserStore = defineStore('user', () => {
     login,
     logout,
     refreshAccessToken,
+    updatePreference,
     fetchUserProfile,
     fetchStorageStats,
   };

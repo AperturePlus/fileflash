@@ -1,27 +1,85 @@
 <script setup lang="ts">
-import { useThemeStore } from '../../store/theme';
-import { useSettingsStore } from '../../store/settings';
 import { storeToRefs } from 'pinia';
-import { ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useLocaleStore } from '../../store/locale';
+import { useSettingsStore } from '../../store/settings';
+import { useThemeStore } from '../../store/theme';
+import { useUserStore } from '../../store/user';
+import type { AppLanguage } from '../../types/user';
 
 const themeStore = useThemeStore();
 const settingsStore = useSettingsStore();
+const userStore = useUserStore();
+const localeStore = useLocaleStore();
+
 const { theme } = storeToRefs(themeStore);
 const { settings } = storeToRefs(settingsStore);
+const { user } = storeToRefs(userStore);
+const t = localeStore.t;
 
 const activeTab = ref('appearance');
+const selectedLanguage = ref<AppLanguage>(localeStore.locale);
+const isUpdatingLanguage = ref(false);
 
-const tabs = [
-  { id: 'appearance', name: '外观', icon: 'APP' },
-  { id: 'uploads', name: '上传', icon: 'UPL' },
-  { id: 'files', name: '文件管理', icon: 'FILE' },
-  { id: 'notifications', name: '通知', icon: 'NOTE' },
-  { id: 'security', name: '安全', icon: 'SAFE' },
-  { id: 'advanced', name: '高级', icon: 'ADV' }
-];
+const tabs = computed(() => [
+  { id: 'appearance', name: t('settings.tab.appearance'), icon: 'APP' },
+  { id: 'uploads', name: t('settings.tab.uploads'), icon: 'UPL' },
+  { id: 'files', name: t('settings.tab.files'), icon: 'FILE' },
+  { id: 'notifications', name: t('settings.tab.notifications'), icon: 'NOTE' },
+  { id: 'security', name: t('settings.tab.security'), icon: 'SAFE' },
+  { id: 'advanced', name: t('settings.tab.advanced'), icon: 'ADV' },
+]);
+
+const syncLanguageSelection = (language?: AppLanguage) => {
+  const nextLanguage = language || user.value?.preference?.language || localeStore.locale;
+  selectedLanguage.value = nextLanguage;
+  if (localeStore.locale !== nextLanguage) {
+    localeStore.setLocale(nextLanguage);
+  }
+};
+
+watch(
+  () => user.value?.preference?.language,
+  (nextLanguage) => {
+    syncLanguageSelection(nextLanguage);
+  },
+  { immediate: true },
+);
+
+onMounted(async () => {
+  if (!user.value?.preference) {
+    await userStore.fetchUserProfile();
+  }
+  syncLanguageSelection(user.value?.preference?.language);
+});
+
+const updateLanguagePreference = async () => {
+  const nextLanguage = selectedLanguage.value;
+  const previousLanguage = localeStore.locale;
+  if (nextLanguage === previousLanguage) {
+    return;
+  }
+  localeStore.setLocale(nextLanguage);
+
+  if (!user.value) {
+    return;
+  }
+
+  isUpdatingLanguage.value = true;
+  try {
+    await userStore.updatePreference({ language: nextLanguage });
+  } catch (error) {
+    console.error('Failed to update language preference:', error);
+    localeStore.setLocale(previousLanguage);
+    selectedLanguage.value = previousLanguage;
+    alert(t('settings.language.updateFailed'));
+  } finally {
+    isUpdatingLanguage.value = false;
+  }
+};
 
 const resetSettings = () => {
-  if (confirm('确定要重置所有设置到默认值吗？此操作无法撤销。')) {
+  if (confirm(t('settings.confirmReset'))) {
     settingsStore.resetSettings();
   }
 };
@@ -44,9 +102,9 @@ const importSettings = (event: Event) => {
     reader.onload = (e) => {
       const result = e.target?.result as string;
       if (settingsStore.importSettings(result)) {
-        alert('设置导入成功！');
+        alert(t('settings.importSuccess'));
       } else {
-        alert('设置导入失败，请检查文件格式。');
+        alert(t('settings.importFailed'));
       }
     };
     reader.readAsText(file);
@@ -57,8 +115,8 @@ const importSettings = (event: Event) => {
 <template>
   <div class="settings-page">
     <header class="page-header">
-      <h1>设置</h1>
-      <p>个性化您的 fileflash 体验，管理应用行为和偏好。</p>
+      <h1>{{ t('settings.pageTitle') }}</h1>
+      <p>{{ t('settings.pageDescription') }}</p>
     </header>
 
     <div class="settings-container">
@@ -80,7 +138,7 @@ const importSettings = (event: Event) => {
       <div class="settings-content">
         <!-- 外观设置 -->
         <div v-if="activeTab === 'appearance'" class="settings-section">
-          <h2 class="section-title">外观设置</h2>
+          <h2 class="section-title">{{ t('settings.section.appearance') }}</h2>
           
           <div class="setting-item">
             <div class="setting-label">
@@ -106,6 +164,25 @@ const importSettings = (event: Event) => {
                   <span>深色</span>
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-label">
+              <h3>{{ t('settings.language.label') }}</h3>
+              <p>{{ t('settings.language.description') }}</p>
+            </div>
+            <div class="setting-control">
+              <select
+                v-model="selectedLanguage"
+                :disabled="isUpdatingLanguage"
+                @change="updateLanguagePreference"
+                class="select-input"
+              >
+                <option value="zh-CN">{{ t('common.language.zhCN') }}</option>
+                <option value="en-US">{{ t('common.language.enUS') }}</option>
+              </select>
+              <p v-if="isUpdatingLanguage" class="setting-hint">{{ t('settings.language.saving') }}</p>
             </div>
           </div>
 
@@ -164,7 +241,7 @@ const importSettings = (event: Event) => {
 
         <!-- 上传设置 -->
         <div v-if="activeTab === 'uploads'" class="settings-section">
-          <h2 class="section-title">上传设置</h2>
+          <h2 class="section-title">{{ t('settings.section.uploads') }}</h2>
           
           <div class="setting-item">
             <div class="setting-label">
@@ -240,7 +317,7 @@ const importSettings = (event: Event) => {
 
         <!-- 文件管理设置 -->
         <div v-if="activeTab === 'files'" class="settings-section">
-          <h2 class="section-title">文件管理设置</h2>
+          <h2 class="section-title">{{ t('settings.section.files') }}</h2>
           
           <div class="setting-item">
             <div class="setting-label">
@@ -335,7 +412,7 @@ const importSettings = (event: Event) => {
 
         <!-- 通知设置 -->
         <div v-if="activeTab === 'notifications'" class="settings-section">
-          <h2 class="section-title">通知设置</h2>
+          <h2 class="section-title">{{ t('settings.section.notifications') }}</h2>
           
           <div class="setting-item">
             <div class="setting-label">
@@ -408,7 +485,7 @@ const importSettings = (event: Event) => {
 
         <!-- 安全设置 -->
         <div v-if="activeTab === 'security'" class="settings-section">
-          <h2 class="section-title">安全设置</h2>
+          <h2 class="section-title">{{ t('settings.section.security') }}</h2>
           
           <div class="setting-item">
             <div class="setting-label">
@@ -451,7 +528,7 @@ const importSettings = (event: Event) => {
 
         <!-- 高级设置 -->
         <div v-if="activeTab === 'advanced'" class="settings-section">
-          <h2 class="section-title">高级设置</h2>
+          <h2 class="section-title">{{ t('settings.section.advanced') }}</h2>
           
           <div class="setting-item">
             <div class="setting-label">
@@ -491,17 +568,17 @@ const importSettings = (event: Event) => {
           </div>
 
           <div class="setting-actions">
-            <h3>设置管理</h3>
+            <h3>{{ t('settings.actions.title') }}</h3>
             <div class="action-buttons">
               <button @click="exportSettings" class="btn btn-secondary">
-                导出设置
+                {{ t('settings.actions.export') }}
               </button>
               <label class="btn btn-secondary">
-                导入设置
+                {{ t('settings.actions.import') }}
                 <input type="file" accept=".json" @change="importSettings" style="display: none;">
               </label>
               <button @click="resetSettings" class="btn btn-danger">
-                重置所有设置
+                {{ t('settings.actions.reset') }}
               </button>
             </div>
           </div>
@@ -630,6 +707,12 @@ const importSettings = (event: Event) => {
 
 .setting-control {
   flex-shrink: 0;
+}
+
+.setting-hint {
+  margin-top: var(--spacing-xs);
+  font-size: 0.8rem;
+  color: var(--color-text-tertiary);
 }
 
 /* Theme Switcher */
@@ -827,4 +910,5 @@ input:checked + .slider:before {
     width: 100%;
   }
 }
-</style> 
+</style>
+

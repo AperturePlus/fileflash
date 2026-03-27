@@ -174,6 +174,7 @@ export const setupUserMocks = () => {
         createdAt: user.createdAt,
         role: user.role,
         status: user.status,
+        preference: user.preference,
         updatedAt: new Date().toISOString(),
         lastLogin: new Date(Date.now() - 2 * 3600000).toISOString(),
         groups: profileGroups,
@@ -200,10 +201,39 @@ export const setupUserMocks = () => {
         createdAt: user.createdAt,
         role: user.role,
         status: user.status,
+        preference: user.preference,
         updatedAt: new Date().toISOString(),
         lastLogin: new Date(Date.now() - 2 * 3600000).toISOString(),
         groups: profileGroups,
       },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/preferences$/, 'get', () => {
+    const user = getCurrentUser();
+    return {
+      success: true,
+      code: 200,
+      data: user.preference,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/preferences$/, 'put', (options) => {
+    const user = getCurrentUser();
+    const { language } = JSON.parse(options.body || '{}');
+
+    if (language && (language === 'zh-CN' || language === 'en-US')) {
+      user.preference = {
+        ...user.preference,
+        language,
+      };
+      addLog('user_preference_update', { userId: user.userId, language });
+    }
+
+    return {
+      success: true,
+      code: 200,
+      data: user.preference,
     };
   });
 
