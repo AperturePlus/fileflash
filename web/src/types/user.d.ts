@@ -9,6 +9,11 @@
  */
 export type UserRole = 'user' | 'admin';
 export type UserStatus = 'active' | 'suspended';
+export type AppLanguage = 'zh-CN' | 'en-US';
+
+export interface UserPreference {
+  language: AppLanguage;
+}
 
 export interface User{
     userId: string;
@@ -20,6 +25,7 @@ export interface User{
     createdAt: string;
     role?: UserRole;
     status?: UserStatus;
+    preference?: UserPreference;
 }
 
 /**
@@ -75,6 +81,11 @@ export interface LoginRequest {
  * 用户信息更新请求体
  */
 export type UpdateProfileRequest = Partial<Pick<UserProfile, 'username' | 'email'>>;
+
+/**
+ * 用户偏好更新请求体
+ */
+export type UpdateUserPreferenceRequest = Partial<UserPreference>;
 
 
 /**

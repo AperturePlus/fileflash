@@ -48,6 +48,7 @@ export const setupAuthMocks = () => {
           createdAt: targetUser.createdAt,
           role: targetUser.role,
           status: targetUser.status,
+          preference: targetUser.preference,
         },
       },
     };
@@ -89,6 +90,9 @@ export const setupAuthMocks = () => {
       status: 'active' as const,
       role: 'user' as const,
       password,
+      preference: {
+        language: 'zh-CN' as const,
+      },
     };
 
     mockUsers.push(createdUser);
@@ -166,6 +170,7 @@ export const setupAuthMocks = () => {
           createdAt: user.createdAt,
           role: user.role,
           status: user.status,
+          preference: user.preference,
         },
       },
     };

@@ -3,12 +3,13 @@ import type { PermissionItem } from '../types/permission';
 import type { Share, SharedItem } from '../types/share';
 import type { NotificationItem } from '../types/notification';
 import type { LogItem } from '../types/log';
-import type { User } from '../types/user';
+import type { User, UserPreference } from '../types/user';
 
 export type MockUserRecord = User & {
   status: 'active' | 'suspended';
   role: 'user' | 'admin';
   password: string;
+  preference: UserPreference;
 };
 
 const now = () => new Date().toISOString();
@@ -32,6 +33,9 @@ export const mockUsers: MockUserRecord[] = [
     status: 'active',
     role: 'admin',
     password: 'admin123',
+    preference: {
+      language: 'zh-CN',
+    },
   },
   {
     userId: 'user2',
@@ -43,6 +47,9 @@ export const mockUsers: MockUserRecord[] = [
     status: 'active',
     role: 'user',
     password: 'demo123',
+    preference: {
+      language: 'en-US',
+    },
   },
   {
     userId: 'user3',
@@ -54,6 +61,9 @@ export const mockUsers: MockUserRecord[] = [
     status: 'active',
     role: 'user',
     password: 'alice123',
+    preference: {
+      language: 'zh-CN',
+    },
   },
   {
     userId: 'user4',
@@ -65,6 +75,9 @@ export const mockUsers: MockUserRecord[] = [
     status: 'active',
     role: 'user',
     password: 'bob123',
+    preference: {
+      language: 'en-US',
+    },
   },
   {
     userId: 'user5',
@@ -76,6 +89,9 @@ export const mockUsers: MockUserRecord[] = [
     status: 'suspended',
     role: 'user',
     password: 'charlie123',
+    preference: {
+      language: 'zh-CN',
+    },
   },
 ];
 

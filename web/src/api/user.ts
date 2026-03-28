@@ -6,6 +6,8 @@ import type {
     RefreshTokenResponse,
     UserProfile, 
     UpdateProfileRequest, 
+    UpdateUserPreferenceRequest,
+    UserPreference,
     ChangePasswordRequest, 
     StorageStats, 
     ActivityLog,
@@ -131,6 +133,23 @@ export const getProfile = () => {
  */
 export const updateProfile = (data: UpdateProfileRequest) => {
   return http.put<UserProfile>('/me/update-profile', data);
+};
+
+/**
+ * 获取当前用户偏好
+ * @returns 用户偏好
+ */
+export const getPreference = () => {
+  return http.get<UserPreference>('/me/preferences');
+};
+
+/**
+ * 更新当前用户偏好
+ * @param data 偏好变更
+ * @returns 更新后的用户偏好
+ */
+export const updatePreference = (data: UpdateUserPreferenceRequest) => {
+  return http.put<UserPreference>('/me/preferences', data);
 };
 
 /**

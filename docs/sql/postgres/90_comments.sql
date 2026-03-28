@@ -15,6 +15,13 @@ COMMENT ON COLUMN "user".storage_used IS '已用空间（字节）';
 COMMENT ON COLUMN "user".failed_login_count IS '连续登录失败次数';
 COMMENT ON COLUMN "user".locked_until IS '账号锁定截止时间';
 
+COMMENT ON TABLE user_preference IS 'User preference settings';
+COMMENT ON COLUMN user_preference.preference_id IS 'Preference primary key';
+COMMENT ON COLUMN user_preference.user_id IS 'User ID';
+COMMENT ON COLUMN user_preference.ui_language IS 'UI language (zh-CN/en-US)';
+COMMENT ON COLUMN user_preference.created_at IS 'Created timestamp';
+COMMENT ON COLUMN user_preference.updated_at IS 'Updated timestamp';
+
 COMMENT ON TABLE user_group IS '用户组定义';
 COMMENT ON COLUMN user_group.id IS '用户组主键';
 COMMENT ON COLUMN user_group.name IS '用户组名称';
