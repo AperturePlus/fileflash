@@ -14,18 +14,6 @@ const profileGroups = [
   },
 ];
 
-function toDateArray(isoString: string) {
-  const date = new Date(isoString);
-  return [
-    date.getFullYear(),
-    date.getMonth() + 1,
-    date.getDate(),
-    date.getHours(),
-    date.getMinutes(),
-    date.getSeconds(),
-  ];
-}
-
 export const setupUserMocks = () => {
   Mock.mock(/\/api\/v1\/users(?:\?.*)?$/, 'get', (options) => {
     const url = new URL(options.url, 'http://localhost');
@@ -297,16 +285,16 @@ export const setupUserMocks = () => {
               'Mozilla/5.0 Edg/122.0',
             ]),
           },
-          ip_address: item.ipAddress,
-          performed_at: toDateArray(item.performedAt),
+          ipAddress: item.ipAddress,
+          performedAt: item.performedAt,
         })),
         pagination: {
-          total_items: paged.pagination.totalItems,
-          total_pages: paged.pagination.totalPages,
-          per_page: paged.pagination.perPage,
-          current_page: paged.pagination.currentPage,
-          has_prev: paged.pagination.hasPrev,
-          has_next: paged.pagination.hasNext,
+          totalItems: paged.pagination.totalItems,
+          totalPages: paged.pagination.totalPages,
+          perPage: paged.pagination.perPage,
+          currentPage: paged.pagination.currentPage,
+          hasPrev: paged.pagination.hasPrev,
+          hasNext: paged.pagination.hasNext,
         },
       },
     };
