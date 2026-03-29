@@ -46,12 +46,12 @@ function computeStorageStats() {
   });
 
   return {
-    storage_limit: storageLimit,
-    storage_used: storageUsed,
-    storage_available: Math.max(storageLimit - storageUsed, 0),
-    storage_percentage: Number(((storageUsed / storageLimit) * 100).toFixed(2)),
-    file_count: files.length,
-    folder_count: folders.length,
+    storageLimit,
+    storageUsed,
+    storageAvailable: Math.max(storageLimit - storageUsed, 0),
+    storagePercentage: Number(((storageUsed / storageLimit) * 100).toFixed(2)),
+    fileCount: files.length,
+    folderCount: folders.length,
     breakdown: bucket,
   };
 }
@@ -76,7 +76,7 @@ export const setupStorageMocks = () => {
   Mock.mock(/\/api\/v1\/storage\/usage-trend(?:\?.*)?$/, 'get', (options) => {
     const url = new URL(options.url, 'http://localhost');
     const days = Math.min(Number(url.searchParams.get('days') || 7), 30);
-    const currentUsed = computeStorageStats().storage_used;
+    const currentUsed = computeStorageStats().storageUsed;
 
     const trends = Array.from({ length: days }).map((_, index) => {
       const dayIndex = days - index - 1;

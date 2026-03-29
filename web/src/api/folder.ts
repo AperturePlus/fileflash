@@ -4,6 +4,7 @@ import type {
   ContentItem,
   GetFolderContentsRequest,
   FolderItem,
+  FolderPathResponse,
   CreateFolderRequest,
   RenameFolderRequest,
   MoveFolderRequest,
@@ -68,7 +69,7 @@ export const getFolders = (params: { parentId?: string; page?: number; perPage?:
  * @param folderId 文件夹ID
  */
 export const getFolderPath = (folderId: string) => {
-  return http.get<{ pathItems: any[] }>(`/folders/${folderId}/path`);
+  return http.get<FolderPathResponse>(`/folders/${folderId}/path`);
 };
 
 /**

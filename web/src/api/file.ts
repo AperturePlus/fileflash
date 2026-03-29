@@ -164,7 +164,7 @@ export const batchDownloadFiles = (fileIds: string[]) => {
  * @returns 操作后的文件信息
  */
 export const batchFiles = (data: BatchFilesRequest) => {
-  return http.post<{ data: ResponseData }>('/files/batch', data);
+  return http.post<ResponseData>('/files/batch', data);
 };
 
 interface ResponseData {
