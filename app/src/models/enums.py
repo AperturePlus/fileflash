@@ -51,6 +51,11 @@ class UserStatus(BaseStrEnum):
 	DISABLED = "disabled"
 
 
+class UserRole(BaseStrEnum):
+	USER = "USER"
+	ADMIN = "ADMIN"
+
+
 class UiLanguage(BaseStrEnum):
 	ZH_CN = "zh-CN"
 	EN_US = "en-US"
@@ -121,6 +126,7 @@ __all__ = [
 	"UploadMode",
 	"UploadTaskStatus",
 	"UploadPartStatus",
+	"UserRole",
 	"UserStatus",
 	"UiLanguage",
 	"FolderType",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.errors import ApiError
 from ..core.security import create_access_token, create_refresh_token, get_password_hash, hash_token, verify_password
 from ..core.settings import Settings
-from ..models.enums import UiLanguage, UserStatus
+from ..models.enums import UiLanguage, UserRole, UserStatus
 from ..models.tables_identity import EmailVerificationToken, PasswordResetToken, User, UserPreference, UserSession
 from ..schemas.auth import ForgotPasswordResponse, RegisterRequest, RegisterResponseData, TokenResponse
 from ..schemas.user import User as UserSchema
@@ -63,7 +64,7 @@ class AuthService:
             username=payload.username,
             email=payload.email,
             password_hash=get_password_hash(payload.password),
-            role="user",
+            role=UserRole.USER,
             status=UserStatus.ACTIVE,
             email_verified=False,
             created_at=now,
@@ -456,7 +457,7 @@ class AuthService:
 
     def _to_user_schema(self, *, user: User, preference: UserPreference | None) -> UserSchema:
         user_status = "active" if user.status == UserStatus.ACTIVE else "suspended"
-        role = str(user.role).lower() if user.role else "user"
+        role: Literal["user", "admin"] = "admin" if user.role == UserRole.ADMIN else "user"
         preference_schema = None
         if preference is not None:
             preference_schema = UserPreferenceSchema(language=preference.ui_language.value)
