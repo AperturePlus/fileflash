@@ -1,14 +1,13 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-import os
+from __future__ import annotations
 
-DATABASE_URL= os.getenv("DATABASE_URL")
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is not set")
+from ..core.settings import get_settings
 
-engine = create_engine(
-    url=DATABASE_URL,
-    echo=True,  # Enable SQL query logging for debugging purposes
-    pool_per_ping=True,  # Enable connection pool pre-ping to check if connections are alive
+settings = get_settings()
+
+engine: AsyncEngine = create_async_engine(
+    settings.async_database_url,
+    echo=False,
+    pool_pre_ping=True,
 )

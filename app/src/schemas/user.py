@@ -25,6 +25,8 @@ class User(CamelModel):
     created_at: datetime
     role: UserRole | None = None
     status: UserStatus | None = None
+    email_verified: bool = False
+    email_verified_at: datetime | None = None
     preference: UserPreference | None = None
 
 
@@ -37,7 +39,7 @@ class UserGroupInfo(CamelModel):
 class UserProfile(User):
     groups: list[UserGroupInfo]
     updated_at: datetime
-    last_login: datetime
+    last_login: datetime | None
 
 
 class UpdateProfileRequest(CamelModel):
