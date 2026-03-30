@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from ..core.deps import get_auth_service, get_current_user
 from ..core.errors import api_success
 from ..models.tables_identity import User
-from ..services.authentication import AuthService
+from ..services.auth import AuthService
 
 router = APIRouter(prefix="/me", tags=["me"])
 

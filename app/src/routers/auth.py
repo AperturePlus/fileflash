@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -14,19 +15,29 @@ from ..schemas.auth import (
     ResetPasswordRequest,
     VerifyEmailRequest,
 )
-from ..services.authentication import AuthService
+from ..services.auth import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+CookieSameSite = Literal["strict", "lax", "none"]
+COOKIE_SAMESITE_MAP: dict[str, CookieSameSite] = {
+    "strict": "strict",
+    "lax": "lax",
+    "none": "none",
+}
+
 
 def _set_refresh_cookie(response: JSONResponse, refresh_token: str, settings: Settings) -> None:
+    samesite = COOKIE_SAMESITE_MAP.get(settings.refresh_cookie_samesite.strip().lower())
+    if samesite is None:
+        raise ValueError(f"Invalid samesite value: {settings.refresh_cookie_samesite}")
     response.set_cookie(
         key=settings.refresh_cookie_name,
         value=refresh_token,
         max_age=settings.refresh_token_ttl_seconds,
         httponly=True,
         secure=settings.refresh_cookie_secure,
-        samesite=settings.refresh_cookie_samesite,
+        samesite=samesite,
         path=settings.refresh_cookie_path,
     )
 

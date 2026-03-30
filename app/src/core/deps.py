@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.deps import get_db
 from ..models.tables_identity import User
-from ..services.authentication import AuthService
+from ..services.auth import AuthService
 from ..services.messaging import InProcessAuthEventPublisher
 from ..services.rate_limiter import RedisRateLimiter
 from .errors import ApiError

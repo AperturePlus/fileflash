@@ -1,4 +1,4 @@
-from .authentication import AuthService
+from .auth import AuthService
 from .messaging import AuthEventPublisher, InProcessAuthEventPublisher
 from .rate_limiter import RedisRateLimiter
 
