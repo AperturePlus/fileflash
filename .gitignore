@@ -5,6 +5,7 @@
 .idea/
 .DS_Store
 */dist/
+*/release/
 *.log
 
 # Nuxt
