@@ -13,6 +13,7 @@ declare module 'axios' {
 const instance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_BASE_URL || '/api/v1',
   timeout: 10000,
+  withCredentials: true,
   // 配置参数序列化，避免嵌套对象格式
   paramsSerializer: (params) => {
     return qs.stringify(params, { arrayFormat: 'brackets', encode: false });

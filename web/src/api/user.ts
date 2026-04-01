@@ -1,6 +1,7 @@
 import http from '../utils/http';
 import type { 
     RegisterRequest, 
+    RegisterResponse,
     LoginRequest, 
     LoginResponse, 
     RefreshTokenResponse,
@@ -21,7 +22,7 @@ import type { PaginatedData } from '../types/base';
  * @param data 注册信息
  */
 export const register = (data: RegisterRequest) => {
-  return http.post<UserProfile>('/auth/register', data);
+  return http.post<RegisterResponse>('/auth/register', data);
 };
 
 /**
@@ -64,6 +65,14 @@ export const logout = () => {
  */
 export const refreshToken = () => {
   return http.post<RefreshTokenResponse>('/auth/refresh');
+};
+
+export const verifyEmail = (token: string) => {
+  return http.post<void>('/auth/verify-email', { token });
+};
+
+export const resendVerification = () => {
+  return http.post<void>('/auth/resend-verification');
 };
 
 /**

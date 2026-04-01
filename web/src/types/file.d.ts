@@ -197,6 +197,113 @@ export interface UploadPreflightResponse {
   uploadedChunkIndexes?: number[];
 }
 
+/**
+ * 批量上传单文件元数据
+ */
+export interface BatchUploadFileMeta {
+  clientFileId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  fileHash: string;
+}
+
+/**
+ * 批量预检请求体
+ */
+export interface BatchUploadPreflightRequest {
+  parentId: string;
+  files: BatchUploadFileMeta[];
+}
+
+/**
+ * 批量预检中每个文件的会话状态
+ */
+export interface BatchUploadFileSession {
+  clientFileId: string;
+  fileName: string;
+  status: 'COMPLETE' | 'UPLOADING';
+  fileId?: string;
+  uploadId?: string;
+  chunkSize?: number;
+  uploadedChunkIndexes?: number[];
+}
+
+/**
+ * 批量预检结果
+ */
+export interface BatchUploadPreflightResponse {
+  batchId: string;
+  parentId: string;
+  files: BatchUploadFileSession[];
+  summary: {
+    totalFiles: number;
+    completeFiles: number;
+    uploadingFiles: number;
+  };
+}
+
+/**
+ * 批量上传完成确认请求体
+ */
+export interface BatchUploadCompleteRequest {
+  files: Array<{
+    clientFileId: string;
+    uploadId?: string;
+  }>;
+}
+
+/**
+ * 批量上传完成确认返回单文件结果
+ */
+export interface BatchUploadCompleteFileResult {
+  clientFileId: string;
+  fileName: string;
+  success: boolean;
+  fileId?: string;
+  message?: string;
+}
+
+/**
+ * 批量上传完成确认结果
+ */
+export interface BatchUploadCompleteResponse {
+  batchId: string;
+  completedAt: string;
+  results: BatchUploadCompleteFileResult[];
+  summary: {
+    totalFiles: number;
+    succeeded: number;
+    failed: number;
+  };
+}
+
+/**
+ * 批量上传进度查询结果
+ */
+export interface BatchUploadStatusResponse {
+  batchId: string;
+  parentId: string;
+  files: Array<{
+    clientFileId: string;
+    fileName: string;
+    status: 'COMPLETE' | 'UPLOADING' | 'FAILED';
+    fileId?: string;
+    uploadId?: string;
+    uploadedChunks: number;
+    totalChunks: number;
+    percentage: number;
+    message?: string;
+  }>;
+  summary: {
+    totalFiles: number;
+    completeFiles: number;
+    uploadingFiles: number;
+    failedFiles: number;
+  };
+  updatedAt: string;
+}
+
 
 /**
  * 发起合并分片请求的负载 (POST /uploads/{uploadId}/merge)

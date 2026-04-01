@@ -21,7 +21,7 @@ const handleLogin = async () => {
   errorMessage.value = '';
 
   try {
-    await userStore.login({
+    const loginResponse = await userStore.login({
       username: username.value,
       password: password.value,
     });
@@ -34,7 +34,11 @@ const handleLogin = async () => {
       localStorage.removeItem('savedUsername');
     }
 
-    router.push('/files');
+    if (loginResponse.user.emailVerified) {
+      router.push('/files');
+    } else {
+      router.push('/verify-email');
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
   } finally {

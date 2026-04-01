@@ -2,9 +2,11 @@ from .auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
+    RegisterResponseData,
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
+    VerifyEmailRequest,
 )
 from .common import ApiResponse, CamelModel, PageQuery, PaginatedData, PaginationMeta
 from .file import (
@@ -195,6 +197,7 @@ __all__ = [
     "RecycleBinItem",
     "RegisterRequest",
     "RemoveGroupMemberResponse",
+    "RegisterResponseData",
     "RenameFileRequest",
     "RenameFolderRequest",
     "RescanAdminFileResponse",
@@ -231,4 +234,5 @@ __all__ = [
     "UserPreference",
     "UserProfile",
     "ViolationItem",
+    "VerifyEmailRequest",
 ]

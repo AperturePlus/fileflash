@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from .common import CamelModel
@@ -10,6 +12,11 @@ class RegisterRequest(CamelModel):
     username: str = Field(min_length=2, max_length=100)
     email: str
     password: str = Field(min_length=6, max_length=255)
+
+
+class RegisterResponseData(CamelModel):
+    user: User
+    email_verification_required: Literal[True] = True
 
 
 class LoginRequest(CamelModel):
@@ -31,9 +38,12 @@ class ResetPasswordRequest(CamelModel):
     new_password: str = Field(min_length=6, max_length=255)
 
 
+class VerifyEmailRequest(CamelModel):
+    token: str = Field(min_length=8, max_length=255)
+
+
 class TokenResponse(CamelModel):
     token: str
     token_type: str = "Bearer"
     expires_in: int = Field(ge=1)
-    refresh_token: str
     user: User

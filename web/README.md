@@ -35,3 +35,21 @@ bun run build
 ```bash
 bun run preview
 ```
+
+## Electron development
+
+```bash
+bun run electron:dev
+```
+
+## Electron package build (unpacked)
+
+```bash
+bun run electron:build
+```
+
+## Electron installer build
+
+```bash
+bun run electron:dist
+```

@@ -18,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
-from .enums import UiLanguage, UserStatus
+from .enums import UiLanguage, UserRole, UserStatus
 from .pg import pg_enum
 
 
@@ -35,7 +35,11 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(50), nullable=False, server_default=text("'USER'"))
+    role: Mapped[UserRole] = mapped_column(
+        pg_enum(UserRole, "user_role_enum"),
+        nullable=False,
+        server_default=text("'USER'"),
+    )
     status: Mapped[UserStatus] = mapped_column(
         pg_enum(UserStatus, "user_status_enum"),
         nullable=False,

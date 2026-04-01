@@ -5,6 +5,7 @@ import {
   getProfile,
   getStorageStats,
   refreshToken as apiRefreshToken,
+  logout as apiLogout,
   updatePreference as apiUpdatePreference,
 } from '../api/user';
 import type {
@@ -34,7 +35,6 @@ function loadStoredUser(): UserProfile | User | null {
 
 export const useUserStore = defineStore('user', () => {
   const token = ref<string | null>(localStorage.getItem('authToken'));
-  const refreshToken = ref<string | null>(localStorage.getItem('refreshToken'));
   const user = ref<UserProfile | User | null>(loadStoredUser());
   const storageStats = ref<StorageStats | null>(null);
 
@@ -63,24 +63,14 @@ export const useUserStore = defineStore('user', () => {
   /**
    * Set the token
    * @param newToken - The new token
-   * @param newRefreshToken - The new refresh token
    */
-  function setToken(newToken: string | null, newRefreshToken?: string | null) {
+  function setToken(newToken: string | null) {
     token.value = newToken;
-    if (newRefreshToken !== undefined) {
-      refreshToken.value = newRefreshToken;
-    }
     
     if (newToken) {
       localStorage.setItem('authToken', newToken);
     } else {
       localStorage.removeItem('authToken');
-    }
-    
-    if (newRefreshToken) {
-      localStorage.setItem('refreshToken', newRefreshToken);
-    } else if (newRefreshToken === null) {
-      localStorage.removeItem('refreshToken');
     }
   }
 
@@ -91,9 +81,10 @@ export const useUserStore = defineStore('user', () => {
    */
   async function login(credentials: LoginRequest) {
     const response = await apiLogin(credentials);
-    setToken(response.token, response.refreshToken);
+    setToken(response.token);
     setUser(response.user as UserProfile);
     await fetchUserProfile();
+    return response;
   }
 
   /**
@@ -130,13 +121,9 @@ export const useUserStore = defineStore('user', () => {
    * @returns The refresh token response
    */
   async function refreshAccessToken() {
-    if (!refreshToken.value) {
-      throw new Error('No refresh token available');
-    }
-    
     try {
       const response = await apiRefreshToken();
-      setToken(response.token, response.refreshToken);
+      setToken(response.token);
       setUser(response.user as UserProfile);
       return response;
     } catch (error) {
@@ -163,7 +150,8 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function logout() {
-    setToken(null, null);
+    apiLogout().catch(() => undefined);
+    setToken(null);
     setUser(null);
     storageStats.value = null;
     // In a real app, you'd probably want to redirect to the login page
@@ -179,7 +167,6 @@ export const useUserStore = defineStore('user', () => {
 
   return { 
     token, 
-    refreshToken,
     user, 
     storageStats,
     isAuthenticated,

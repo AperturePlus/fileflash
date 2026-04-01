@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS "user" (
     username VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    "role" VARCHAR(50) NOT NULL DEFAULT 'USER',
+    "role" user_role_enum NOT NULL DEFAULT 'USER',
     "status" user_status_enum NOT NULL DEFAULT 'active',
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     email_verified_at TIMESTAMP NULL,
