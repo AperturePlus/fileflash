@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from os import cpu_count
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_worker_concurrency() -> int:
+    cpu_total = cpu_count() or 2
+    return max(1, cpu_total - 1)
 
 
 class Settings(BaseSettings):
@@ -20,7 +26,10 @@ class Settings(BaseSettings):
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     ff_db_uri: str | None = Field(default=None, alias="FF_DB_URI")
 
-    jwt_secret_key: str = Field(default="change-this-in-production-please-use-32-plus-bytes", alias="JWT_SECRET_KEY")
+    jwt_secret_key: str = Field(
+        default="change-this-in-production-please-use-32-plus-bytes",
+        alias="JWT_SECRET_KEY",
+    )
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
@@ -49,6 +58,27 @@ class Settings(BaseSettings):
     resend_verification_rate_limit: int = 5
     resend_verification_rate_window_seconds: int = 600
 
+    worker_poll_interval_seconds: float = Field(
+        default=2.0,
+        alias="WORKER_POLL_INTERVAL_SECONDS",
+    )
+    worker_concurrency: int = Field(
+        default_factory=_default_worker_concurrency,
+        alias="WORKER_CONCURRENCY",
+    )
+    worker_task_timeout_seconds: int = Field(default=900, alias="WORKER_TASK_TIMEOUT_SECONDS")
+    worker_default_max_attempts: int = Field(default=5, alias="WORKER_DEFAULT_MAX_ATTEMPTS")
+    worker_retry_backoff_seconds: str = Field(
+        default="30,120,600,1800,7200",
+        alias="WORKER_RETRY_BACKOFF_SECONDS",
+    )
+    worker_queue_stream: str = Field(default="fileflash:tasks", alias="WORKER_QUEUE_STREAM")
+    worker_queue_group: str = Field(default="fileflash-workers", alias="WORKER_QUEUE_GROUP")
+    worker_queue_block_ms: int = Field(default=5000, alias="WORKER_QUEUE_BLOCK_MS")
+
+    ffmpeg_binary: str = Field(default="ffmpeg", alias="FFMPEG_BINARY")
+    ffprobe_binary: str = Field(default="ffprobe", alias="FFPROBE_BINARY")
+
     @property
     def resolved_database_url(self) -> str:
         db_url = self.database_url or self.ff_db_uri
@@ -74,6 +104,23 @@ class Settings(BaseSettings):
     @property
     def refresh_token_ttl_seconds(self) -> int:
         return self.refresh_token_expire_days * 24 * 60 * 60
+
+    @property
+    def worker_retry_backoff_schedule(self) -> tuple[int, ...]:
+        values: list[int] = []
+        for item in self.worker_retry_backoff_seconds.split(","):
+            token = item.strip()
+            if not token:
+                continue
+            try:
+                seconds = int(token)
+            except ValueError:
+                continue
+            if seconds > 0:
+                values.append(seconds)
+        if not values:
+            return (30, 120, 600, 1800, 7200)
+        return tuple(values)
 
 
 @lru_cache

@@ -1,6 +1,7 @@
 from .base import Base
 from .tables import (
     Acl,
+    BackgroundJob,
     BatchDownloadTask,
     EmailVerificationToken,
     FavoriteItem,
@@ -31,6 +32,7 @@ from .tables import (
 __all__ = [
     "Acl",
     "Base",
+    "BackgroundJob",
     "BatchDownloadTask",
     "EmailVerificationToken",
     "FavoriteItem",
