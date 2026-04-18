@@ -9,10 +9,11 @@ from fastapi.responses import JSONResponse
 
 
 class ApiError(Exception):
-    def __init__(self, status_code: int, code: int, message: str) -> None:
+    def __init__(self, status_code: int, code: int, message: str, data: Any = None) -> None:
         self.status_code = status_code
         self.code = code
         self.message = message
+        self.data = data
         super().__init__(message)
 
 
@@ -36,7 +37,7 @@ def api_success(data: Any = None, *, code: int = 200, message: str = "OK", statu
 async def api_error_handler(_request: Request, exc: ApiError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content=build_api_payload(success=False, code=exc.code, message=exc.message, data=None),
+        content=build_api_payload(success=False, code=exc.code, message=exc.message, data=exc.data),
     )
 
 

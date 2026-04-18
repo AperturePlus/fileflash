@@ -3,6 +3,7 @@ from .background_jobs import BackgroundJobService
 from .job_queue import JobQueuePublisher, RedisStreamJobQueue
 from .messaging import AuthEventPublisher, InProcessAuthEventPublisher
 from .rate_limiter import RedisRateLimiter
+from .upload import UploadService
 
 __all__ = [
     "AuthEventPublisher",
@@ -12,4 +13,5 @@ __all__ = [
     "InProcessAuthEventPublisher",
     "RedisStreamJobQueue",
     "RedisRateLimiter",
+    "UploadService",
 ]

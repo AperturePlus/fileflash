@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import io
+import logging
+from dataclasses import dataclass
+from typing import Iterable
+
+from minio import Minio
+from minio.commonconfig import ComposeSource
+from minio.deleteobjects import DeleteObject
+from minio.error import S3Error
+
+from ..core.settings import Settings
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class ObjectWriteResult:
+    etag: str | None
+    version_id: str | None
+
+
+@dataclass(slots=True)
+class ObjectStat:
+    size: int
+    etag: str | None
+    version_id: str | None
+    content_type: str | None
+
+
+class MinioObjectStorageClient:
+    def __init__(
+        self,
+        *,
+        endpoint: str,
+        access_key: str,
+        secret_key: str,
+        bucket_name: str,
+        secure: bool,
+        region: str | None,
+    ) -> None:
+        self.bucket_name = bucket_name
+        self.region = region
+        self._client = Minio(
+            endpoint=endpoint,
+            access_key=access_key,
+            secret_key=secret_key,
+            secure=secure,
+            region=region,
+        )
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> "MinioObjectStorageClient":
+        return cls(
+            endpoint=settings.object_storage_endpoint,
+            access_key=settings.object_storage_access_key,
+            secret_key=settings.object_storage_secret_key,
+            bucket_name=settings.object_storage_bucket,
+            secure=settings.object_storage_secure,
+            region=settings.object_storage_region,
+        )
+
+    async def ensure_bucket(self) -> None:
+        def _run() -> None:
+            if self._client.bucket_exists(self.bucket_name):
+                return
+            try:
+                self._client.make_bucket(self.bucket_name, location=self.region)
+            except S3Error as exc:
+                if exc.code not in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
+                    raise
+
+        await asyncio.to_thread(_run)
+
+    async def put_bytes(self, *, object_key: str, data: bytes, content_type: str) -> ObjectWriteResult:
+        await self.ensure_bucket()
+
+        def _run() -> ObjectWriteResult:
+            result = self._client.put_object(
+                self.bucket_name,
+                object_key,
+                io.BytesIO(data),
+                len(data),
+                content_type=content_type,
+            )
+            return ObjectWriteResult(etag=result.etag, version_id=result.version_id)
+
+        return await asyncio.to_thread(_run)
+
+    async def compose_object(self, *, object_key: str, source_keys: list[str]) -> ObjectWriteResult:
+        await self.ensure_bucket()
+
+        def _run() -> ObjectWriteResult:
+            sources = [ComposeSource(self.bucket_name, source_key) for source_key in source_keys]
+            result = self._client.compose_object(self.bucket_name, object_key, sources)
+            return ObjectWriteResult(etag=result.etag, version_id=result.version_id)
+
+        return await asyncio.to_thread(_run)
+
+    async def stat_object(self, *, object_key: str) -> ObjectStat:
+        def _run() -> ObjectStat:
+            stat = self._client.stat_object(self.bucket_name, object_key)
+            return ObjectStat(
+                size=stat.size,
+                etag=getattr(stat, "etag", None),
+                version_id=getattr(stat, "version_id", None),
+                content_type=getattr(stat, "content_type", None),
+            )
+
+        return await asyncio.to_thread(_run)
+
+    async def remove_object(self, *, object_key: str) -> None:
+        def _run() -> None:
+            self._client.remove_object(self.bucket_name, object_key)
+
+        await asyncio.to_thread(_run)
+
+    async def remove_objects(self, *, object_keys: Iterable[str]) -> None:
+        keys = [key for key in object_keys if key]
+        if not keys:
+            return
+
+        def _run() -> None:
+            errors = list(
+                self._client.remove_objects(
+                    self.bucket_name,
+                    (DeleteObject(key) for key in keys),
+                )
+            )
+            if errors:
+                error_text = ", ".join(f"{error.object_name}:{error.code}" for error in errors)
+                raise RuntimeError(f"Failed to remove objects: {error_text}")
+
+        await asyncio.to_thread(_run)
+
+    async def compute_object_hash(self, *, object_key: str, algorithm: str) -> str:
+        def _run() -> str:
+            hasher = hashlib.new(algorithm)
+            response = self._client.get_object(self.bucket_name, object_key)
+            try:
+                for chunk in response.stream(1024 * 1024):
+                    hasher.update(chunk)
+            finally:
+                response.close()
+                response.release_conn()
+            return hasher.hexdigest()
+
+        return await asyncio.to_thread(_run)

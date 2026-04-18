@@ -10,6 +10,8 @@ from ..models.tables_identity import User
 from ..services.auth import AuthService
 from ..services.messaging import InProcessAuthEventPublisher
 from ..services.rate_limiter import RedisRateLimiter
+from ..services.upload import UploadService
+from ..s3 import MinioObjectStorageClient
 from .errors import ApiError
 from .security import decode_access_token
 from .settings import Settings, get_settings
@@ -18,6 +20,7 @@ http_bearer = HTTPBearer(auto_error=False)
 _settings = get_settings()
 _rate_limiter = RedisRateLimiter(_settings.redis_url)
 _event_publisher = InProcessAuthEventPublisher()
+_object_storage = MinioObjectStorageClient.from_settings(_settings)
 
 
 def get_rate_limiter() -> RedisRateLimiter:
@@ -26,6 +29,10 @@ def get_rate_limiter() -> RedisRateLimiter:
 
 def get_event_publisher() -> InProcessAuthEventPublisher:
     return _event_publisher
+
+
+def get_object_storage() -> MinioObjectStorageClient:
+    return _object_storage
 
 
 def get_settings_dep() -> Settings:
@@ -57,6 +64,14 @@ def get_auth_service(
         rate_limiter=rate_limiter,
         event_publisher=event_publisher,
     )
+
+
+def get_upload_service(
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+    storage: MinioObjectStorageClient = Depends(get_object_storage),
+) -> UploadService:
+    return UploadService(db=db, settings=settings, storage=storage)
 
 
 async def get_current_user(

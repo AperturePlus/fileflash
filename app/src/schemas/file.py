@@ -127,6 +127,7 @@ class MergeChunksRequest(CamelModel):
     file_name: str = Field(min_length=1, max_length=255)
     mime_type: str = Field(min_length=1, max_length=255)
     parent_id: str
+    conflict_strategy: Literal["rename", "overwrite", "cancel"] | None = None
 
 
 class MergeChunksResponse(CamelModel):

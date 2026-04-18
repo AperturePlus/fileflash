@@ -44,6 +44,21 @@ class Settings(BaseSettings):
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
     rabbitmq_url: str | None = Field(default=None, alias="RABBITMQ_URL")
 
+    object_storage_endpoint: str = Field(default="localhost:9000", alias="OBJECT_STORAGE_ENDPOINT")
+    object_storage_access_key: str = Field(default="admin", alias="OBJECT_STORAGE_ACCESS_KEY")
+    object_storage_secret_key: str = Field(default="minio-admin", alias="OBJECT_STORAGE_SECRET_KEY")
+    object_storage_bucket: str = Field(default="fileflash", alias="OBJECT_STORAGE_BUCKET")
+    object_storage_secure: bool = Field(default=False, alias="OBJECT_STORAGE_SECURE")
+    object_storage_region: str | None = Field(default=None, alias="OBJECT_STORAGE_REGION")
+
+    upload_chunk_size_default: int = Field(default=5 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_DEFAULT")
+    upload_chunk_size_min: int = Field(default=1 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_MIN")
+    upload_chunk_size_max: int = Field(default=16 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_MAX")
+    upload_single_file_size_max: int = Field(default=5 * 1024 * 1024 * 1024, alias="UPLOAD_SINGLE_FILE_SIZE_MAX")
+    upload_session_ttl_hours: int = Field(default=24, alias="UPLOAD_SESSION_TTL_HOURS")
+    upload_temp_prefix: str = Field(default="tmp", alias="UPLOAD_TEMP_PREFIX")
+    upload_object_prefix: str = Field(default="objects", alias="UPLOAD_OBJECT_PREFIX")
+
     max_failed_login_attempts: int = 5
     account_lock_minutes: int = 15
     email_verification_expire_minutes: int = 60
@@ -121,6 +136,10 @@ class Settings(BaseSettings):
         if not values:
             return (30, 120, 600, 1800, 7200)
         return tuple(values)
+
+    @property
+    def upload_session_ttl_seconds(self) -> int:
+        return max(1, self.upload_session_ttl_hours) * 3600
 
 
 @lru_cache

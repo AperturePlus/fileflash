@@ -329,6 +329,11 @@ export interface MergeChunksRequest {
    * 目标父文件夹ID。
    */
   parentId: string;
+
+  /**
+   * Conflict handling strategy for merge retries.
+   */
+  conflictStrategy?: 'rename' | 'overwrite' | 'cancel';
 }
 
 /**
@@ -462,3 +467,4 @@ export interface GetAdminFilesRequest {
   sort?: 'name' | 'size' | 'createdAt' | 'updatedAt';
   order?: 'asc' | 'desc';
 }
+
