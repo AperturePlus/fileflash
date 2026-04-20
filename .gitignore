@@ -25,3 +25,5 @@
 # Local agent / test caches
 /.tmp/
 /.uv-cache/
+
+docs/design
