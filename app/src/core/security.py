@@ -48,3 +48,23 @@ def decode_access_token(token: str, settings: Settings) -> dict[str, Any]:
     if token_type != "access":
         raise jwt.InvalidTokenError("Invalid token type")
     return payload
+
+
+def create_share_access_token(*, share_id: int, settings: Settings, ttl_seconds: int = 30 * 60) -> str:
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "sub": str(share_id),
+        "typ": "share",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=ttl_seconds)).timestamp()),
+        "jti": str(uuid.uuid4()),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_share_access_token(token: str, settings: Settings) -> dict[str, Any]:
+    payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    token_type = payload.get("typ")
+    if token_type != "share":
+        raise jwt.InvalidTokenError("Invalid token type")
+    return payload

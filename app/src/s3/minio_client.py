@@ -7,6 +7,8 @@ import logging
 from dataclasses import dataclass
 from typing import Iterable
 
+from collections.abc import AsyncIterator
+
 from minio import Minio
 from minio.commonconfig import ComposeSource
 from minio.deleteobjects import DeleteObject
@@ -149,3 +151,17 @@ class MinioObjectStorageClient:
             return hasher.hexdigest()
 
         return await asyncio.to_thread(_run)
+
+    async def iter_object(self, *, object_key: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]:
+        await self.ensure_bucket()
+
+        response = await asyncio.to_thread(self._client.get_object, self.bucket_name, object_key)
+        try:
+            while True:
+                chunk = await asyncio.to_thread(response.read, chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            await asyncio.to_thread(response.close)
+            await asyncio.to_thread(response.release_conn)

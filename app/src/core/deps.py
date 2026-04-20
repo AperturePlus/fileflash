@@ -10,6 +10,7 @@ from ..models.tables_identity import User
 from ..services.auth import AuthService
 from ..services.messaging import InProcessAuthEventPublisher
 from ..services.rate_limiter import RedisRateLimiter
+from ..services.share import ShareService
 from ..services.upload import UploadService
 from ..s3 import MinioObjectStorageClient
 from .errors import ApiError
@@ -72,6 +73,14 @@ def get_upload_service(
     storage: MinioObjectStorageClient = Depends(get_object_storage),
 ) -> UploadService:
     return UploadService(db=db, settings=settings, storage=storage)
+
+
+def get_share_service(
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+    storage: MinioObjectStorageClient = Depends(get_object_storage),
+) -> ShareService:
+    return ShareService(db=db, settings=settings, storage=storage)
 
 
 async def get_current_user(

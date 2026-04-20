@@ -10,6 +10,7 @@ from .common import CamelModel, PageQuery
 
 class ShareSettings(CamelModel):
     password_protected: bool
+    password: str | None = None
     expire_at: datetime | None = None
     allow_download: bool
     allow_preview: bool
@@ -62,6 +63,8 @@ class GetSharesQuery(PageQuery):
 
 class UpdateShareSettingsRequest(CamelModel):
     password_protected: bool | None = None
+    password: str | None = Field(default=None, min_length=4, max_length=64)
+    regenerate_password: bool | None = None
     expire_at: datetime | None = None
     allow_download: bool | None = None
     allow_preview: bool | None = None
@@ -93,3 +96,15 @@ class AcceptSharedItemResponse(CamelModel):
     accepted: bool
     accepted_at: datetime
     item_id: str
+
+
+class SaveShareRequest(CamelModel):
+    target_folder_id: str = Field(min_length=1, max_length=255)
+    share_access_token: str = Field(min_length=8, max_length=4096)
+
+
+class SaveShareResponse(CamelModel):
+    saved_at: datetime
+    item_type: Literal["file", "folder"]
+    item_id: str
+    target_folder_id: str
