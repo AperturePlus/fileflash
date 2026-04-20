@@ -142,6 +142,7 @@ export const mockShares: Array<Share & { ownerUserId: string }> = [
     },
     settings: {
       passwordProtected: true,
+      password: '123456',
       expireAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
       allowDownload: true,
       allowPreview: false,

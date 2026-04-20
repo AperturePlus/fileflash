@@ -6,6 +6,7 @@ const HOME_ROUTE_NAME = 'Home';
 const FILES_ROUTE_PATH = '/files';
 const VERIFY_EMAIL_ROUTE_NAME = 'VerifyEmail';
 const PROFILE_ROUTE_NAME = 'Profile';
+const SHARE_ACCESS_ROUTE_NAME = 'ShareAccess';
 
 export function createRouterGuard(router: Router) {
   router.beforeEach((to, _from, next) => {
@@ -25,13 +26,14 @@ export function createRouterGuard(router: Router) {
     } else if (to.name === LOGIN_ROUTE_NAME && isLoggedIn) {
       // If logged in, redirect to home page from login page
       next({ name: HOME_ROUTE_NAME });
-    } else if (
-      needsVerification &&
-      to.name !== VERIFY_EMAIL_ROUTE_NAME &&
-      to.name !== PROFILE_ROUTE_NAME
-    ) {
-      next({ name: VERIFY_EMAIL_ROUTE_NAME });
-    } else if (requiresAdmin && !hasAdminAccess) {
+	    } else if (
+	      needsVerification &&
+	      to.name !== VERIFY_EMAIL_ROUTE_NAME &&
+	      to.name !== PROFILE_ROUTE_NAME &&
+	      to.name !== SHARE_ACCESS_ROUTE_NAME
+	    ) {
+	      next({ name: VERIFY_EMAIL_ROUTE_NAME });
+	    } else if (requiresAdmin && !hasAdminAccess) {
       next({ path: FILES_ROUTE_PATH });
     } else {
       // Make sure to always call next()!

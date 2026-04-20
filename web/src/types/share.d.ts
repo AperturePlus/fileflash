@@ -6,11 +6,12 @@
  * @property {boolean} allowPreview - 是否允许预览
  */
 export interface ShareSettings {
-    passwordProtected: boolean;
-    expireAt: string | null;
-    allowDownload: boolean;
-    allowPreview: boolean;
-  }
+	    passwordProtected: boolean;
+	    password?: string | null;
+	    expireAt: string | null;
+	    allowDownload: boolean;
+	    allowPreview: boolean;
+	  }
   
   /**
    * 分享项中的文件/文件夹信息
@@ -140,8 +141,22 @@ export interface GetSharedItemsRequest {
 }
 
 export interface UpdateShareSettingsRequest {
-  passwordProtected?: boolean;
-  expireAt?: string | null;
-  allowDownload?: boolean;
-  allowPreview?: boolean;
+	  passwordProtected?: boolean;
+	  password?: string;
+	  regeneratePassword?: boolean;
+	  expireAt?: string | null;
+	  allowDownload?: boolean;
+	  allowPreview?: boolean;
+	}
+
+export interface SaveShareRequest {
+  targetFolderId: string;
+  shareAccessToken: string;
+}
+
+export interface SaveShareResponse {
+  savedAt: string;
+  itemType: 'file' | 'folder';
+  itemId: string;
+  targetFolderId: string;
 }

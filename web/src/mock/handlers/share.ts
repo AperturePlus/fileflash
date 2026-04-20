@@ -2,6 +2,44 @@ import Mock from 'mockjs';
 import { addLog, createMockId, mockSharedItems, mockShares, paginate } from '../state';
 import { vfsApi } from '../vfs';
 
+function sanitizeShare<T extends { settings?: any }>(share: T) {
+  if (!share.settings) return share;
+  return {
+    ...share,
+    settings: {
+      ...share.settings,
+      password: undefined,
+    },
+  };
+}
+
+function buildMockFileBlob(file: { name: string; mimeType?: string; content?: string }) {
+  if (file.content) {
+    const byteCharacters = atob(file.content);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i += 1) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: file.mimeType || 'application/octet-stream' });
+  }
+
+  if ((file.mimeType || '').startsWith('text/')) {
+    return new Blob([`Mock content for ${file.name}`], { type: file.mimeType || 'text/plain' });
+  }
+
+  if (file.mimeType === 'application/pdf') {
+    const text = `%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF`;
+    return new Blob([text], { type: 'application/pdf' });
+  }
+
+  return new Blob([`Binary file: ${file.name}`], { type: file.mimeType || 'application/octet-stream' });
+}
+
+function generatePassword() {
+  return Mock.Random.string('number', 6);
+}
+
 function sortSharedItems<T extends { [key: string]: any }>(items: T[], sort: string | null, order: string | null) {
   const sortField = sort || 'sharedAt';
   const direction = order === 'asc' ? 1 : -1;
@@ -74,11 +112,15 @@ export const setupShareMocks = () => {
     const url = new URL(options.url, 'http://localhost');
     const page = Number(url.searchParams.get('page') || 1);
     const perPage = Number(url.searchParams.get('perPage') || 20);
+    const paged = paginate(mockShares, page, perPage);
 
     return {
       success: true,
       code: 200,
-      data: paginate(mockShares, page, perPage),
+      data: {
+        ...paged,
+        items: paged.items.map((item) => sanitizeShare(item)),
+      },
     };
   });
 
@@ -98,7 +140,7 @@ export const setupShareMocks = () => {
     return {
       success: true,
       code: 200,
-      data: share,
+      data: sanitizeShare(share),
     };
   });
 
@@ -116,7 +158,7 @@ export const setupShareMocks = () => {
       };
     }
 
-    if (share.settings.passwordProtected && password !== '123456') {
+    if (share.settings.passwordProtected && password !== share.settings.password) {
       return {
         success: false,
         code: 403,
@@ -145,8 +187,8 @@ export const setupShareMocks = () => {
         itemType: share.itemType,
         itemInfo: share.itemInfo,
         accessUrls: {
-          download: share.settings.allowDownload ? `/api/v1/files/${share.itemInfo.id}/download` : '',
-          preview: share.settings.allowPreview ? `/api/v1/files/${share.itemInfo.id}/preview` : '',
+          download: share.settings.allowDownload ? `/api/v1/shares/${share.shareLink}/download` : '',
+          preview: share.settings.allowPreview ? `/api/v1/shares/${share.shareLink}/preview` : '',
         },
       },
     };
@@ -156,6 +198,8 @@ export const setupShareMocks = () => {
     const shareLink = (options.url.match(/\/api\/v1\/shares\/([^/]+)\/settings/) || [])[1];
     const payload = JSON.parse(options.body || '{}') as Partial<{
       passwordProtected: boolean;
+      password: string;
+      regeneratePassword: boolean;
       expireAt: string | null;
       allowDownload: boolean;
       allowPreview: boolean;
@@ -171,12 +215,25 @@ export const setupShareMocks = () => {
       };
     }
 
-    share.settings = {
-      passwordProtected: payload.passwordProtected ?? share.settings.passwordProtected,
-      expireAt: payload.expireAt === undefined ? share.settings.expireAt : payload.expireAt,
-      allowDownload: payload.allowDownload ?? share.settings.allowDownload,
-      allowPreview: payload.allowPreview ?? share.settings.allowPreview,
-    };
+    const nextPasswordProtected = payload.passwordProtected ?? share.settings.passwordProtected;
+    share.settings.passwordProtected = nextPasswordProtected;
+    share.settings.expireAt = payload.expireAt === undefined ? share.settings.expireAt : payload.expireAt;
+    share.settings.allowDownload = payload.allowDownload ?? share.settings.allowDownload;
+    share.settings.allowPreview = payload.allowPreview ?? share.settings.allowPreview;
+
+    let issuedPassword: string | undefined;
+    if (!nextPasswordProtected) {
+      share.settings.password = undefined;
+    } else {
+      const wantsRegenerate = Boolean(payload.regeneratePassword);
+      const customPassword = payload.password?.trim();
+      const needsAutoGenerate = !share.settings.password;
+
+      if (wantsRegenerate || customPassword || needsAutoGenerate) {
+        issuedPassword = customPassword || generatePassword();
+        share.settings.password = issuedPassword;
+      }
+    }
 
     addLog('share_settings_update', {
       shareId: share.shareId,
@@ -187,7 +244,13 @@ export const setupShareMocks = () => {
     return {
       success: true,
       code: 200,
-      data: share,
+      data: {
+        ...sanitizeShare(share),
+        settings: {
+          ...sanitizeShare(share).settings,
+          ...(issuedPassword ? { password: issuedPassword } : {}),
+        },
+      },
     };
   });
 
@@ -216,6 +279,132 @@ export const setupShareMocks = () => {
         deletedAt: new Date().toISOString(),
       },
     };
+  });
+
+  Mock.mock(/\/api\/v1\/shares\/([^/]+)\/save$/, 'post', (options) => {
+    const shareLink = (options.url.match(/\/api\/v1\/shares\/([^/]+)\/save/) || [])[1];
+    const { targetFolderId } = JSON.parse(options.body || '{}');
+    const share = mockShares.find((item) => item.shareLink === shareLink || item.shareId === shareLink);
+
+    if (!share) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Share not found',
+        data: null,
+      };
+    }
+
+    try {
+      const copied = vfsApi.copy(share.itemInfo.id, targetFolderId || 'root');
+      addLog('shared_item_accept', { shareId: share.shareId, targetFolderId, savedId: copied.id });
+      return {
+        success: true,
+        code: 201,
+        data: {
+          savedAt: new Date().toISOString(),
+          itemType: share.itemType,
+          itemId: copied.id,
+          targetFolderId: targetFolderId || 'root',
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        code: 400,
+        message: (error as Error).message || 'Failed to save share',
+        data: null,
+      };
+    }
+  });
+
+  Mock.mock(/\/api\/v1\/shares\/([^/]+)\/download$/, 'get', (options) => {
+    const shareLink = (options.url.match(/\/api\/v1\/shares\/([^/]+)\/download/) || [])[1];
+    const share = mockShares.find((item) => item.shareLink === shareLink || item.shareId === shareLink);
+
+    if (!share) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Share not found',
+        data: null,
+      };
+    }
+
+    if (share.itemType !== 'file') {
+      return {
+        success: false,
+        code: 400,
+        message: 'Only file shares support download',
+        data: null,
+      };
+    }
+
+    if (!share.settings.allowDownload) {
+      return {
+        success: false,
+        code: 403,
+        message: 'Download not allowed',
+        data: null,
+      };
+    }
+
+    const node = vfsApi.get(share.itemInfo.id);
+    if (!node || node.type !== 'file') {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    addLog('file_download', { shareId: share.shareId, fileId: node.id, fileName: node.name });
+    return buildMockFileBlob(node);
+  });
+
+  Mock.mock(/\/api\/v1\/shares\/([^/]+)\/preview$/, 'get', (options) => {
+    const shareLink = (options.url.match(/\/api\/v1\/shares\/([^/]+)\/preview/) || [])[1];
+    const share = mockShares.find((item) => item.shareLink === shareLink || item.shareId === shareLink);
+
+    if (!share) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Share not found',
+        data: null,
+      };
+    }
+
+    if (share.itemType !== 'file') {
+      return {
+        success: false,
+        code: 400,
+        message: 'Only file shares support preview',
+        data: null,
+      };
+    }
+
+    if (!share.settings.allowPreview) {
+      return {
+        success: false,
+        code: 403,
+        message: 'Preview not allowed',
+        data: null,
+      };
+    }
+
+    const node = vfsApi.get(share.itemInfo.id);
+    if (!node || node.type !== 'file') {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    return buildMockFileBlob(node);
   });
 
   Mock.mock(/\/api\/v1\/shared-items(?:\?.*)?$/, 'get', (options) => {
