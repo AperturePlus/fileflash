@@ -3,12 +3,13 @@ import type { PermissionItem } from '../types/permission';
 import type { Share, SharedItem } from '../types/share';
 import type { NotificationItem } from '../types/notification';
 import type { LogItem } from '../types/log';
-import type { User } from '../types/user';
+import type { User, UserPreference } from '../types/user';
 
 export type MockUserRecord = User & {
   status: 'active' | 'suspended';
   role: 'user' | 'admin';
   password: string;
+  preference: UserPreference;
 };
 
 const now = () => new Date().toISOString();
@@ -28,10 +29,15 @@ export const mockUsers: MockUserRecord[] = [
     email: 'admin@fileflash.mock',
     storageLimit: 107374182400,
     storageUsed: 21474836480,
+    emailVerified: true,
+    emailVerifiedAt: '2025-01-10T10:00:00.000Z',
     createdAt: '2025-01-10T09:30:00.000Z',
     status: 'active',
     role: 'admin',
     password: 'admin123',
+    preference: {
+      language: 'zh-CN',
+    },
   },
   {
     userId: 'user2',
@@ -39,10 +45,15 @@ export const mockUsers: MockUserRecord[] = [
     email: 'demo@example.com',
     storageLimit: 53687091200,
     storageUsed: 10737418240,
+    emailVerified: false,
+    emailVerifiedAt: null,
     createdAt: '2025-02-18T10:10:00.000Z',
     status: 'active',
     role: 'user',
     password: 'demo123',
+    preference: {
+      language: 'en-US',
+    },
   },
   {
     userId: 'user3',
@@ -50,10 +61,15 @@ export const mockUsers: MockUserRecord[] = [
     email: 'alice@example.com',
     storageLimit: 53687091200,
     storageUsed: 10737418240,
+    emailVerified: true,
+    emailVerifiedAt: '2025-03-12T12:00:00.000Z',
     createdAt: '2025-03-12T11:20:00.000Z',
     status: 'active',
     role: 'user',
     password: 'alice123',
+    preference: {
+      language: 'zh-CN',
+    },
   },
   {
     userId: 'user4',
@@ -61,10 +77,15 @@ export const mockUsers: MockUserRecord[] = [
     email: 'bob@example.com',
     storageLimit: 53687091200,
     storageUsed: 3435973836,
+    emailVerified: true,
+    emailVerifiedAt: '2025-06-02T10:15:00.000Z',
     createdAt: '2025-06-02T08:15:00.000Z',
     status: 'active',
     role: 'user',
     password: 'bob123',
+    preference: {
+      language: 'en-US',
+    },
   },
   {
     userId: 'user5',
@@ -72,10 +93,15 @@ export const mockUsers: MockUserRecord[] = [
     email: 'charlie@example.com',
     storageLimit: 53687091200,
     storageUsed: 17448304640,
+    emailVerified: false,
+    emailVerifiedAt: null,
     createdAt: '2025-08-01T06:05:00.000Z',
     status: 'suspended',
     role: 'user',
     password: 'charlie123',
+    preference: {
+      language: 'zh-CN',
+    },
   },
 ];
 
@@ -116,6 +142,7 @@ export const mockShares: Array<Share & { ownerUserId: string }> = [
     },
     settings: {
       passwordProtected: true,
+      password: '123456',
       expireAt: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
       allowDownload: true,
       allowPreview: false,

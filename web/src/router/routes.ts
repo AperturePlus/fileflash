@@ -17,6 +17,17 @@ export const routes: Array<RouteRecordRaw> = [
     name: 'ForgotPassword',
     component: () => import('../pages/forgot-password/index.ts'),
   },
+  {
+    path: '/verify-email',
+    name: 'VerifyEmail',
+    component: () => import('../pages/verify-email/index.ts'),
+  },
+
+  {
+    path: '/share/:shareLink',
+    name: 'ShareAccess',
+    component: () => import('../pages/share/index.ts'),
+  },
   
   {
     path: '/',

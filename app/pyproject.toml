@@ -5,19 +5,26 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "asynchttp>=0.0.4",
-    "asyncio>=4.0.0",
+    "asyncpg>=0.30.0",
     "fastapi>=0.135.1",
+    "fastapi-mail>=1.6.2",
     "minio>=7.2.20",
+    "passlib[bcrypt]>=1.7.4",
+    "pydantic-settings>=2.11.0",
     "pydantic>=2.12.5",
+    "pyjwt>=2.10.1",
     "python-dotenv>=1.2.2",
+    "redis>=6.4.0",
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.42.0",
+    "python-multipart>=0.0.24",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "hypothesis>=6.151.9",
+    "pytest-asyncio>=1.2.0",
     "pytest>=9.0.2",
     "ruff>=0.15.6",
 ]

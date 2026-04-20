@@ -7,7 +7,6 @@ import type { PermissionsList, CreatePermissionRequest, PermissionItem, UpdatePe
  * @returns 创建的权限信息
  */
 export const createPermission = (data: CreatePermissionRequest) => {
-  console.log("send by createPermission", data);
   return http.post<PermissionItem>('/permissions', data);
 };
 
@@ -17,7 +16,6 @@ export const createPermission = (data: CreatePermissionRequest) => {
  * @returns 权限列表
  */
 export const getPermissions = (params: GetPermissionsRequest) => {
-  console.log("send by getPermissions", params);
   return http.get<PermissionsList>('/permissions', params);
 };
 
@@ -28,7 +26,6 @@ export const getPermissions = (params: GetPermissionsRequest) => {
  * @returns 更新后的权限信息
  */
 export const updatePermission = (permissionId: string, data: UpdatePermissionRequest) => {
-  console.log("send by updatePermission", data);
   return http.put<PermissionItem>(`/permissions/${permissionId}`, data);
 };
 
@@ -38,6 +35,5 @@ export const updatePermission = (permissionId: string, data: UpdatePermissionReq
  * @returns 删除后的权限信息
  */
 export const deletePermission = (permissionId: string) => {
-  console.log("send by deletePermission", permissionId);
   return http.delete<{ permissionId: string; revokedPermission: string; deletedAt: string }>(`/permissions/${permissionId}`);
 }; 

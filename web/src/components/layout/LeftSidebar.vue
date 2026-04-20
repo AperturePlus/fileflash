@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useFileStore } from '../../store/file';
 import type { ContentItem, FolderItem } from '../../types/file';
 import FileTreeNode from '../common/FileTreeNode.vue';
 import { eventBus } from '../../utils/eventBus';
 import { getStorageStats } from '../../api/user';
 import type { StorageStats } from '../../types/user';
+import { useLocaleStore } from '../../store/locale';
 
 defineProps<{ collapsed: boolean }>();
 
 const fileStore = useFileStore();
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const rootNode = ref<FolderItem>({
   id: 'root',
-  name: 'My Files',
+  name: t('sidebar.myFiles'),
   itemType: 'folder',
   size: 0,
   ownerName: '',
@@ -68,6 +71,16 @@ const refreshTree = () => {
   treeKey.value += 1;
 };
 
+watch(
+  () => localeStore.locale,
+  () => {
+    rootNode.value = {
+      ...rootNode.value,
+      name: t('sidebar.myFiles'),
+    };
+  },
+);
+
 onMounted(() => {
   eventBus.on('refresh-file-tree', refreshTree);
   getStorageStats().then((stats) => {
@@ -87,26 +100,26 @@ onUnmounted(() => {
         <li class="nav-item">
           <router-link to="/files" class="nav-link" active-class="active">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h6l2 2h10v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
-            <span v-if="!collapsed" class="link-text">My Files</span>
+            <span v-if="!collapsed" class="link-text">{{ t('sidebar.myFiles') }}</span>
           </router-link>
         </li>
         <li class="nav-item">
           <router-link to="/shared" class="nav-link" active-class="active">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7a3 3 0 1 0-2.8-4H14a3 3 0 0 0 .2 1l-5.7 3a3 3 0 1 0 0 2l5.7 3a3 3 0 1 0 .7-1.3l-5.7-3a3 3 0 0 0 0-1.4z" /></svg>
-            <span v-if="!collapsed" class="link-text">Shared</span>
+            <span v-if="!collapsed" class="link-text">{{ t('sidebar.shared') }}</span>
           </router-link>
         </li>
         <li class="nav-item">
           <router-link to="/trash" class="nav-link" active-class="active">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4zm1 6h2v8h-2zm4 0h2v8h-2zM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" /></svg>
-            <span v-if="!collapsed" class="link-text">Recycle Bin</span>
+            <span v-if="!collapsed" class="link-text">{{ t('sidebar.recycleBin') }}</span>
           </router-link>
         </li>
       </ul>
     </nav>
 
     <div v-if="!collapsed" class="tree-panel">
-      <div class="panel-title">Workspace Tree</div>
+      <div class="panel-title">{{ t('sidebar.workspaceTree') }}</div>
       <div class="tree-scroll-wrapper">
         <FileTreeNode
           :key="treeKey"
@@ -121,7 +134,7 @@ onUnmounted(() => {
     <div class="sidebar-footer">
       <div v-if="storage" class="storage-card">
         <div class="storage-head">
-          <strong v-if="!collapsed">Storage</strong>
+          <strong v-if="!collapsed">{{ t('sidebar.storage') }}</strong>
           <span>{{ storagePercentage }}%</span>
         </div>
         <div class="progress-track" :aria-valuenow="storagePercentage" aria-valuemin="0" aria-valuemax="100" role="progressbar">

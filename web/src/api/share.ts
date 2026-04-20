@@ -8,6 +8,8 @@ import type {
   GetSharedItemsRequest,
   SharedItem,
   UpdateShareSettingsRequest,
+  SaveShareRequest,
+  SaveShareResponse,
 } from '../types/share';
 
 /**
@@ -34,7 +36,7 @@ export const getShares = (params: { page?: number; perPage?: number }) => {
  * @returns 分享详情
  */
 export const getShareDetails = (shareLink: string) => {
-  return http.get<Share>(`/shares/${shareLink}`);
+  return http.get<Share>(`/shares/${shareLink}`, undefined, { skipAuth: true });
 };
 
 /**
@@ -44,7 +46,7 @@ export const getShareDetails = (shareLink: string) => {
  * @returns 访问分享的响应数据
  */
 export const accessShare = (shareLink: string, data: AccessShareRequest) => {
-  return http.post<AccessShareResponseData>(`/shares/${shareLink}/access`, data);
+  return http.post<AccessShareResponseData>(`/shares/${shareLink}/access`, data, { skipAuth: true });
 };
 
 /**
@@ -58,6 +60,26 @@ export const deleteShare = (shareLink: string) => {
 
 export const updateShareSettings = (shareLink: string, data: UpdateShareSettingsRequest) => {
   return http.patch<Share>(`/shares/${shareLink}/settings`, data);
+};
+
+export const saveShare = (shareLink: string, data: SaveShareRequest) => {
+  return http.post<SaveShareResponse>(`/shares/${shareLink}/save`, data);
+};
+
+export const downloadSharedFile = (shareLink: string, shareAccessToken: string) => {
+  return http.get<Blob>(`/shares/${shareLink}/download`, undefined, {
+    skipAuth: true,
+    responseType: 'blob' as const,
+    headers: { Authorization: `Bearer ${shareAccessToken}` },
+  });
+};
+
+export const previewSharedFile = (shareLink: string, shareAccessToken: string) => {
+  return http.get<Blob>(`/shares/${shareLink}/preview`, undefined, {
+    skipAuth: true,
+    responseType: 'blob' as const,
+    headers: { Authorization: `Bearer ${shareAccessToken}` },
+  });
 };
 
 /**

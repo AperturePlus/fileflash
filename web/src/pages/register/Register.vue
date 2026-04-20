@@ -27,13 +27,17 @@ const handleRegister = async () => {
   errorMessage.value = '';
 
   try {
-    await register({
+    const response = await register({
       username: username.value,
       email: email.value,
       password: password.value,
     });
 
-    router.push('/login');
+    if (response.emailVerificationRequired) {
+      router.push('/verify-email');
+    } else {
+      router.push('/login');
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '注册失败，请稍后再试。';
   } finally {

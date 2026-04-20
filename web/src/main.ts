@@ -1,19 +1,23 @@
-import { createApp } from 'vue'
+import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import './style.css'
-import App from './App.vue'
+import './style.css';
+import App from './App.vue';
 import router from './router';
 
-// --- Mock Service ---
-// Note: In a real application, this would be conditional,
-// e.g., only in development mode.
- import './mock'; // 禁用Mock服务，连接真实后端
+async function bootstrap() {
+  const enableMocks = import.meta.env.VITE_ENABLE_MOCKS !== 'false';
+  if (enableMocks) {
+    await import('./mock');
+  }
 
-const app = createApp(App);
-const pinia = createPinia();
+  const app = createApp(App);
+  const pinia = createPinia();
 
-app.use(pinia);
-app.use(router);
+  app.use(pinia);
+  app.use(router);
 
-app.mount('#app');
-    
+  app.mount('#app');
+}
+
+bootstrap();
+

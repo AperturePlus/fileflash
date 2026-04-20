@@ -13,6 +13,11 @@ import type {
   BatchFilesRequest,
   UploadPreflightRequest,
   UploadPreflightResponse,
+  BatchUploadPreflightRequest,
+  BatchUploadPreflightResponse,
+  BatchUploadCompleteRequest,
+  BatchUploadCompleteResponse,
+  BatchUploadStatusResponse,
   MergeChunksRequest,
   MergeChunksResponse,
   AdminFileAuditItem,
@@ -22,6 +27,34 @@ import type {
 // 上传相关API
 export const preflightUpload = (data: UploadPreflightRequest) => {
   return http.post<UploadPreflightResponse>('/uploads/preflight', data);
+};
+
+/**
+ * 批量上传预检
+ * @param data 批量预检请求
+ * @returns 每个文件的上传会话信息
+ */
+export const batchPreflightUpload = (data: BatchUploadPreflightRequest) => {
+  return http.post<BatchUploadPreflightResponse>('/uploads/batch-preflight', data);
+};
+
+/**
+ * 批量上传完成确认
+ * @param batchId 批次ID
+ * @param data 完成确认请求
+ * @returns 批次完成结果
+ */
+export const completeBatchUpload = (batchId: string, data: BatchUploadCompleteRequest) => {
+  return http.post<BatchUploadCompleteResponse>(`/uploads/batch/${batchId}/complete`, data);
+};
+
+/**
+ * 获取批量上传状态
+ * @param batchId 批次ID
+ * @returns 批量上传状态
+ */
+export const getBatchUploadStatus = (batchId: string) => {
+  return http.get<BatchUploadStatusResponse>(`/uploads/batch/${batchId}`);
 };
 
 /**
@@ -164,7 +197,7 @@ export const batchDownloadFiles = (fileIds: string[]) => {
  * @returns 操作后的文件信息
  */
 export const batchFiles = (data: BatchFilesRequest) => {
-  return http.post<{ data: ResponseData }>('/files/batch', data);
+  return http.post<ResponseData>('/files/batch', data);
 };
 
 interface ResponseData {

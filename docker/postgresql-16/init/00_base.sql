@@ -34,6 +34,14 @@ BEGIN
         CREATE TYPE user_status_enum AS ENUM ('pending_verification', 'active', 'locked', 'disabled');
     END IF;
 
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role_enum') THEN
+        CREATE TYPE user_role_enum AS ENUM ('USER', 'ADMIN');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ui_language_enum') THEN
+        CREATE TYPE ui_language_enum AS ENUM ('zh-CN', 'en-US');
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'folder_type_enum') THEN
         CREATE TYPE folder_type_enum AS ENUM ('normal', 'root', 'system');
     END IF;

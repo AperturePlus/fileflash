@@ -1,16 +1,34 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import Hls from 'hls.js';
+import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import Viewer from 'viewerjs';
+import 'viewerjs/dist/viewer.css';
 import { downloadFile, previewFile } from '../../api/file';
 import { useFileStore } from '../../store/file';
+
+GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 defineProps<{ visible: boolean }>();
 
 const fileStore = useFileStore();
 
 const isLoading = ref(false);
+const isPdfRendering = ref(false);
 const error = ref('');
 const textContent = ref('');
 const objectUrl = ref('');
+const pdfDoc = ref<PDFDocumentProxy | null>(null);
+const pdfPage = ref(1);
+const pdfTotalPages = ref(0);
+
+const imagePreviewRef = ref<HTMLImageElement | null>(null);
+const videoPreviewRef = ref<HTMLVideoElement | null>(null);
+const pdfCanvasRef = ref<HTMLCanvasElement | null>(null);
+
+let imageViewer: Viewer | null = null;
+let hlsPlayer: Hls | null = null;
 
 const selectedFile = computed(() => {
   if (!fileStore.selectedFile || fileStore.selectedFile.itemType !== 'file') return null;
@@ -23,6 +41,10 @@ const isPdf = computed(() => selectedMime.value === 'application/pdf');
 const isImage = computed(() => selectedMime.value.startsWith('image/'));
 const isAudio = computed(() => selectedMime.value.startsWith('audio/'));
 const isVideo = computed(() => selectedMime.value.startsWith('video/'));
+const isHlsPlaylist = computed(() => {
+  const name = selectedFile.value?.name.toLowerCase() || '';
+  return selectedMime.value === 'application/vnd.apple.mpegurl' || name.endsWith('.m3u8');
+});
 
 const formatBytes = (bytes: number | undefined) => {
   if (!bytes) return '--';
@@ -32,13 +54,130 @@ const formatBytes = (bytes: number | undefined) => {
   return `${(bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 };
 
+const canPrevPdfPage = computed(() => pdfPage.value > 1);
+const canNextPdfPage = computed(() => pdfPage.value < pdfTotalPages.value);
+
+const destroyImageViewer = () => {
+  if (imageViewer) {
+    imageViewer.destroy();
+    imageViewer = null;
+  }
+};
+
+const destroyVideoPlayer = () => {
+  if (hlsPlayer) {
+    hlsPlayer.destroy();
+    hlsPlayer = null;
+  }
+  if (videoPreviewRef.value) {
+    videoPreviewRef.value.removeAttribute('src');
+    videoPreviewRef.value.load();
+  }
+};
+
+const destroyPdfState = () => {
+  pdfDoc.value?.destroy();
+  pdfDoc.value = null;
+  pdfPage.value = 1;
+  pdfTotalPages.value = 0;
+  const canvas = pdfCanvasRef.value;
+  if (!canvas) return;
+  const context = canvas.getContext('2d');
+  context?.clearRect(0, 0, canvas.width, canvas.height);
+};
+
 const resetState = () => {
   textContent.value = '';
   error.value = '';
+  destroyImageViewer();
+  destroyVideoPlayer();
+  destroyPdfState();
+
   if (objectUrl.value) {
     URL.revokeObjectURL(objectUrl.value);
     objectUrl.value = '';
   }
+};
+
+const renderPdfPage = async (pageNumber: number) => {
+  if (!pdfDoc.value || !pdfCanvasRef.value) return;
+  if (pageNumber < 1 || pageNumber > pdfDoc.value.numPages) return;
+
+  isPdfRendering.value = true;
+  try {
+    const page = await pdfDoc.value.getPage(pageNumber);
+    const unscaledViewport = page.getViewport({ scale: 1 });
+    const containerWidth = pdfCanvasRef.value.parentElement?.clientWidth || 640;
+    const scale = Math.max(0.5, Math.min(2.4, containerWidth / unscaledViewport.width));
+    const viewport = page.getViewport({ scale });
+
+    const canvas = pdfCanvasRef.value;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Canvas context is unavailable');
+    }
+
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    await page.render({
+      canvas,
+      canvasContext: context,
+      viewport,
+    }).promise;
+
+    pdfPage.value = pageNumber;
+  } catch {
+    error.value = 'Unable to render PDF preview.';
+  } finally {
+    isPdfRendering.value = false;
+  }
+};
+
+const initImagePreview = async () => {
+  if (!isImage.value || !imagePreviewRef.value) return;
+  destroyImageViewer();
+
+  imageViewer = new Viewer(imagePreviewRef.value, {
+    inline: false,
+    navbar: false,
+    title: false,
+    toolbar: {
+      zoomIn: true,
+      zoomOut: true,
+      oneToOne: true,
+      reset: true,
+      prev: false,
+      next: false,
+      rotateLeft: true,
+      rotateRight: true,
+      flipHorizontal: false,
+      flipVertical: false,
+    },
+  });
+};
+
+const initVideoPreview = () => {
+  if (!isVideo.value || !videoPreviewRef.value || !objectUrl.value) return;
+  destroyVideoPlayer();
+
+  const video = videoPreviewRef.value;
+  if (isHlsPlaylist.value && Hls.isSupported()) {
+    hlsPlayer = new Hls({
+      enableWorker: true,
+      lowLatencyMode: true,
+    });
+    hlsPlayer.loadSource(objectUrl.value);
+    hlsPlayer.attachMedia(video);
+    hlsPlayer.on(Hls.Events.ERROR, (_event: string, data: { fatal: boolean }) => {
+      if (data.fatal) {
+        error.value = 'Unable to play this HLS stream.';
+      }
+    });
+    return;
+  }
+
+  video.src = objectUrl.value;
 };
 
 const loadPreview = async () => {
@@ -53,14 +192,36 @@ const loadPreview = async () => {
     const blob = await previewFile(selectedFile.value.id);
     if (isText.value) {
       textContent.value = await blob.text();
+    } else if (isPdf.value) {
+      const raw = new Uint8Array(await blob.arrayBuffer());
+      pdfDoc.value = await getDocument({ data: raw }).promise;
+      pdfTotalPages.value = pdfDoc.value.numPages;
+      await nextTick();
+      await renderPdfPage(1);
     } else {
       objectUrl.value = URL.createObjectURL(blob);
+      await nextTick();
+      if (isImage.value) {
+        await initImagePreview();
+      } else if (isVideo.value) {
+        initVideoPreview();
+      }
     }
   } catch {
     error.value = 'Unable to load file preview.';
   } finally {
     isLoading.value = false;
   }
+};
+
+const goToPrevPdfPage = async () => {
+  if (!canPrevPdfPage.value) return;
+  await renderPdfPage(pdfPage.value - 1);
+};
+
+const goToNextPdfPage = async () => {
+  if (!canNextPdfPage.value) return;
+  await renderPdfPage(pdfPage.value + 1);
 };
 
 const downloadSelectedFile = async () => {
@@ -117,11 +278,18 @@ const closeSidebar = () => {
         <pre v-else-if="isText" class="text-preview">{{ textContent }}</pre>
 
         <div v-else-if="isImage" class="image-preview">
-          <img :src="objectUrl" alt="Image preview" />
+          <img ref="imagePreviewRef" :src="objectUrl" alt="Image preview" />
         </div>
 
         <div v-else-if="isPdf" class="pdf-preview">
-          <iframe :src="objectUrl" title="PDF preview" />
+          <div class="pdf-toolbar">
+            <button class="pdf-btn" :disabled="!canPrevPdfPage || isPdfRendering" @click="goToPrevPdfPage">Prev</button>
+            <span>Page {{ pdfPage }} / {{ pdfTotalPages || 1 }}</span>
+            <button class="pdf-btn" :disabled="!canNextPdfPage || isPdfRendering" @click="goToNextPdfPage">Next</button>
+          </div>
+          <div class="pdf-canvas-wrap">
+            <canvas ref="pdfCanvasRef"></canvas>
+          </div>
         </div>
 
         <div v-else-if="isAudio" class="media-preview">
@@ -129,7 +297,7 @@ const closeSidebar = () => {
         </div>
 
         <div v-else-if="isVideo" class="media-preview">
-          <video :src="objectUrl" controls preload="metadata" />
+          <video ref="videoPreviewRef" :src="isHlsPlaylist ? '' : objectUrl" controls preload="metadata" />
         </div>
 
         <div v-else class="state">Preview is not available for this file type.</div>
@@ -181,7 +349,8 @@ const closeSidebar = () => {
 }
 
 .close-btn,
-.action-btn {
+.action-btn,
+.pdf-btn {
   height: 32px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
@@ -238,8 +407,7 @@ const closeSidebar = () => {
 
 .image-preview img,
 .media-preview audio,
-.media-preview video,
-.pdf-preview iframe {
+.media-preview video {
   width: 100%;
   border-radius: var(--border-radius-sm);
 }
@@ -248,9 +416,37 @@ const closeSidebar = () => {
   max-height: 320px;
 }
 
-.pdf-preview iframe {
-  min-height: 520px;
+.pdf-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.pdf-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pdf-canvas-wrap {
   border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
   background-color: #fff;
+  overflow: auto;
+}
+
+.pdf-canvas-wrap canvas {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
 }
 </style>

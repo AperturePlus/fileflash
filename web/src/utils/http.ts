@@ -7,12 +7,14 @@ import { useUserStore } from '../store/user';
 declare module 'axios' {
   export interface AxiosRequestConfig {
     useUrlencoded?: boolean;
+    skipAuth?: boolean;
   }
 }
 
 const instance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_BASE_URL || '/api/v1',
   timeout: 10000,
+  withCredentials: true,
   // 配置参数序列化，避免嵌套对象格式
   paramsSerializer: (params) => {
     return qs.stringify(params, { arrayFormat: 'brackets', encode: false });
@@ -27,8 +29,11 @@ instance.interceptors.request.use(
     const userStore = useUserStore();
     const token = userStore.token;
 
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (!config.skipAuth && token) {
+      config.headers = config.headers || {};
+      if (!config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
 
     // 根据配置，处理 application/x-www-form-urlencoded 格式的数据

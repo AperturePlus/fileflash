@@ -14,18 +14,6 @@ const profileGroups = [
   },
 ];
 
-function toDateArray(isoString: string) {
-  const date = new Date(isoString);
-  return [
-    date.getFullYear(),
-    date.getMonth() + 1,
-    date.getDate(),
-    date.getHours(),
-    date.getMinutes(),
-    date.getSeconds(),
-  ];
-}
-
 export const setupUserMocks = () => {
   Mock.mock(/\/api\/v1\/users(?:\?.*)?$/, 'get', (options) => {
     const url = new URL(options.url, 'http://localhost');
@@ -42,6 +30,8 @@ export const setupUserMocks = () => {
       email: user.email,
       storageLimit: user.storageLimit,
       storageUsed: user.storageUsed,
+      emailVerified: user.emailVerified,
+      emailVerifiedAt: user.emailVerifiedAt,
       createdAt: user.createdAt,
       role: user.role,
       status: user.status,
@@ -65,6 +55,8 @@ export const setupUserMocks = () => {
       email: user.email,
       storageLimit: user.storageLimit,
       storageUsed: user.storageUsed,
+      emailVerified: user.emailVerified,
+      emailVerifiedAt: user.emailVerifiedAt,
       createdAt: user.createdAt,
       role: user.role,
       status: user.status,
@@ -171,9 +163,12 @@ export const setupUserMocks = () => {
         email: user.email,
         storageLimit: user.storageLimit,
         storageUsed: user.storageUsed,
+        emailVerified: user.emailVerified,
+        emailVerifiedAt: user.emailVerifiedAt,
         createdAt: user.createdAt,
         role: user.role,
         status: user.status,
+        preference: user.preference,
         updatedAt: new Date().toISOString(),
         lastLogin: new Date(Date.now() - 2 * 3600000).toISOString(),
         groups: profileGroups,
@@ -197,13 +192,44 @@ export const setupUserMocks = () => {
         email: user.email,
         storageLimit: user.storageLimit,
         storageUsed: user.storageUsed,
+        emailVerified: user.emailVerified,
+        emailVerifiedAt: user.emailVerifiedAt,
         createdAt: user.createdAt,
         role: user.role,
         status: user.status,
+        preference: user.preference,
         updatedAt: new Date().toISOString(),
         lastLogin: new Date(Date.now() - 2 * 3600000).toISOString(),
         groups: profileGroups,
       },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/preferences$/, 'get', () => {
+    const user = getCurrentUser();
+    return {
+      success: true,
+      code: 200,
+      data: user.preference,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/me\/preferences$/, 'put', (options) => {
+    const user = getCurrentUser();
+    const { language } = JSON.parse(options.body || '{}');
+
+    if (language && (language === 'zh-CN' || language === 'en-US')) {
+      user.preference = {
+        ...user.preference,
+        language,
+      };
+      addLog('user_preference_update', { userId: user.userId, language });
+    }
+
+    return {
+      success: true,
+      code: 200,
+      data: user.preference,
     };
   });
 
@@ -267,16 +293,16 @@ export const setupUserMocks = () => {
               'Mozilla/5.0 Edg/122.0',
             ]),
           },
-          ip_address: item.ipAddress,
-          performed_at: toDateArray(item.performedAt),
+          ipAddress: item.ipAddress,
+          performedAt: item.performedAt,
         })),
         pagination: {
-          total_items: paged.pagination.totalItems,
-          total_pages: paged.pagination.totalPages,
-          per_page: paged.pagination.perPage,
-          current_page: paged.pagination.currentPage,
-          has_prev: paged.pagination.hasPrev,
-          has_next: paged.pagination.hasNext,
+          totalItems: paged.pagination.totalItems,
+          totalPages: paged.pagination.totalPages,
+          perPage: paged.pagination.perPage,
+          currentPage: paged.pagination.currentPage,
+          hasPrev: paged.pagination.hasPrev,
+          hasNext: paged.pagination.hasNext,
         },
       },
     };
