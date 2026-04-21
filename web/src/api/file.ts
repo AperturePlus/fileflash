@@ -22,6 +22,10 @@ import type {
   MergeChunksResponse,
   AdminFileAuditItem,
   GetAdminFilesRequest,
+  ArchiveExtractRequest,
+  BackgroundJob,
+  JobResultArchiveExtract,
+  JobResultArchivePreview,
 } from '../types/file';
 
 // 上传相关API
@@ -81,6 +85,15 @@ export const uploadChunk = (uploadId: string, chunk: File, chunkIndex: number) =
  */
 export const mergeChunks = (uploadId: string, data: MergeChunksRequest) => {
   return http.post<MergeChunksResponse>(`/uploads/${uploadId}/merge`, data);
+};
+
+// Archive preview/extract APIs
+export const requestArchivePreview = (fileId: string) => {
+  return http.post<BackgroundJob<JobResultArchivePreview>>(`/files/${fileId}/archive/preview`);
+};
+
+export const requestArchiveExtract = (fileId: string, data: ArchiveExtractRequest) => {
+  return http.post<BackgroundJob<JobResultArchiveExtract>>(`/files/${fileId}/archive/extract`, data);
 };
 
 // 文件管理API

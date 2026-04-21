@@ -4,6 +4,7 @@ import type { Share, SharedItem } from '../types/share';
 import type { NotificationItem } from '../types/notification';
 import type { LogItem } from '../types/log';
 import type { User, UserPreference } from '../types/user';
+import type { BackgroundJob } from '../types/file';
 
 export type MockUserRecord = User & {
   status: 'active' | 'suspended';
@@ -21,6 +22,8 @@ const randomRecentTime = (maxHours = 72) => {
 
 let notificationId = 200;
 let logId = 1000;
+
+export const mockJobs: Record<string, BackgroundJob<any>> = {};
 
 export const mockUsers: MockUserRecord[] = [
   {

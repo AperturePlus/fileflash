@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import type { ContentItem, FolderItem } from '../../types/file';
 import { getFolderContents } from '../../api/folder';
 import FolderTreeNode from './FolderTreeNode.vue';
@@ -7,6 +7,10 @@ import FolderTreeNode from './FolderTreeNode.vue';
 interface Props {
   isVisible: boolean;
   itemToMove: ContentItem | null;
+  title?: string;
+  prompt?: string;
+  confirmText?: string;
+  rootLabel?: string;
 }
 const props = defineProps<Props>();
 
@@ -15,6 +19,16 @@ const emit = defineEmits(['close', 'confirm']);
 const rootFolders = ref<FolderItem[]>([]);
 const isLoading = ref(false);
 const selectedFolderId = ref<string | null>(null);
+
+const modalTitle = computed(() => {
+  if (props.title) return props.title;
+  if (!props.itemToMove) return 'Move';
+  return `Move '${props.itemToMove.name}'`;
+});
+
+const promptText = computed(() => props.prompt || 'Choose a new location:');
+const confirmButtonText = computed(() => props.confirmText || 'Move Here');
+const rootText = computed(() => props.rootLabel || 'My Files (Root)');
 
 const fetchRootFolders = async () => {
   if (rootFolders.value.length > 0) return; // Don't re-fetch if already loaded
@@ -68,11 +82,11 @@ const handleConfirm = () => {
     <div v-if="isVisible" class="modal-overlay" @click.self="$emit('close')">
       <div class="modal-dialog">
         <header class="modal-header">
-          <h3 class="modal-title">Move '{{ itemToMove?.name }}'</h3>
+          <h3 class="modal-title">{{ modalTitle }}</h3>
           <button class="modal-close" @click="$emit('close')">&times;</button>
         </header>
         <div class="modal-body">
-          <p class="prompt">Choose a new location:</p>
+          <p class="prompt">{{ promptText }}</p>
           <div class="folder-tree-container">
             <div v-if="isLoading" class="loading-indicator">Loading...</div>
             <div v-else-if="rootFolders.length === 0" class="empty-state">No folders available.</div>
@@ -82,7 +96,7 @@ const handleConfirm = () => {
                 :class="{ 'selected': selectedFolderId === 'root' }"
                 @click="handleSelectFolder('root')"
               >
-                My Files (Root)
+                {{ rootText }}
               </div>
               <FolderTreeNode
                 v-for="folder in rootFolders"
@@ -96,7 +110,7 @@ const handleConfirm = () => {
         </div>
         <footer class="modal-footer">
           <button class="btn btn-secondary" @click="$emit('close')">Cancel</button>
-          <button class="btn btn-primary" @click="handleConfirm" :disabled="!selectedFolderId">Move Here</button>
+          <button class="btn btn-primary" @click="handleConfirm" :disabled="!selectedFolderId">{{ confirmButtonText }}</button>
         </footer>
       </div>
     </div>
