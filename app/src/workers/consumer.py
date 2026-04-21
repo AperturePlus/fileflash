@@ -5,6 +5,7 @@ import logging
 import uuid
 from concurrent.futures import ProcessPoolExecutor
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -99,13 +100,15 @@ class WorkerConsumer:
         try:
             async with self._session_factory() as db:
                 async with db.begin():
-                    await apply_task_effects(
+                    extra_result = await apply_task_effects(
                         db,
                         task_type=message.task_type,
                         payload=payload,
                         result=result,
                     )
-                    await mark_job_succeeded(db, job_id=message.job_id, result=result)
+                    merged = _merge_job_result(result, extra_result)
+                    merged.pop("manifestPath", None)
+                    await mark_job_succeeded(db, job_id=message.job_id, result=merged)
         except Exception as exc:
             await self._handle_failure(slot=slot, message=message, error=exc)
             return
@@ -183,6 +186,21 @@ class WorkerConsumer:
 def _is_retryable_error(error: Exception) -> bool:
     non_retryable_types = (FileNotFoundError, PermissionError, ValueError)
     return not isinstance(error, non_retryable_types)
+
+
+def _merge_job_result(base: dict[str, Any], extra: dict[str, Any] | None) -> dict[str, Any]:
+    merged = dict(base or {})
+    if not extra:
+        return merged
+
+    for key, value in extra.items():
+        if key == "summary" and isinstance(value, dict) and isinstance(merged.get("summary"), dict):
+            merged_summary = dict(merged["summary"])
+            merged_summary.update(value)
+            merged["summary"] = merged_summary
+            continue
+        merged[key] = value
+    return merged
 
 
 async def run_worker() -> None:

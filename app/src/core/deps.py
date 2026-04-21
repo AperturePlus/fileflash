@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.deps import get_db
 from ..models.tables_identity import User
+from ..services.archive import ArchiveService
 from ..services.auth import AuthService
+from ..services.background_jobs import BackgroundJobService
+from ..services.job_queue import RedisStreamJobQueue
 from ..services.messaging import InProcessAuthEventPublisher
 from ..services.rate_limiter import RedisRateLimiter
 from ..services.share import ShareService
@@ -22,6 +25,10 @@ _settings = get_settings()
 _rate_limiter = RedisRateLimiter(_settings.redis_url)
 _event_publisher = InProcessAuthEventPublisher()
 _object_storage = MinioObjectStorageClient.from_settings(_settings)
+_job_queue_publisher = RedisStreamJobQueue(
+    redis_url=_settings.redis_url,
+    stream_key=_settings.worker_queue_stream,
+)
 
 
 def get_rate_limiter() -> RedisRateLimiter:
@@ -34,6 +41,16 @@ def get_event_publisher() -> InProcessAuthEventPublisher:
 
 def get_object_storage() -> MinioObjectStorageClient:
     return _object_storage
+
+
+def get_job_queue_publisher() -> RedisStreamJobQueue:
+    return _job_queue_publisher
+
+
+def get_background_job_service(
+    queue_publisher: RedisStreamJobQueue = Depends(get_job_queue_publisher),
+) -> BackgroundJobService:
+    return BackgroundJobService(queue_publisher=queue_publisher)
 
 
 def get_settings_dep() -> Settings:
@@ -81,6 +98,13 @@ def get_share_service(
     storage: MinioObjectStorageClient = Depends(get_object_storage),
 ) -> ShareService:
     return ShareService(db=db, settings=settings, storage=storage)
+
+
+def get_archive_service(
+    db: AsyncSession = Depends(get_db),
+    jobs: BackgroundJobService = Depends(get_background_job_service),
+) -> ArchiveService:
+    return ArchiveService(db=db, jobs=jobs)
 
 
 async def get_current_user(

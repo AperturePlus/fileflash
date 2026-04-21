@@ -94,6 +94,17 @@ class Settings(BaseSettings):
     ffmpeg_binary: str = Field(default="ffmpeg", alias="FFMPEG_BINARY")
     ffprobe_binary: str = Field(default="ffprobe", alias="FFPROBE_BINARY")
 
+    archive_preview_max_entries: int = Field(default=2000, alias="ARCHIVE_PREVIEW_MAX_ENTRIES")
+    archive_extract_max_entries: int = Field(default=20000, alias="ARCHIVE_EXTRACT_MAX_ENTRIES")
+    archive_extract_max_total_bytes: int = Field(
+        default=10 * 1024 * 1024 * 1024,
+        alias="ARCHIVE_EXTRACT_MAX_TOTAL_BYTES",
+    )
+    archive_extract_max_file_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        alias="ARCHIVE_EXTRACT_MAX_FILE_BYTES",
+    )
+
     @property
     def resolved_database_url(self) -> str:
         db_url = self.database_url or self.ff_db_uri

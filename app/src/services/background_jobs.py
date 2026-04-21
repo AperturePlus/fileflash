@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.errors import ApiError
 from ..models import BackgroundJob
 from ..workers.contracts import WorkerJobMessage
 from .job_queue import JobQueuePublisher
@@ -37,6 +38,7 @@ class BackgroundJobService:
             if existing is not None:
                 return existing
 
+        now = datetime.now(UTC)
         job = BackgroundJob(
             task_type=task_type,
             status="pending",
@@ -45,7 +47,7 @@ class BackgroundJobService:
             error_message=None,
             attempt=0,
             max_attempts=max_attempts,
-            scheduled_at=datetime.now(UTC),
+            scheduled_at=now,
             trace_id=str(uuid.uuid4()),
             idempotency_key=idempotency_key,
             requested_by=requested_by,
@@ -53,9 +55,35 @@ class BackgroundJobService:
         )
         db.add(job)
         await db.flush()
+        await db.commit()
 
-        if self._queue_publisher is not None:
+        if self._queue_publisher is None:
+            job.status = "failed"
+            job.error_message = "Job queue unavailable"
+            job.finished_at = now
+            job.updated_at = now
+            await db.commit()
+            raise ApiError(
+                status_code=503,
+                code=503,
+                message="Job queue unavailable",
+                data={"jobId": str(job.job_id)},
+            )
+
+        try:
             await self._queue_publisher.publish(_build_queue_message(job))
+        except Exception as exc:
+            job.status = "failed"
+            job.error_message = f"Publish failed: {type(exc).__name__}: {exc}"[:2000]
+            job.finished_at = now
+            job.updated_at = now
+            await db.commit()
+            raise ApiError(
+                status_code=503,
+                code=503,
+                message="Job queue unavailable",
+                data={"jobId": str(job.job_id)},
+            ) from exc
         return job
 
     async def enqueue_scan_job(
@@ -103,6 +131,10 @@ class BackgroundJobService:
 
 
 def _build_queue_message(job: BackgroundJob) -> WorkerJobMessage:
+    payload = dict(job.payload or {})
+    payload.setdefault("jobId", job.job_id)
+    if job.requested_by is not None:
+        payload.setdefault("requestedBy", job.requested_by)
     return WorkerJobMessage(
         version=1,
         message_id=f"job-{job.job_id}-attempt-{job.attempt}",
@@ -113,5 +145,5 @@ def _build_queue_message(job: BackgroundJob) -> WorkerJobMessage:
         max_attempts=job.max_attempts,
         trace_id=job.trace_id or f"job-{job.job_id}",
         requested_by=str(job.requested_by) if job.requested_by is not None else None,
-        payload=dict(job.payload or {}),
+        payload=payload,
     )
