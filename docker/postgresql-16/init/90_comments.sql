@@ -253,3 +253,74 @@ COMMENT ON VIEW v_full_path IS '目录全路径视图';
 COMMENT ON VIEW v_user_recycle_bin IS '用户回收站视图';
 COMMENT ON VIEW v_admin_share_overview IS '管理员分享总览视图';
 COMMENT ON VIEW v_user_dashboard IS '管理员用户仪表盘视图';
+COMMENT ON COLUMN background_job.agent_phase IS 'Agent runtime phase marker';
+COMMENT ON COLUMN background_job.cancel_requested_at IS 'When the user requested cancellation';
+
+COMMENT ON TABLE agent_user_setting IS 'Agent default settings per user';
+COMMENT ON COLUMN agent_user_setting.setting_id IS 'Primary key';
+COMMENT ON COLUMN agent_user_setting.user_id IS 'Owner user id';
+COMMENT ON COLUMN agent_user_setting.default_execution_policy IS 'Default execution policy';
+COMMENT ON COLUMN agent_user_setting.default_data_policy_json IS 'Default data policy payload';
+COMMENT ON COLUMN agent_user_setting.llm_provider IS 'Default LLM provider';
+COMMENT ON COLUMN agent_user_setting.llm_model IS 'Default LLM model';
+COMMENT ON COLUMN agent_user_setting.default_budget_tokens IS 'Default token budget';
+COMMENT ON COLUMN agent_user_setting.default_max_steps IS 'Default max steps';
+
+COMMENT ON TABLE agent_mcp_server IS 'Visible MCP server configuration for agents';
+COMMENT ON COLUMN agent_mcp_server.mcp_server_id IS 'Primary key';
+COMMENT ON COLUMN agent_mcp_server.owner_user_id IS 'Private MCP owner user id';
+COMMENT ON COLUMN agent_mcp_server.visibility IS 'Visibility level (system/private)';
+COMMENT ON COLUMN agent_mcp_server.endpoint IS 'MCP endpoint';
+COMMENT ON COLUMN agent_mcp_server.transport IS 'MCP transport';
+COMMENT ON COLUMN agent_mcp_server.auth_type IS 'Auth strategy';
+COMMENT ON COLUMN agent_mcp_server.headers_json IS 'Headers payload';
+COMMENT ON COLUMN agent_mcp_server.metadata_json IS 'Additional metadata';
+
+COMMENT ON TABLE agent_skill IS 'Persisted agent skill definitions';
+COMMENT ON COLUMN agent_skill.skill_id IS 'Primary key';
+COMMENT ON COLUMN agent_skill.skill_key IS 'Stable skill key';
+COMMENT ON COLUMN agent_skill.triggers_text IS 'Skill trigger description';
+COMMENT ON COLUMN agent_skill.tool_whitelist_json IS 'Tool whitelist';
+COMMENT ON COLUMN agent_skill.plan_template_json IS 'Plan template payload';
+COMMENT ON COLUMN agent_skill.inputs_schema_json IS 'Input schema payload';
+COMMENT ON COLUMN agent_skill.outputs_schema_json IS 'Output schema payload';
+COMMENT ON COLUMN agent_skill.visibility IS 'Visibility level (global/private)';
+COMMENT ON COLUMN agent_skill.owner_user_id IS 'Private skill owner user id';
+
+COMMENT ON TABLE agent_memory IS 'Agent memory items';
+COMMENT ON COLUMN agent_memory.memory_id IS 'Primary key';
+COMMENT ON COLUMN agent_memory.scope IS 'Memory scope';
+COMMENT ON COLUMN agent_memory.scope_key IS 'Workspace folder id or session job id';
+COMMENT ON COLUMN agent_memory.kind IS 'Memory kind';
+COMMENT ON COLUMN agent_memory.source_job_id IS 'Source job id';
+COMMENT ON COLUMN agent_memory.expires_at IS 'Optional expiration time';
+
+COMMENT ON TABLE agent_plan IS 'Persisted agent plans';
+COMMENT ON COLUMN agent_plan.plan_id IS 'Primary key';
+COMMENT ON COLUMN agent_plan.job_id IS 'Owning background job id';
+COMMENT ON COLUMN agent_plan.context_json IS 'Planning context payload';
+COMMENT ON COLUMN agent_plan.data_policy_json IS 'Planning data policy payload';
+COMMENT ON COLUMN agent_plan.chosen_skill_id IS 'Chosen skill key';
+COMMENT ON COLUMN agent_plan.proposed_actions_json IS 'Plan DSL payload';
+COMMENT ON COLUMN agent_plan.plan_hash IS 'Plan hash';
+COMMENT ON COLUMN agent_plan.cost_estimate_json IS 'Estimated cost payload';
+
+COMMENT ON TABLE agent_action_log IS 'Step-level tool execution log for agent jobs';
+COMMENT ON COLUMN agent_action_log.action_log_id IS 'Primary key';
+COMMENT ON COLUMN agent_action_log.step_no IS 'Plan step number';
+COMMENT ON COLUMN agent_action_log.inputs_json IS 'Tool inputs';
+COMMENT ON COLUMN agent_action_log.outputs_json IS 'Tool outputs';
+COMMENT ON COLUMN agent_action_log.duration_ms IS 'Execution duration in milliseconds';
+
+COMMENT ON TABLE agent_work_session IS 'Current work session snapshot for an agent job';
+COMMENT ON COLUMN agent_work_session.work_session_id IS 'Primary key';
+COMMENT ON COLUMN agent_work_session.job_id IS 'Owning background job id';
+COMMENT ON COLUMN agent_work_session.checkpoint_json IS 'Latest checkpoint snapshot';
+COMMENT ON COLUMN agent_work_session.checkpoint_version IS 'Checkpoint version';
+COMMENT ON COLUMN agent_work_session.tool_call_count IS 'Aggregated tool call count';
+COMMENT ON COLUMN agent_work_session.last_error_message IS 'Latest tool error summary';
+
+COMMENT ON VIEW v_agent_skill_catalog IS 'Visible agent skill catalog';
+COMMENT ON VIEW v_agent_mcp_catalog IS 'Visible MCP catalog';
+COMMENT ON VIEW v_agent_memory_active IS 'Unexpired agent memory';
+COMMENT ON VIEW v_agent_job_overview IS 'Aggregated agent job overview';

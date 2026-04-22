@@ -11,6 +11,7 @@ class BackgroundJobResponse(CamelModel):
     job_id: str
     task_type: str
     status: str
+    agent_phase: str | None = None
     priority: int
     payload: dict[str, Any]
     result: dict[str, Any]
@@ -22,6 +23,7 @@ class BackgroundJobResponse(CamelModel):
     finished_at: datetime | None = None
     trace_id: str | None = None
     idempotency_key: str | None = None
+    cancel_requested_at: datetime | None = None
     requested_by: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -32,6 +34,7 @@ def to_background_job_response(job: BackgroundJob) -> BackgroundJobResponse:
         job_id=str(job.job_id),
         task_type=str(job.task_type),
         status=str(job.status),
+        agent_phase=job.agent_phase,
         priority=int(job.priority or 0),
         payload=dict(job.payload or {}),
         result=dict(job.result or {}),
@@ -43,8 +46,8 @@ def to_background_job_response(job: BackgroundJob) -> BackgroundJobResponse:
         finished_at=job.finished_at,
         trace_id=job.trace_id,
         idempotency_key=job.idempotency_key,
+        cancel_requested_at=job.cancel_requested_at,
         requested_by=str(job.requested_by) if job.requested_by is not None else None,
         created_at=job.created_at,
         updated_at=job.updated_at,
     )
-

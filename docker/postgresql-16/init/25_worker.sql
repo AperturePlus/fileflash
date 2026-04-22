@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS background_job (
     finished_at TIMESTAMP NULL,
     trace_id VARCHAR(64) NULL,
     idempotency_key VARCHAR(255) NULL,
+    agent_phase VARCHAR(32) NULL,
+    cancel_requested_at TIMESTAMP NULL,
     requested_by BIGINT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -26,10 +28,10 @@ CREATE TABLE IF NOT EXISTS background_job (
 
 CREATE INDEX IF NOT EXISTS idx_background_job_status_scheduled_at ON background_job (status, scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_background_job_task_type_status ON background_job (task_type, status);
+CREATE INDEX IF NOT EXISTS idx_background_job_requested_by_task_type ON background_job (requested_by, task_type, status);
 
 DROP TRIGGER IF EXISTS trg_background_job_updated_at ON background_job;
 CREATE TRIGGER trg_background_job_updated_at
 BEFORE UPDATE ON background_job
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
-

@@ -59,6 +59,8 @@ class BackgroundJob(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     trace_id: Mapped[str | None] = mapped_column(String(64))
     idempotency_key: Mapped[str | None] = mapped_column(String(255))
+    agent_phase: Mapped[str | None] = mapped_column(String(32))
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime)
     requested_by: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("user.user_id", ondelete="SET NULL"),
