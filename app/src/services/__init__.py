@@ -1,4 +1,5 @@
 from .archive import ArchiveService
+from .agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from .auth import AuthService
 from .background_jobs import BackgroundJobService
 from .job_queue import JobQueuePublisher, RedisStreamJobQueue
@@ -12,6 +13,13 @@ __all__ = [
     "AuthService",
     "ArchiveService",
     "BackgroundJobService",
+    "ExecuteService",
+    "McpService",
+    "MemoryService",
+    "PlanService",
+    "SessionService",
+    "SettingsService",
+    "SkillService",
     "JobQueuePublisher",
     "InProcessAuthEventPublisher",
     "RedisStreamJobQueue",
