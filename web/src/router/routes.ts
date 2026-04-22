@@ -22,6 +22,12 @@ export const routes: Array<RouteRecordRaw> = [
     name: 'VerifyEmail',
     component: () => import('../pages/verify-email/index.ts'),
   },
+
+  {
+    path: '/share/:shareLink',
+    name: 'ShareAccess',
+    component: () => import('../pages/share/index.ts'),
+  },
   
   {
     path: '/',

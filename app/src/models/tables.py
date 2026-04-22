@@ -35,9 +35,11 @@ from .tables_storage import (
     UploadTask,
     UploadTaskPart,
 )
+from .tables_worker import BackgroundJob
 
 __all__ = [
     "Acl",
+    "BackgroundJob",
     "BatchDownloadTask",
     "EmailVerificationToken",
     "FavoriteItem",

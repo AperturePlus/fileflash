@@ -12,9 +12,10 @@ import { toggleFolderStar } from '../../api/folder';
 import Breadcrumb from '../../components/common/Breadcrumb.vue';
 import MoveItemDialog from '../../components/common/MoveItemDialog.vue';
 import ShareDialog from '../../components/common/ShareDialog.vue';
+import ExtractArchiveDialog from './components/ExtractArchiveDialog.vue';
 import FileItemsView from './components/FileItemsView.vue';
 import { eventBus } from '../../utils/eventBus';
-import type { ContentItem, FolderItem } from '../../types/file';
+import type { ContentItem, FileItem, FolderItem } from '../../types/file';
 
 const fileStore = useFileStore();
 const { items, path, isLoading, currentFolderId } = storeToRefs(fileStore);
@@ -173,6 +174,14 @@ const clearSearch = () => {
   handleSearch({ query: '' });
 };
 
+const isExtractDialogVisible = ref(false);
+const fileToExtract = ref<FileItem | null>(null);
+
+const handleExtractArchive = (file: FileItem) => {
+  fileToExtract.value = file;
+  isExtractDialogVisible.value = true;
+};
+
 onMounted(() => {
   fileStore.fetchFolderContents('root');
   eventBus.on('move-items', handleSidebarMove);
@@ -229,6 +238,13 @@ onUnmounted(() => {
 
     <ShareDialog :is-visible="isShareDialogVisible" :item-to-share="itemToShare" @close="isShareDialogVisible = false" />
 
+    <ExtractArchiveDialog
+      :is-visible="isExtractDialogVisible"
+      :file="fileToExtract"
+      :current-folder-id="currentFolderId"
+      @close="isExtractDialogVisible = false"
+    />
+
     <div v-if="uploadTasks.length" class="upload-progress-area">
       <h4>Upload Queue</h4>
       <div v-for="task in uploadTasks" :key="task.id" class="upload-task">
@@ -273,6 +289,7 @@ onUnmounted(() => {
         @start-rename="startRename"
         @start-move="startMove"
         @start-share="startShare"
+        @extract-archive="handleExtractArchive"
         @delete="handleDelete"
       />
     </div>
@@ -485,6 +502,5 @@ onUnmounted(() => {
   }
 }
 </style>
-
 
 

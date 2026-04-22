@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import Mock from 'mockjs';
-import { addLog, addNotification, mockShares } from '../state';
+import { addLog, addNotification, createMockId, mockJobs, mockShares } from '../state';
 import { vfsApi, type VfsNode } from '../vfs';
 
 function parseUrl(url: string) {
@@ -72,6 +72,72 @@ function buildMockFileBlob(file: VfsNode) {
   }
 
   return new Blob([`Binary file: ${file.name}`], { type: file.mimeType || 'application/octet-stream' });
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function detectArchiveFormat(name: string) {
+  const lower = (name || '').toLowerCase();
+  if (lower.endsWith('.7z')) return '7z';
+  if (lower.endsWith('.zip')) return 'zip';
+  if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz') || lower.endsWith('.gz')) return 'tar.gz';
+  if (lower.endsWith('.tar')) return 'tar';
+  return 'unknown';
+}
+
+function defaultSubfolderName(fileName: string) {
+  const lower = (fileName || '').toLowerCase();
+  if (lower.endsWith('.tar.gz')) return fileName.slice(0, -'.tar.gz'.length);
+  if (lower.endsWith('.tgz')) return fileName.slice(0, -'.tgz'.length);
+  const lastDot = fileName.lastIndexOf('.');
+  return lastDot > 0 ? fileName.slice(0, lastDot) : fileName;
+}
+
+function ensureFolderPath(parentId: string, relPath: string) {
+  const parts = relPath.split('/').filter(Boolean);
+  let current = parentId;
+
+  for (const part of parts) {
+    const existing = vfsApi.getChildren(current).find((node) => node.type === 'folder' && node.name === part);
+    if (existing && existing.type === 'folder') {
+      current = existing.id;
+      continue;
+    }
+    const created = vfsApi.createFolder(current, part);
+    current = created.id;
+  }
+
+  return current;
+}
+
+function createMockJob<T>(taskType: string, payload: Record<string, any>, result: T) {
+  const timestamp = nowIso();
+  const jobId = createMockId('job');
+
+  const job = {
+    jobId,
+    taskType,
+    status: 'succeeded',
+    priority: 100,
+    payload,
+    result,
+    errorMessage: null,
+    attempt: 0,
+    maxAttempts: 5,
+    scheduledAt: timestamp,
+    startedAt: timestamp,
+    finishedAt: timestamp,
+    traceId: `mock-${jobId}`,
+    idempotencyKey: null,
+    requestedBy: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  mockJobs[jobId] = job as any;
+  return job;
 }
 
 function getSortedItems(items: VfsNode[], sort: string | null, order: string | null) {
@@ -322,6 +388,119 @@ export const setupFileMocks = () => {
     }
 
     return buildMockFileBlob(node);
+  });
+
+  Mock.mock(/\/api\/v1\/files\/([^/]+)\/archive\/preview$/, 'post', (options) => {
+    const fileId = (options.url.match(/\/api\/v1\/files\/([^/]+)\/archive\/preview/) || [])[1];
+    const node = vfsApi.get(fileId);
+
+    if (!node || node.type !== 'file') {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    const format = detectArchiveFormat(node.name);
+    const entries = [
+      { path: 'docs', isDir: true, size: 0 },
+      { path: 'docs/README.txt', isDir: false, size: 1024 },
+      { path: 'images', isDir: true, size: 0 },
+      { path: 'images/logo.png', isDir: false, size: 2048 },
+    ];
+    const result = {
+      archive: { format, fileName: node.name },
+      entries,
+      summary: {
+        totalEntries: entries.length,
+        fileCount: entries.filter((e) => !e.isDir).length,
+        dirCount: entries.filter((e) => e.isDir).length,
+        totalUncompressedBytes: entries.filter((e) => !e.isDir).reduce((sum, e) => sum + (e.size || 0), 0),
+        truncated: false,
+      },
+      previewedAt: nowIso(),
+    };
+
+    const job = createMockJob('task.archive_preview', { fileId, fileName: node.name }, result);
+    addLog('archive_preview', { fileId, fileName: node.name });
+
+    return {
+      success: true,
+      code: 201,
+      data: job,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/files\/([^/]+)\/archive\/extract$/, 'post', (options) => {
+    const fileId = (options.url.match(/\/api\/v1\/files\/([^/]+)\/archive\/extract/) || [])[1];
+    const node = vfsApi.get(fileId);
+
+    if (!node || node.type !== 'file') {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    const body = JSON.parse(options.body || '{}');
+    const targetFolderId = body.targetFolderId || 'root';
+    const createSubfolder = Boolean(body.createSubfolder);
+    const subfolderName = (body.subfolderName || '').trim() || defaultSubfolderName(node.name) || 'Extracted';
+
+    let extractRootId = targetFolderId;
+    if (createSubfolder) {
+      extractRootId = vfsApi.createFolder(targetFolderId, subfolderName).id;
+    }
+
+    const previewEntries = [
+      { path: 'docs', isDir: true, size: 0 },
+      { path: 'docs/README.txt', isDir: false, size: 1024 },
+      { path: 'images', isDir: true, size: 0 },
+      { path: 'images/logo.png', isDir: false, size: 2048 },
+    ];
+
+    const createdDirs = new Set<string>();
+    for (const entry of previewEntries) {
+      if (entry.isDir) {
+        ensureFolderPath(extractRootId, entry.path);
+        createdDirs.add(entry.path);
+        continue;
+      }
+
+      const parts = entry.path.split('/').filter(Boolean);
+      const fileName = parts.pop() || 'file.bin';
+      const parentPath = parts.join('/');
+      const parentId = parentPath ? ensureFolderPath(extractRootId, parentPath) : extractRootId;
+      const mimeType = fileName.toLowerCase().endsWith('.png') ? 'image/png' : 'text/plain';
+      vfsApi.createFile(parentId, fileName, entry.size || 0, mimeType);
+    }
+
+    const totalBytes = previewEntries.filter((e) => !e.isDir).reduce((sum, e) => sum + (e.size || 0), 0);
+    const result = {
+      archive: { format: detectArchiveFormat(node.name), fileName: node.name },
+      summary: {
+        extractedFiles: previewEntries.filter((e) => !e.isDir).length,
+        extractedDirs: createdDirs.size,
+        skippedEntries: 0,
+        totalBytes,
+      },
+      extractedFolderId: createSubfolder ? extractRootId : undefined,
+      extractedAt: nowIso(),
+    };
+
+    const job = createMockJob('task.archive_extract', { fileId, fileName: node.name }, result);
+    addLog('archive_extract', { fileId, fileName: node.name, targetFolderId });
+    addNotification(`Extracted ${node.name} successfully.`);
+
+    return {
+      success: true,
+      code: 201,
+      data: job,
+    };
   });
 
   Mock.mock(/\/api\/v1\/files\/([^/]+)\/thumbnail$/, 'get', (options) => {

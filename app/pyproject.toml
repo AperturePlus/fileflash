@@ -12,11 +12,13 @@ dependencies = [
     "passlib[bcrypt]>=1.7.4",
     "pydantic-settings>=2.11.0",
     "pydantic>=2.12.5",
+    "py7zr>=0.21.0",
     "pyjwt>=2.10.1",
     "python-dotenv>=1.2.2",
     "redis>=6.4.0",
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.42.0",
+    "python-multipart>=0.0.24",
 ]
 
 [dependency-groups]

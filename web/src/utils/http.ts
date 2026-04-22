@@ -7,6 +7,7 @@ import { useUserStore } from '../store/user';
 declare module 'axios' {
   export interface AxiosRequestConfig {
     useUrlencoded?: boolean;
+    skipAuth?: boolean;
   }
 }
 
@@ -28,8 +29,11 @@ instance.interceptors.request.use(
     const userStore = useUserStore();
     const token = userStore.token;
 
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (!config.skipAuth && token) {
+      config.headers = config.headers || {};
+      if (!config.headers.Authorization) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
 
     // 根据配置，处理 application/x-www-form-urlencoded 格式的数据

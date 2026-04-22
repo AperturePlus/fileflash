@@ -21,3 +21,13 @@
 
 *.ruff_cache/
 *.pytest_cache/
+
+# Local agent / test caches
+/.tmp/
+/.uv-cache/
+
+docs/design
+.sandbox_*
+.test_*
+
+app/artifacts/

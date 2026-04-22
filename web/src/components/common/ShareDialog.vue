@@ -31,11 +31,12 @@ const isSavingSettings = ref(false);
 const settingsMessage = ref('');
 
 const shareSettings = ref({
-  passwordProtected: false,
-  expireAt: '' as string,
-  allowDownload: true,
-  allowPreview: true,
-});
+	  passwordProtected: false,
+	  password: '' as string,
+	  expireAt: '' as string,
+	  allowDownload: true,
+	  allowPreview: true,
+	});
 
 const currentItemPayload = computed(() => {
   if (!props.itemToShare) return null;
@@ -66,13 +67,14 @@ const fetchPermissions = async () => {
 };
 
 const hydrateShareSettings = (share: Share) => {
-  shareSettings.value = {
-    passwordProtected: share.settings.passwordProtected,
-    expireAt: share.settings.expireAt ? share.settings.expireAt.slice(0, 10) : '',
-    allowDownload: share.settings.allowDownload,
-    allowPreview: share.settings.allowPreview,
-  };
-};
+	  shareSettings.value = {
+	    passwordProtected: share.settings.passwordProtected,
+	    password: share.settings.password || '',
+	    expireAt: share.settings.expireAt ? share.settings.expireAt.slice(0, 10) : '',
+	    allowDownload: share.settings.allowDownload,
+	    allowPreview: share.settings.allowPreview,
+	  };
+	};
 
 const loadExistingShare = async () => {
   if (!props.itemToShare) {
@@ -85,18 +87,19 @@ const loadExistingShare = async () => {
       (item) => item.itemType === props.itemToShare?.itemType && item.itemInfo.id === props.itemToShare?.id,
     );
 
-    if (!matched) {
-      currentShareLink.value = '';
-      publicLink.value = '';
-      publicLinkEnabled.value = false;
-      shareSettings.value = {
-        passwordProtected: false,
-        expireAt: '',
-        allowDownload: true,
-        allowPreview: true,
-      };
-      return;
-    }
+	    if (!matched) {
+	      currentShareLink.value = '';
+	      publicLink.value = '';
+	      publicLinkEnabled.value = false;
+	      shareSettings.value = {
+	        passwordProtected: false,
+	        password: '',
+	        expireAt: '',
+	        allowDownload: true,
+	        allowPreview: true,
+	      };
+	      return;
+	    }
 
     currentShareLink.value = matched.shareLink;
     publicLink.value = `${window.location.origin}/share/${matched.shareLink}`;
@@ -212,6 +215,42 @@ const createPublicShare = async () => {
 };
 
 const saveShareSettings = async () => {
+	  if (!currentShareLink.value) return;
+
+	  isSavingSettings.value = true;
+	  settingsMessage.value = '';
+
+	  try {
+	    const payload: Record<string, any> = {
+	      passwordProtected: shareSettings.value.passwordProtected,
+	      allowDownload: shareSettings.value.allowDownload,
+	      allowPreview: shareSettings.value.allowPreview,
+	      expireAt: shareSettings.value.expireAt ? `${shareSettings.value.expireAt}T23:59:59.000Z` : null,
+	    };
+
+	    const trimmedPassword = shareSettings.value.password?.trim();
+	    if (shareSettings.value.passwordProtected && trimmedPassword) {
+	      payload.password = trimmedPassword;
+	    }
+
+	    const updated = await updateShareSettings(currentShareLink.value, payload);
+
+	    hydrateShareSettings(updated);
+	    if (updated.settings.password) {
+	      shareSettings.value.password = updated.settings.password;
+	      settingsMessage.value = 'Password updated. Copy it now.';
+	    } else {
+	      settingsMessage.value = 'Share settings saved.';
+	    }
+	  } catch (error) {
+	    console.error('Failed to save share settings', error);
+	    settingsMessage.value = 'Failed to save settings.';
+	  } finally {
+	    isSavingSettings.value = false;
+	  }
+	};
+
+const regeneratePassword = async () => {
   if (!currentShareLink.value) return;
 
   isSavingSettings.value = true;
@@ -219,19 +258,30 @@ const saveShareSettings = async () => {
 
   try {
     const updated = await updateShareSettings(currentShareLink.value, {
-      passwordProtected: shareSettings.value.passwordProtected,
-      allowDownload: shareSettings.value.allowDownload,
-      allowPreview: shareSettings.value.allowPreview,
-      expireAt: shareSettings.value.expireAt ? `${shareSettings.value.expireAt}T23:59:59.000Z` : null,
+      passwordProtected: true,
+      regeneratePassword: true,
     });
 
     hydrateShareSettings(updated);
-    settingsMessage.value = 'Share settings saved.';
+    if (updated.settings.password) {
+      shareSettings.value.password = updated.settings.password;
+    }
+    settingsMessage.value = 'New password generated. Copy it now.';
   } catch (error) {
-    console.error('Failed to save share settings', error);
-    settingsMessage.value = 'Failed to save settings.';
+    console.error('Failed to regenerate password', error);
+    settingsMessage.value = 'Failed to regenerate password.';
   } finally {
     isSavingSettings.value = false;
+  }
+};
+
+const copyPassword = async () => {
+  if (!shareSettings.value.password) return;
+  try {
+    await navigator.clipboard.writeText(shareSettings.value.password);
+    settingsMessage.value = 'Password copied.';
+  } catch {
+    window.prompt('Copy this password', shareSettings.value.password);
   }
 };
 
@@ -272,6 +322,15 @@ watch(publicLinkEnabled, (enabled) => {
     settingsMessage.value = 'Public link hidden in this dialog. Existing links are kept.';
   }
 });
+
+watch(
+  () => shareSettings.value.passwordProtected,
+  (enabled) => {
+    if (!enabled) {
+      shareSettings.value.password = '';
+    }
+  },
+);
 </script>
 
 <template>
@@ -351,16 +410,23 @@ watch(publicLinkEnabled, (enabled) => {
                   <button @click="copyLink">Copy</button>
                 </div>
 
-                <div class="settings-grid">
-                  <label class="setting-check">
-                    <input v-model="shareSettings.passwordProtected" type="checkbox" />
-                    <span>Password protected</span>
-                  </label>
-                  <label class="setting-check">
-                    <input v-model="shareSettings.allowDownload" type="checkbox" />
-                    <span>Allow download</span>
-                  </label>
-                  <label class="setting-check">
+	                <div class="settings-grid">
+	                  <label class="setting-check">
+	                    <input v-model="shareSettings.passwordProtected" type="checkbox" />
+	                    <span>Password protected</span>
+	                  </label>
+	                  <div v-if="shareSettings.passwordProtected" class="password-row">
+	                    <input v-model="shareSettings.password" type="text" placeholder="Leave blank to auto-generate" />
+	                    <button type="button" class="ghost-btn" :disabled="isSavingSettings" @click="regeneratePassword">
+	                      Regenerate
+	                    </button>
+	                    <button v-if="shareSettings.password" type="button" class="ghost-btn" @click="copyPassword">Copy</button>
+	                  </div>
+	                  <label class="setting-check">
+	                    <input v-model="shareSettings.allowDownload" type="checkbox" />
+	                    <span>Allow download</span>
+	                  </label>
+	                  <label class="setting-check">
                     <input v-model="shareSettings.allowPreview" type="checkbox" />
                     <span>Allow preview</span>
                   </label>
@@ -637,11 +703,27 @@ watch(publicLinkEnabled, (enabled) => {
   padding: 0 10px;
 }
 
-.settings-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+	.settings-actions {
+	  display: flex;
+	  align-items: center;
+	  gap: 10px;
+	}
+
+	.password-row {
+	  display: grid;
+	  grid-template-columns: 1fr auto auto;
+	  gap: 8px;
+	}
+
+	.password-row input {
+	  height: 36px;
+	  border-radius: 8px;
+	  border: 1px solid var(--color-border);
+	  background-color: var(--color-bg-primary);
+	  padding: 0 10px;
+	  font-family: var(--font-family-mono);
+	  font-size: 12px;
+	}
 
 .save-btn {
   border: none;

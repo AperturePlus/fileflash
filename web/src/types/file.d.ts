@@ -329,6 +329,11 @@ export interface MergeChunksRequest {
    * 目标父文件夹ID。
    */
   parentId: string;
+
+  /**
+   * Conflict handling strategy for merge retries.
+   */
+  conflictStrategy?: 'rename' | 'overwrite' | 'cancel';
 }
 
 /**
@@ -462,3 +467,76 @@ export interface GetAdminFilesRequest {
   sort?: 'name' | 'size' | 'createdAt' | 'updatedAt';
   order?: 'asc' | 'desc';
 }
+
+// --- Archive extract / preview ---
+
+export interface ArchiveEntry {
+  path: string;
+  isDir: boolean;
+  size: number;
+  compressedSize?: number;
+}
+
+export interface ArchivePreviewSummary {
+  totalEntries: number;
+  fileCount: number;
+  dirCount: number;
+  totalUncompressedBytes: number;
+  truncated: boolean;
+}
+
+export interface JobResultArchivePreview {
+  archive?: {
+    format: string;
+    fileName: string;
+  };
+  entries: ArchiveEntry[];
+  summary: ArchivePreviewSummary;
+  previewedAt?: string;
+}
+
+export interface ArchiveExtractRequest {
+  targetFolderId: string;
+  createSubfolder: boolean;
+  subfolderName?: string;
+  conflictStrategy?: 'rename' | 'overwrite' | 'skip';
+}
+
+export interface ArchiveExtractSummary {
+  extractedFiles: number;
+  extractedDirs: number;
+  skippedEntries: number;
+  totalBytes?: number;
+}
+
+export interface JobResultArchiveExtract {
+  archive?: {
+    format: string;
+    fileName: string;
+  };
+  summary: ArchiveExtractSummary;
+  extractedFolderId?: string;
+  extractedFolderName?: string;
+  extractedAt?: string;
+}
+
+export interface BackgroundJob<T = any> {
+  jobId: string;
+  taskType: string;
+  status: string;
+  priority: number;
+  payload: Record<string, any>;
+  result: T;
+  errorMessage?: string | null;
+  attempt: number;
+  maxAttempts: number;
+  scheduledAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  traceId?: string | null;
+  idempotencyKey?: string | null;
+  requestedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
