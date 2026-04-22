@@ -23,6 +23,34 @@ export type LocaleKey =
   | 'sidebar.recycleBin'
   | 'sidebar.workspaceTree'
   | 'sidebar.storage'
+  | 'sidebar.skills'
+  | 'skills.pageTitle'
+  | 'skills.pageDescription'
+  | 'skills.searchPlaceholder'
+  | 'skills.tab.marketplace'
+  | 'skills.tab.mySkills'
+  | 'skills.actions.refresh'
+  | 'skills.actions.newSkill'
+  | 'skills.actions.edit'
+  | 'skills.actions.delete'
+  | 'skills.actions.save'
+  | 'skills.actions.cancel'
+  | 'skills.marketplace.empty'
+  | 'skills.mySkills.empty'
+  | 'skills.form.name'
+  | 'skills.form.description'
+  | 'skills.form.triggers'
+  | 'skills.form.tools'
+  | 'skills.form.planTemplate'
+  | 'skills.form.inputsSchema'
+  | 'skills.form.outputsSchema'
+  | 'skills.admin.importTitle'
+  | 'skills.admin.mode'
+  | 'skills.admin.mode.upsert'
+  | 'skills.admin.mode.insertOnly'
+  | 'skills.admin.jsonPlaceholder'
+  | 'skills.admin.import'
+  | 'skills.admin.results'
   | 'settings.pageTitle'
   | 'settings.pageDescription'
   | 'settings.tab.appearance'
@@ -77,6 +105,34 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.recycleBin': '回收站',
     'sidebar.workspaceTree': '工作区目录',
     'sidebar.storage': '存储',
+    'sidebar.skills': '技能',
+    'skills.pageTitle': '技能',
+    'skills.pageDescription': '浏览全局技能市场，并管理你的私有自定义技能。',
+    'skills.searchPlaceholder': '搜索技能（name/description/triggers）',
+    'skills.tab.marketplace': '技能市场',
+    'skills.tab.mySkills': '我的技能',
+    'skills.actions.refresh': '刷新',
+    'skills.actions.newSkill': '新增技能',
+    'skills.actions.edit': '编辑',
+    'skills.actions.delete': '删除',
+    'skills.actions.save': '保存',
+    'skills.actions.cancel': '取消',
+    'skills.marketplace.empty': '没有找到技能市场内容。',
+    'skills.mySkills.empty': '还没有私有技能，可以先新增一个。',
+    'skills.form.name': '名称',
+    'skills.form.description': '描述',
+    'skills.form.triggers': '触发词',
+    'skills.form.tools': '工具白名单',
+    'skills.form.planTemplate': '计划模板',
+    'skills.form.inputsSchema': '输入 Schema',
+    'skills.form.outputsSchema': '输出 Schema',
+    'skills.admin.importTitle': '导入全局技能 (Admin)',
+    'skills.admin.mode': '模式',
+    'skills.admin.mode.upsert': 'Upsert',
+    'skills.admin.mode.insertOnly': 'Insert only',
+    'skills.admin.jsonPlaceholder': '粘贴 JSON（数组）或 { items: [] }',
+    'skills.admin.import': '导入',
+    'skills.admin.results': '导入结果',
     'settings.pageTitle': '设置',
     'settings.pageDescription': '个性化您的 fileflash 体验，管理应用行为和偏好。',
     'settings.tab.appearance': '外观',
@@ -126,6 +182,34 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.recycleBin': 'Recycle Bin',
     'sidebar.workspaceTree': 'Workspace Tree',
     'sidebar.storage': 'Storage',
+    'sidebar.skills': 'Skills',
+    'skills.pageTitle': 'Skills',
+    'skills.pageDescription': 'Browse the global marketplace and manage your private custom skills.',
+    'skills.searchPlaceholder': 'Search skills (name/description/triggers)',
+    'skills.tab.marketplace': 'Marketplace',
+    'skills.tab.mySkills': 'My Skills',
+    'skills.actions.refresh': 'Refresh',
+    'skills.actions.newSkill': 'New Skill',
+    'skills.actions.edit': 'Edit',
+    'skills.actions.delete': 'Delete',
+    'skills.actions.save': 'Save',
+    'skills.actions.cancel': 'Cancel',
+    'skills.marketplace.empty': 'No marketplace skills found.',
+    'skills.mySkills.empty': 'No private skills yet. Create one to get started.',
+    'skills.form.name': 'Name',
+    'skills.form.description': 'Description',
+    'skills.form.triggers': 'Triggers',
+    'skills.form.tools': 'Tool whitelist',
+    'skills.form.planTemplate': 'Plan template',
+    'skills.form.inputsSchema': 'Inputs schema',
+    'skills.form.outputsSchema': 'Outputs schema',
+    'skills.admin.importTitle': 'Import global skills (Admin)',
+    'skills.admin.mode': 'Mode',
+    'skills.admin.mode.upsert': 'Upsert',
+    'skills.admin.mode.insertOnly': 'Insert only',
+    'skills.admin.jsonPlaceholder': 'Paste JSON (array) or { items: [] }',
+    'skills.admin.import': 'Import',
+    'skills.admin.results': 'Import results',
     'settings.pageTitle': 'Settings',
     'settings.pageDescription': 'Personalize your fileflash experience and manage app behavior.',
     'settings.tab.appearance': 'Appearance',

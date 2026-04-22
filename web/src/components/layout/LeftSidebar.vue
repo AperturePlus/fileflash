@@ -110,6 +110,12 @@ onUnmounted(() => {
           </router-link>
         </li>
         <li class="nav-item">
+          <router-link to="/skills" class="nav-link" active-class="active">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 5l5 3l-5 3l-3 5l-3-5l-5-3l5-3zM4 21h16" /></svg>
+            <span v-if="!collapsed" class="link-text">{{ t('sidebar.skills') }}</span>
+          </router-link>
+        </li>
+        <li class="nav-item">
           <router-link to="/trash" class="nav-link" active-class="active">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4zm1 6h2v8h-2zm4 0h2v8h-2zM6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" /></svg>
             <span v-if="!collapsed" class="link-text">{{ t('sidebar.recycleBin') }}</span>

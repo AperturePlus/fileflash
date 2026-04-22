@@ -67,6 +67,12 @@ export const routes: Array<RouteRecordRaw> = [
         meta: { navId: 'settings' }
       },
       {
+        path: 'skills',
+        name: 'Skills',
+        component: () => import('../pages/skills/index.ts'),
+        meta: { navId: 'skills' }
+      },
+      {
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../pages/dashboard/index.ts'),
