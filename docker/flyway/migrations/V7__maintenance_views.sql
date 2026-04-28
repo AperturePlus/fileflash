@@ -506,7 +506,7 @@ WITH RECURSIVE folder_path AS (
         f.owner_id,
         f.parent_folder_id,
         f.folder_name,
-        fp.path || '/' || f.folder_name AS path
+        CAST(fp.path || '/' || f.folder_name AS VARCHAR(2048)) AS path
     FROM folder f
     JOIN folder_path fp
       ON f.parent_folder_id = fp.folder_id
