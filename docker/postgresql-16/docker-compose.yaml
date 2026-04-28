@@ -7,7 +7,8 @@ services:
       - "5432:5432"
     volumes:
       - ./data:/var/lib/postgresql/data
-      - ./init:/docker-entrypoint-initdb.d
+      # 删掉这一行 ↓（不再用 postgres 自带 init，改由 flyway 管）
+      # - ./init:/docker-entrypoint-initdb.d
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: psgl-ff-db
@@ -18,3 +19,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  flyway:
+    image: flyway/flyway:latest
+    container_name: flyway
+    command: >
+      -url=jdbc:postgresql://postgres:5432/fileflash
+      -user=admin
+      -password=psgl-ff-db
+      -connectRetries=10
+      migrate
+    volumes:
+      - ../flyway/sql:/flyway/sql
+    depends_on:
+      postgres:
+        condition: service_healthy
