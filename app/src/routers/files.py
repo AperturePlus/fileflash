@@ -1,15 +1,61 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
-from ..core.deps import get_archive_service, get_current_user
-from ..core.errors import api_success
+from ..core.deps import get_archive_service, get_current_user, get_file_service
+from ..core.errors import ApiError, api_success
 from ..models.tables_identity import User
 from ..schemas.archive import ArchiveExtractRequest
+from ..schemas.file import GetFilesQuery
 from ..schemas.job import to_background_job_response
 from ..services.archive import ArchiveService
+from ..services.file import FileService
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+
+@router.get("")
+async def list_files(
+    folder_id: str | None = Query(None, alias="folderId"),
+    sort: str | None = None,
+    order: str | None = None,
+    search: str | None = None,
+    mime_type: str | None = Query(None, alias="mimeType"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=200, alias="perPage"),
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    query = GetFilesQuery(
+        folder_id=folder_id, sort=sort, order=order,
+        search=search, mime_type=mime_type, page=page, per_page=per_page,
+    )
+    result = await file_service.list_files(user_id=current_user.user_id, query=query)
+    return api_success(data=result.model_dump(by_alias=True))
+
+
+@router.get("/starred")
+async def list_starred(
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    result = await file_service.list_starred(user_id=current_user.user_id)
+    return api_success(data=result.model_dump(by_alias=True))
+
+
+@router.get("/{file_id}")
+async def get_file(
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    try:
+        fid = int(file_id)
+    except ValueError as exc:
+        raise ApiError(status_code=400, code=400, message="Invalid fileId") from exc
+
+    result = await file_service.get_file(user_id=current_user.user_id, file_id=fid)
+    return api_success(data=result.model_dump(by_alias=True))
 
 
 @router.post("/{file_id}/archive/preview")
@@ -45,4 +91,3 @@ async def create_archive_extract_job(
         code=201,
         status_code=201,
     )
-

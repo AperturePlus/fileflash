@@ -2,6 +2,8 @@ from .archive import ArchiveService
 from .agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from .auth import AuthService
 from .background_jobs import BackgroundJobService
+from .file import FileService
+from .folder import FolderService
 from .job_queue import JobQueuePublisher, RedisStreamJobQueue
 from .messaging import AuthEventPublisher, InProcessAuthEventPublisher
 from .rate_limiter import RedisRateLimiter
@@ -14,6 +16,8 @@ __all__ = [
     "ArchiveService",
     "BackgroundJobService",
     "ExecuteService",
+    "FileService",
+    "FolderService",
     "McpService",
     "MemoryService",
     "PlanService",

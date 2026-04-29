@@ -21,6 +21,8 @@ from ..services.archive import ArchiveService
 from ..services.agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
+from ..services.file import FileService
+from ..services.folder import FolderService
 from ..services.job_queue import RedisStreamJobQueue
 from ..services.messaging import InProcessAuthEventPublisher
 from ..services.rate_limiter import RedisRateLimiter
@@ -130,6 +132,20 @@ def get_archive_service(
     jobs: BackgroundJobService = Depends(get_background_job_service),
 ) -> ArchiveService:
     return ArchiveService(db=db, jobs=jobs)
+
+
+
+def get_file_service(
+    db: AsyncSession = Depends(get_db),
+) -> FileService:
+    return FileService(db=db)
+
+
+def get_folder_service(
+    db: AsyncSession = Depends(get_db),
+) -> FolderService:
+    return FolderService(db=db)
+
 
 
 def get_agent_settings_repository(db: AsyncSession = Depends(get_db)) -> AgentSettingsRepository:
