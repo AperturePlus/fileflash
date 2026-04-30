@@ -31,3 +31,5 @@ docs/design
 .test_*
 
 app/artifacts/
+
+*design_backup*
