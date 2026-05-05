@@ -85,6 +85,16 @@ export interface FolderItem {
    */
   export interface MoveFolderRequest {
     targetParentId: string;
+    shareHandling?: 'keep' | 'revoke';
+  }
+
+  export interface MoveFolderResponse {
+    folderId: string;
+    targetParentId: string;
+    finalName: string;
+    shareHandling: 'keep' | 'revoke';
+    revokedShareCount: number;
+    movedAt: string;
   }
 
   /**
@@ -391,6 +401,16 @@ export interface RenameFileRequest {
  */
 export interface MoveFileRequest {
   targetFolderId: string;
+  shareHandling?: 'keep' | 'revoke';
+}
+
+export interface MoveFileResponse {
+  fileId: string;
+  targetFolderId: string;
+  finalName: string;
+  shareHandling: 'keep' | 'revoke';
+  revokedShareCount: number;
+  movedAt: string;
 }
 
 /**
@@ -406,8 +426,29 @@ export interface CopyFileRequest {
  */
 export interface BatchFilesRequest {
   action: 'delete' | 'move' | 'copy';
-  fileIds: string[]; // 修改为 string[] 以保持一致性
-  targetFolderId?: string; // 修改为 string 以保持一致性
+  fileIds: string[];
+  folderIds?: string[];
+  targetFolderId?: string;
+  shareHandling?: 'keep' | 'revoke';
+}
+
+export interface BatchMoveItemResult {
+  itemType: 'file' | 'folder';
+  itemId: string;
+  success: boolean;
+  finalName?: string | null;
+  movedAt?: string | null;
+  message?: string | null;
+  shareHandling: 'keep' | 'revoke';
+  revokedShareCount: number;
+}
+
+export interface BatchFilesResponse {
+  processed: number;
+  action: 'delete' | 'move' | 'copy';
+  succeeded: number;
+  failed: number;
+  results: BatchMoveItemResult[];
 }
 
 /**
@@ -539,4 +580,6 @@ export interface BackgroundJob<T = any> {
   createdAt: string;
   updatedAt: string;
 }
+
+
 

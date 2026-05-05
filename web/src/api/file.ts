@@ -9,8 +9,10 @@ import type {
   GetFilesRequest,
   RenameFileRequest,
   MoveFileRequest,
+  MoveFileResponse,
   CopyFileRequest,
   BatchFilesRequest,
+  BatchFilesResponse,
   UploadPreflightRequest,
   UploadPreflightResponse,
   BatchUploadPreflightRequest,
@@ -164,7 +166,7 @@ export const renameFile = (fileId: string, data: RenameFileRequest) => {
  * @returns 移动后的文件信息
  */
 export const moveFile = (fileId: string, data: MoveFileRequest) => {
-  return http.patch<{ fileId: string; targetFolderId: string; movedAt: string }>(`/files/${fileId}/move`, data);
+  return http.patch<MoveFileResponse>(`/files/${fileId}/move`, data);
 };
 
 /**
@@ -210,14 +212,8 @@ export const batchDownloadFiles = (fileIds: string[]) => {
  * @returns 操作后的文件信息
  */
 export const batchFiles = (data: BatchFilesRequest) => {
-  return http.post<ResponseData>('/files/batch', data);
+  return http.post<BatchFilesResponse>('/files/batch', data);
 };
-
-interface ResponseData {
-  processed: number;
-  action: string; 
-  succeeded: number;
-}
 
 export const getAdminFiles = (params: GetAdminFilesRequest) => {
   return http.get<PaginatedData<AdminFileAuditItem>>('/admin/files', params);

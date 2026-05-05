@@ -78,6 +78,175 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function splitFileName(name: string) {
+  const dotIndex = name.lastIndexOf('.');
+  if (dotIndex > 0) {
+    return {
+      stem: name.slice(0, dotIndex),
+      ext: name.slice(dotIndex),
+    };
+  }
+  return { stem: name, ext: '' };
+}
+
+function hasNameConflict({
+  parentId,
+  itemType,
+  name,
+  excludeId,
+}: {
+  parentId: string;
+  itemType: 'file' | 'folder';
+  name: string;
+  excludeId?: string;
+}) {
+  return vfsApi
+    .getChildren(parentId)
+    .some((node) => !node.isTrashed && node.type === itemType && node.id !== excludeId && node.name === name);
+}
+
+function nextAvailableName({
+  parentId,
+  itemType,
+  originalName,
+  excludeId,
+}: {
+  parentId: string;
+  itemType: 'file' | 'folder';
+  originalName: string;
+  excludeId?: string;
+}) {
+  if (!hasNameConflict({ parentId, itemType, name: originalName, excludeId })) {
+    return originalName;
+  }
+
+  if (itemType === 'file') {
+    const { stem, ext } = splitFileName(originalName);
+    let index = 1;
+    while (true) {
+      const candidate = `${stem || 'file'} (${index})${ext}`;
+      if (!hasNameConflict({ parentId, itemType, name: candidate, excludeId })) {
+        return candidate;
+      }
+      index += 1;
+    }
+  }
+
+  const base = originalName.trim() || 'Folder';
+  let index = 1;
+  while (true) {
+    const candidate = `${base} (${index})`;
+    if (!hasNameConflict({ parentId, itemType, name: candidate, excludeId })) {
+      return candidate;
+    }
+    index += 1;
+  }
+}
+
+function collectFolderSubtreeIds(rootFolderId: string): { folderIds: string[]; fileIds: string[] } {
+  const folderIds: string[] = [];
+  const fileIds: string[] = [];
+
+  const walk = (folderId: string) => {
+    folderIds.push(folderId);
+    const children = vfsApi.getChildren(folderId);
+    children.forEach((node) => {
+      if (node.isTrashed) return;
+      if (node.type === 'folder') {
+        walk(node.id);
+      } else {
+        fileIds.push(node.id);
+      }
+    });
+  };
+
+  walk(rootFolderId);
+  return { folderIds, fileIds };
+}
+
+function revokeActiveShares(fileIds: string[], folderIds: string[]): number {
+  const fileSet = new Set(fileIds);
+  const folderSet = new Set(folderIds);
+
+  let revoked = 0;
+  for (let index = mockShares.length - 1; index >= 0; index -= 1) {
+    const share = mockShares[index];
+    const matchFile = share.itemType === 'file' && fileSet.has(share.itemInfo.id);
+    const matchFolder = share.itemType === 'folder' && folderSet.has(share.itemInfo.id);
+    if (!matchFile && !matchFolder) continue;
+    mockShares.splice(index, 1);
+    revoked += 1;
+  }
+  return revoked;
+}
+
+function moveNodeWithPolicy(
+  itemId: string,
+  targetFolderId: string,
+  shareHandling: 'keep' | 'revoke',
+  expectedType?: 'file' | 'folder',
+) {
+  const node = vfsApi.get(itemId);
+  if (!node || node.isTrashed) {
+    return { success: false as const, code: 404, message: 'Item not found' };
+  }
+  if (expectedType && node.type !== expectedType) {
+    return { success: false as const, code: 404, message: `${expectedType === 'file' ? 'File' : 'Folder'} not found` };
+  }
+
+  const targetFolder = vfsApi.get(targetFolderId);
+  if (!targetFolder || targetFolder.type !== 'folder' || targetFolder.isTrashed) {
+    return { success: false as const, code: 404, message: 'Target folder not found' };
+  }
+
+  if (node.type === 'folder' && node.id === 'root') {
+    return { success: false as const, code: 400, message: 'Root folder cannot be moved' };
+  }
+
+  const finalName = nextAvailableName({
+    parentId: targetFolderId,
+    itemType: node.type,
+    originalName: node.name,
+    excludeId: node.id,
+  });
+
+  try {
+    vfsApi.move(itemId, targetFolderId);
+    if (finalName !== node.name) {
+      vfsApi.rename(itemId, finalName);
+    }
+  } catch (error) {
+    return {
+      success: false as const,
+      code: 409,
+      message: (error as Error)?.message || 'Move failed',
+    };
+  }
+
+  let revokedShareCount = 0;
+  if (shareHandling === 'revoke') {
+    if (node.type === 'file') {
+      revokedShareCount = revokeActiveShares([node.id], []);
+    } else {
+      const { folderIds, fileIds } = collectFolderSubtreeIds(node.id);
+      revokedShareCount = revokeActiveShares(fileIds, folderIds);
+    }
+  }
+
+  const movedNode = vfsApi.get(itemId)!;
+  return {
+    success: true as const,
+    code: 200,
+    itemType: movedNode.type,
+    itemId: movedNode.id,
+    targetFolderId,
+    finalName: movedNode.name,
+    movedAt: movedNode.updatedAt,
+    shareHandling,
+    revokedShareCount,
+  };
+}
+
 function detectArchiveFormat(name: string) {
   const lower = (name || '').toLowerCase();
   if (lower.endsWith('.7z')) return '7z';
@@ -522,18 +691,28 @@ export const setupFileMocks = () => {
 
   Mock.mock(/\/api\/v1\/files\/([^/]+)\/move$/, 'patch', (options) => {
     const fileId = (options.url.match(/\/api\/v1\/files\/([^/]+)\/move/) || [])[1];
-    const { targetFolderId } = JSON.parse(options.body || '{}');
-
-    const moved = vfsApi.move(fileId, targetFolderId);
-    addLog('file_move', { fileId, targetFolderId });
+    const { targetFolderId, shareHandling = 'keep' } = JSON.parse(options.body || '{}');
+    const moved = moveNodeWithPolicy(fileId, targetFolderId, shareHandling, 'file');
+    if (!moved.success) {
+      return {
+        success: false,
+        code: moved.code,
+        message: moved.message,
+        data: null,
+      };
+    }
+    addLog('file_move', { fileId, targetFolderId, shareHandling });
 
     return {
       success: true,
       code: 200,
       data: {
-        fileId: moved.id,
-        targetFolderId,
-        movedAt: moved.updatedAt,
+        fileId: moved.itemId,
+        targetFolderId: moved.targetFolderId,
+        finalName: moved.finalName,
+        shareHandling: moved.shareHandling,
+        revokedShareCount: moved.revokedShareCount,
+        movedAt: moved.movedAt,
       },
     };
   });
@@ -627,46 +806,223 @@ export const setupFileMocks = () => {
   });
 
   Mock.mock(/\/api\/v1\/files\/batch$/, 'post', (options) => {
-    const { action, fileIds = [], targetFolderId } = JSON.parse(options.body || '{}');
+    const {
+      action,
+      fileIds = [],
+      folderIds = [],
+      targetFolderId,
+      shareHandling = 'keep',
+    } = JSON.parse(options.body || '{}');
 
-    if (!Array.isArray(fileIds) || fileIds.length === 0) {
+    if ((!Array.isArray(fileIds) || fileIds.length === 0) && (!Array.isArray(folderIds) || folderIds.length === 0)) {
       return {
         success: false,
         code: 400,
-        message: 'fileIds is required',
+        message: 'At least one fileId or folderId is required',
         data: null,
       };
     }
 
-    let succeeded = 0;
+    const uniqueFileIds = Array.from(new Set(fileIds as string[]));
+    const uniqueFolderIds = Array.from(new Set(folderIds as string[]));
+    const results: Array<{
+      itemType: 'file' | 'folder';
+      itemId: string;
+      success: boolean;
+      finalName: string | null;
+      movedAt: string | null;
+      message: string | null;
+      shareHandling: 'keep' | 'revoke';
+      revokedShareCount: number;
+    }> = [];
 
     if (action === 'delete') {
-      fileIds.forEach((id: string) => {
+      uniqueFileIds.forEach((id: string) => {
         const node = vfsApi.get(id);
-        if (node) {
+        if (node && node.type === 'file' && !node.isTrashed) {
           vfsApi.delete(id);
-          succeeded += 1;
+          results.push({
+            itemType: 'file',
+            itemId: id,
+            success: true,
+            finalName: node.name,
+            movedAt: node.updatedAt,
+            message: null,
+            shareHandling: 'keep',
+            revokedShareCount: 0,
+          });
+        } else {
+          results.push({
+            itemType: 'file',
+            itemId: id,
+            success: false,
+            finalName: null,
+            movedAt: null,
+            message: 'File not found',
+            shareHandling: 'keep',
+            revokedShareCount: 0,
+          });
         }
       });
-      addLog('file_batch_delete', { count: succeeded });
-      addNotification(`${succeeded} files moved to recycle bin`, true);
-    } else if (action === 'move') {
-      fileIds.forEach((id: string) => {
+      uniqueFolderIds.forEach((id: string) => {
         const node = vfsApi.get(id);
-        if (node) {
-          vfsApi.move(id, targetFolderId);
-          succeeded += 1;
+        if (node && node.type === 'folder' && !node.isTrashed) {
+          vfsApi.delete(id);
+          results.push({
+            itemType: 'folder',
+            itemId: id,
+            success: true,
+            finalName: node.name,
+            movedAt: node.updatedAt,
+            message: null,
+            shareHandling: 'keep',
+            revokedShareCount: 0,
+          });
+        } else {
+          results.push({
+            itemType: 'folder',
+            itemId: id,
+            success: false,
+            finalName: null,
+            movedAt: null,
+            message: 'Folder not found',
+            shareHandling: 'keep',
+            revokedShareCount: 0,
+          });
         }
       });
+      const succeeded = results.filter((item) => item.success).length;
+      addLog('file_batch_delete', { count: succeeded });
+      addNotification(`${succeeded} item(s) moved to recycle bin`, true);
+    } else if (action === 'move') {
+      if (!targetFolderId) {
+        return {
+          success: false,
+          code: 400,
+          message: 'targetFolderId is required for move action',
+          data: null,
+        };
+      }
+
+      uniqueFileIds.forEach((id: string) => {
+        const moved = moveNodeWithPolicy(id, targetFolderId, shareHandling, 'file');
+        if (moved.success) {
+          results.push({
+            itemType: 'file',
+            itemId: moved.itemId,
+            success: true,
+            finalName: moved.finalName,
+            movedAt: moved.movedAt,
+            message: null,
+            shareHandling: moved.shareHandling,
+            revokedShareCount: moved.revokedShareCount,
+          });
+        } else {
+          results.push({
+            itemType: 'file',
+            itemId: id,
+            success: false,
+            finalName: null,
+            movedAt: null,
+            message: moved.message,
+            shareHandling,
+            revokedShareCount: 0,
+          });
+        }
+      });
+      uniqueFolderIds.forEach((id: string) => {
+        const moved = moveNodeWithPolicy(id, targetFolderId, shareHandling, 'folder');
+        if (moved.success) {
+          results.push({
+            itemType: 'folder',
+            itemId: moved.itemId,
+            success: true,
+            finalName: moved.finalName,
+            movedAt: moved.movedAt,
+            message: null,
+            shareHandling: moved.shareHandling,
+            revokedShareCount: moved.revokedShareCount,
+          });
+        } else {
+          results.push({
+            itemType: 'folder',
+            itemId: id,
+            success: false,
+            finalName: null,
+            movedAt: null,
+            message: moved.message,
+            shareHandling,
+            revokedShareCount: 0,
+          });
+        }
+      });
+      const succeeded = results.filter((item) => item.success).length;
       addLog('file_batch_move', { count: succeeded, targetFolderId: targetFolderId || '' });
     } else if (action === 'copy') {
-      fileIds.forEach((id: string) => {
+      if (!targetFolderId) {
+        return {
+          success: false,
+          code: 400,
+          message: 'targetFolderId is required for copy action',
+          data: null,
+        };
+      }
+
+      uniqueFileIds.forEach((id: string) => {
         const node = vfsApi.get(id);
-        if (node) {
-          vfsApi.copy(id, targetFolderId);
-          succeeded += 1;
+        if (node && node.type === 'file' && !node.isTrashed) {
+          const copied = vfsApi.copy(id, targetFolderId);
+          results.push({
+            itemType: 'file',
+            itemId: copied.id,
+            success: true,
+            finalName: copied.name,
+            movedAt: copied.updatedAt,
+            message: null,
+            shareHandling: 'keep',
+            revokedShareCount: 0,
+          });
+        } else {
+          results.push({
+            itemType: 'file',
+            itemId: id,
+            success: false,
+            finalName: null,
+            movedAt: null,
+            message: 'File not found',
+            shareHandling: 'keep',
+            revokedShareCount: 0,
+          });
         }
       });
+      uniqueFolderIds.forEach((id: string) => {
+        const node = vfsApi.get(id);
+        if (node && node.type === 'folder' && !node.isTrashed) {
+          const copied = vfsApi.copy(id, targetFolderId);
+          results.push({
+            itemType: 'folder',
+            itemId: copied.id,
+            success: true,
+            finalName: copied.name,
+            movedAt: copied.updatedAt,
+            message: null,
+            shareHandling: 'keep',
+            revokedShareCount: 0,
+          });
+        } else {
+          results.push({
+            itemType: 'folder',
+            itemId: id,
+            success: false,
+            finalName: null,
+            movedAt: null,
+            message: 'Folder not found',
+            shareHandling: 'keep',
+            revokedShareCount: 0,
+          });
+        }
+      });
+      const succeeded = results.filter((item) => item.success).length;
       addLog('file_batch_copy', { count: succeeded, targetFolderId: targetFolderId || '' });
     } else {
       return {
@@ -681,9 +1037,11 @@ export const setupFileMocks = () => {
       success: true,
       code: 200,
       data: {
-        processed: fileIds.length,
+        processed: results.length,
         action,
-        succeeded,
+        succeeded: results.filter((item) => item.success).length,
+        failed: results.filter((item) => !item.success).length,
+        results,
       },
     };
   });

@@ -80,7 +80,8 @@ const resolveFolderName = async (folderId: string): Promise<string> => {
   return folderId;
 };
 
-const handleFolderPicked = async (folderId: string) => {
+const handleFolderPicked = async (payload: string | { targetFolderId: string }) => {
+  const folderId = typeof payload === 'string' ? payload : payload.targetFolderId;
   destinationFolderId.value = folderId;
   isFolderPickerVisible.value = false;
   destinationFolderName.value = await resolveFolderName(folderId);
@@ -299,6 +300,7 @@ onUnmounted(() => {
       <MoveItemDialog
         :is-visible="isFolderPickerVisible"
         :item-to-move="file"
+        :enable-share-handling="false"
         title="Select destination folder"
         prompt="Choose a folder to extract into:"
         confirm-text="Select"

@@ -108,7 +108,7 @@ const handleClick = () => {
       @dragleave="isDragOver = false"
     >
       <span v-if="isFolder" class="arrow" :class="{ expanded: isExpanded }">
-        {{ isExpanded ? '▼' : '►' }}
+        {{ isExpanded ? 'v' : '>' }}
       </span>
       <span v-else class="arrow-placeholder"></span>
       <img :src="isFolder ? folderIcon : getIconForFile(node.name)" alt="" class="icon" />
@@ -181,3 +181,6 @@ const handleClick = () => {
   cursor: pointer;
 }
 </style> 
+
+
+

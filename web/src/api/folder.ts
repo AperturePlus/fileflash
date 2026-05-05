@@ -8,6 +8,7 @@ import type {
   CreateFolderRequest,
   RenameFolderRequest,
   MoveFolderRequest,
+  MoveFolderResponse,
 } from '../types/file';
 
 /**
@@ -87,7 +88,7 @@ export const renameFolder = (folderId: string, data: RenameFolderRequest) => {
  * @param data 包含目标父文件夹ID
  */
 export const moveFolder = (folderId: string, data: MoveFolderRequest) => {
-  return http.patch<{ folderId: string; targetParentId: string; movedAt: string }>(`/folders/${folderId}/move`, data);
+  return http.patch<MoveFolderResponse>(`/folders/${folderId}/move`, data);
 };
 
 /**
