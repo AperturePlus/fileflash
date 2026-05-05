@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue';
 import { getFolderContents } from '../../api/folder';
 import type { FolderItem } from '../../types/file';
 import FolderTreeNode from './FolderTreeNode.vue';
+import { ui } from '../../utils/ui';
 
 interface Props {
   isVisible: boolean;
@@ -52,7 +53,7 @@ const handleSelectFolder = (folderId: string) => {
 
 const handleConfirm = () => {
   if (!selectedFolderId.value) {
-    alert('Please select a destination folder.');
+    ui.toast({ type: 'warning', message: 'Please select a destination folder.' });
     return;
   }
   emit('confirm', selectedFolderId.value);

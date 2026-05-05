@@ -4,6 +4,7 @@ import { clearRecycleBin, getRecycleBin, permanentDelete, restoreItem } from '..
 import type { RecycleBinItem } from '../../types/file';
 import { getIconForFile } from '../../utils/fileIcons';
 import { eventBus } from '../../utils/eventBus';
+import { ui } from '../../utils/ui';
 
 const items = ref<RecycleBinItem[]>([]);
 const isLoading = ref(false);
@@ -21,40 +22,60 @@ const fetchItems = async () => {
 };
 
 const handleRestore = async (item: RecycleBinItem) => {
-  const confirmed = window.confirm(`Restore \"${item.name}\"?`);
+  const confirmed = await ui.confirm({
+    title: 'Restore Item',
+    message: `Restore "${item.name}"?`,
+    confirmText: 'Restore',
+  });
   if (!confirmed) return;
 
   try {
     await restoreItem(item.id, { itemType: item.itemType });
     items.value = items.value.filter((entry) => entry.id !== item.id);
     eventBus.emit('refresh-file-tree');
+    ui.toast({ type: 'success', message: `Restored "${item.name}".` });
   } catch (error) {
     console.error('Restore failed', error);
+    ui.toast({ type: 'error', message: 'Restore failed.' });
   }
 };
 
 const handlePermanentDelete = async (item: RecycleBinItem) => {
-  const confirmed = window.confirm(`Permanently delete \"${item.name}\"? This cannot be undone.`);
+  const confirmed = await ui.confirm({
+    title: 'Permanent Delete',
+    message: `Permanently delete "${item.name}"? This cannot be undone.`,
+    confirmText: 'Delete',
+    danger: true,
+  });
   if (!confirmed) return;
 
   try {
     await permanentDelete(item.id, item.itemType);
     items.value = items.value.filter((entry) => entry.id !== item.id);
+    ui.toast({ type: 'success', message: `Deleted "${item.name}".` });
   } catch (error) {
     console.error('Permanent delete failed', error);
+    ui.toast({ type: 'error', message: 'Permanent delete failed.' });
   }
 };
 
 const handleClearAll = async () => {
   if (!items.value.length) return;
-  const confirmed = window.confirm('Clear entire recycle bin? This cannot be undone.');
+  const confirmed = await ui.confirm({
+    title: 'Clear Recycle Bin',
+    message: 'Clear entire recycle bin? This cannot be undone.',
+    confirmText: 'Clear',
+    danger: true,
+  });
   if (!confirmed) return;
 
   try {
     await clearRecycleBin();
     items.value = [];
+    ui.toast({ type: 'success', message: 'Recycle bin cleared.' });
   } catch (error) {
     console.error('Clear recycle bin failed', error);
+    ui.toast({ type: 'error', message: 'Clear recycle bin failed.' });
   }
 };
 

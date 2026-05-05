@@ -9,6 +9,7 @@ import { createShare, getShares, updateShareSettings } from '../../api/share';
 import { getUsers } from '../../api/user';
 import { getUserGroups } from '../../api/usergroup';
 import { createPermission, deletePermission, getPermissions, updatePermission } from '../../api/permission';
+import { ui } from '../../utils/ui';
 
 interface Props {
   isVisible: boolean;
@@ -281,7 +282,11 @@ const copyPassword = async () => {
     await navigator.clipboard.writeText(shareSettings.value.password);
     settingsMessage.value = 'Password copied.';
   } catch {
-    window.prompt('Copy this password', shareSettings.value.password);
+    await ui.copyText({
+      title: 'Copy Password',
+      message: 'Clipboard is unavailable. Copy this password manually:',
+      text: shareSettings.value.password,
+    });
   }
 };
 
@@ -296,7 +301,11 @@ const copyLink = async () => {
     await navigator.clipboard.writeText(publicLink.value);
     settingsMessage.value = 'Link copied.';
   } catch {
-    window.prompt('Copy this link', publicLink.value);
+    await ui.copyText({
+      title: 'Copy Link',
+      message: 'Clipboard is unavailable. Copy this link manually:',
+      text: publicLink.value,
+    });
   }
 };
 

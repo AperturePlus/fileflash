@@ -6,6 +6,7 @@ import { useLocaleStore } from '../../store/locale';
 import { useUserStore } from '../../store/user';
 import type { AgentSkillItem, ImportAgentSkillMode, ImportAgentSkillResult, ImportAgentSkillItem } from '../../types/skill';
 import type { PaginatedData } from '../../types/base';
+import { ui } from '../../utils/ui';
 
 const localeStore = useLocaleStore();
 const userStore = useUserStore();
@@ -136,7 +137,7 @@ const buildToolWhitelist = () => {
 
 const saveSkill = async () => {
   if (!formName.value.trim() || !formDescription.value.trim()) {
-    alert('Name and description are required.');
+    ui.toast({ type: 'warning', message: 'Name and description are required.' });
     return;
   }
 
@@ -164,18 +165,26 @@ const saveSkill = async () => {
 
     closeEditor();
     await loadMySkills();
+    ui.toast({ type: 'success', message: 'Skill saved successfully.' });
   } catch (error) {
     console.error('Failed to save skill:', error);
-    alert(String((error as Error).message || 'Failed to save skill.'));
+    ui.toast({ type: 'error', message: String((error as Error).message || 'Failed to save skill.') });
   } finally {
     editorLoading.value = false;
   }
 };
 
 const removeSkill = async (skillKey: string) => {
-  if (!confirm(`Delete skill ${skillKey}?`)) return;
+  const confirmed = await ui.confirm({
+    title: 'Delete Skill',
+    message: `Delete skill ${skillKey}?`,
+    confirmText: 'Delete',
+    danger: true,
+  });
+  if (!confirmed) return;
   await deleteCustomSkill(skillKey);
   await loadMySkills();
+  ui.toast({ type: 'success', message: 'Skill deleted.' });
 };
 
 // ---- Admin import ----
@@ -198,7 +207,7 @@ const handleImportFile = (event: Event) => {
 const submitImport = async () => {
   importResults.value = [];
   if (!importJson.value.trim()) {
-    alert('Paste JSON first.');
+    ui.toast({ type: 'warning', message: 'Paste JSON first.' });
     return;
   }
 
@@ -221,9 +230,10 @@ const submitImport = async () => {
 
     importResults.value = response.results || [];
     await loadMarketplace();
+    ui.toast({ type: 'success', message: 'Skill import completed.' });
   } catch (error) {
     console.error('Import failed:', error);
-    alert(String((error as Error).message || 'Import failed.'));
+    ui.toast({ type: 'error', message: String((error as Error).message || 'Import failed.') });
   } finally {
     importLoading.value = false;
   }
@@ -334,7 +344,7 @@ const gotoMySkillsNext = async () => {
           <h4>{{ t('skills.admin.results') }}</h4>
           <ul>
             <li v-for="item in importResults" :key="item.skillKey">
-              <code>{{ item.skillKey }}</code> — <span class="action">{{ item.action }}</span>
+              <code>{{ item.skillKey }}</code> - <span class="action">{{ item.action }}</span>
             </li>
           </ul>
         </div>
@@ -374,7 +384,7 @@ const gotoMySkillsNext = async () => {
         <div class="editor">
           <div class="editor-head">
             <h3>{{ editingKey ? t('skills.actions.edit') : t('skills.actions.newSkill') }}</h3>
-            <button class="icon" @click="closeEditor">×</button>
+            <button class="icon" @click="closeEditor">&times;</button>
           </div>
 
           <div class="form">
@@ -764,4 +774,8 @@ const gotoMySkillsNext = async () => {
   }
 }
 </style>
+
+
+
+
 
