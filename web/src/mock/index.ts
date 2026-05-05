@@ -13,6 +13,7 @@ import { setupStorageMocks } from './handlers/storage';
 import { setupSystemMocks } from './handlers/system';
 import { setupJobsMocks } from './handlers/jobs';
 import { setupSkillMocks } from './handlers/skill';
+import { setupAgentMocks } from './handlers/agent';
 
 // Setup all mock handlers
 export const setupMocks = () => {
@@ -31,6 +32,7 @@ export const setupMocks = () => {
   setupSystemMocks();
   setupJobsMocks();
   setupSkillMocks();
+  setupAgentMocks();
 };
 
 // Immediately setup mocks when this module is imported

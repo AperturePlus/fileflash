@@ -565,6 +565,7 @@ export interface BackgroundJob<T = any> {
   jobId: string;
   taskType: string;
   status: string;
+  agentPhase?: string | null;
   priority: number;
   payload: Record<string, any>;
   result: T;
@@ -576,6 +577,7 @@ export interface BackgroundJob<T = any> {
   finishedAt?: string | null;
   traceId?: string | null;
   idempotencyKey?: string | null;
+  cancelRequestedAt?: string | null;
   requestedBy?: string | null;
   createdAt: string;
   updatedAt: string;
