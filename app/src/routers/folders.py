@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from ..core.deps import get_current_user, get_folder_service
 from ..core.errors import ApiError, api_success
 from ..models.tables_identity import User
-from ..schemas.file import GetFolderContentsQuery
+from ..schemas.file import GetFolderContentsQuery, MoveFolderRequest
 from ..services.folder import FolderService
 
 router = APIRouter(prefix="/folders", tags=["folders"])
@@ -88,3 +88,14 @@ async def get_folder_size(
 
     result = await folder_service.get_folder_size(user_id=current_user.user_id, folder_id=fid)
     return api_success(data=result.model_dump(by_alias=True))
+
+
+@router.patch("/{folder_id}/move")
+async def move_folder(
+    folder_id: str,
+    payload: MoveFolderRequest,
+    current_user: User = Depends(get_current_user),
+    folder_service: FolderService = Depends(get_folder_service),
+):
+    result = await folder_service.move_folder(user_id=current_user.user_id, folder_id=folder_id, payload=payload)
+    return api_success(data=result.model_dump(by_alias=True), message="Folder moved successfully")

@@ -16,8 +16,11 @@ from ..schemas.file import (
     FolderPathResponse,
     FolderSizeResponse,
     GetFolderContentsQuery,
+    MoveFolderRequest,
+    MoveFolderResponse,
     PathItem,
 )
+from .file import FileService
 
 _SORT_COLUMNS_FILE = {
     "name": File.file_name,
@@ -184,6 +187,26 @@ class FolderService:
             total_size=total_size or 0,
             file_count=file_count or 0,
             folder_count=folder_count,
+        )
+
+    async def move_folder(
+        self, *, user_id: int, folder_id: str, payload: MoveFolderRequest,
+    ) -> MoveFolderResponse:
+        mover = FileService(db=self.db)
+        moved = await mover._move_folder_record(
+            user_id=user_id,
+            folder_id=folder_id,
+            target_parent_id=payload.target_parent_id,
+            share_handling=payload.share_handling,
+        )
+        await self.db.commit()
+        return MoveFolderResponse(
+            folder_id=str(moved["folder_id"]),
+            target_parent_id=str(moved["target_parent_id"]),
+            final_name=str(moved["final_name"]),
+            share_handling=str(moved["share_handling"]),
+            revoked_share_count=int(moved["revoked_share_count"]),
+            moved_at=moved["moved_at"],
         )
 
     # ------------------------------------------------------------------

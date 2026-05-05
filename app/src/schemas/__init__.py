@@ -21,6 +21,7 @@ from .agent_skill import (
 from .common import ApiResponse, CamelModel, PageQuery, PaginatedData, PaginationMeta
 from .file import (
     AdminFileAuditItem,
+    BatchMoveItemResult,
     BatchFilesRequest,
     BatchFilesResponse,
     ContentItem,
@@ -47,6 +48,7 @@ from .file import (
     RenameFileRequest,
     RenameFolderRequest,
     RescanAdminFileResponse,
+    ShareHandling,
     ToggleFileStarRequest,
     ToggleFolderStarRequest,
     UploadPreflightRequest,
@@ -145,6 +147,7 @@ __all__ = [
     "ApiResponse",
     "BatchFilesRequest",
     "BatchFilesResponse",
+    "BatchMoveItemResult",
     "BroadcastNotificationRequest",
     "BreakdownDetail",
     "CamelModel",
@@ -223,6 +226,7 @@ __all__ = [
     "ShareSettings",
     "SaveShareRequest",
     "SaveShareResponse",
+    "ShareHandling",
     "StorageStats",
     "StorageUsagePoint",
     "StorageUsageTrend",
