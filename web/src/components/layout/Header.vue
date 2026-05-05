@@ -154,11 +154,12 @@ const handleSearchInput = (event: Event) => {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: var(--border-radius-md);
-  transition: background-color 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .brand:hover {
   background-color: var(--color-bg-tertiary);
+  transform: translateY(-1px);
 }
 
 .brand-logo {
@@ -193,12 +194,14 @@ const handleSearchInput = (event: Event) => {
   border: 1px solid var(--color-border);
   border-radius: 999px;
   padding: 0 14px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .search-box:focus-within {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.15);
+  background-color: var(--color-bg-primary);
+  box-shadow: 0 4px 12px rgba(var(--color-primary-rgb), 0.1);
+  transform: translateY(-1px);
 }
 
 .search-box svg {
@@ -230,13 +233,19 @@ const handleSearchInput = (event: Event) => {
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: var(--transition-base);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .icon-btn:hover {
   border-color: var(--color-border);
   background-color: var(--color-bg-tertiary);
   color: var(--color-text-primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.icon-btn:active {
+  transform: translateY(0);
 }
 
 .icon-btn svg {
@@ -258,6 +267,13 @@ const handleSearchInput = (event: Event) => {
   gap: var(--spacing-sm);
   padding: 0 12px 0 6px;
   cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-trigger:hover {
+  background-color: var(--color-bg-tertiary);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .profile-trigger .avatar {

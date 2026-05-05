@@ -31,7 +31,8 @@ import { ui, uiState } from '../../utils/ui';
 .toast-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  position: relative;
 }
 
 .toast-item {
@@ -85,13 +86,21 @@ import { ui, uiState } from '../../utils/ui';
 
 .toast-fade-enter-active,
 .toast-fade-leave-active {
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.toast-fade-enter-from,
+.toast-fade-enter-from {
+  opacity: 0;
+  transform: translateX(30px) scale(0.95);
+}
+
 .toast-fade-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateX(30px) scale(0.95);
+}
+
+.toast-fade-leave-active {
+  position: absolute;
 }
 </style>
 
