@@ -208,3 +208,136 @@ CREATE TRIGGER trg_agent_work_session_updated_at
 BEFORE UPDATE ON agent_work_session
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
+
+-- =========================
+-- Agent views and functions
+-- =========================
+
+CREATE OR REPLACE FUNCTION agent_refresh_work_session_metrics(p_work_session_id BIGINT)
+RETURNS VOID AS $$
+BEGIN
+    IF p_work_session_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    UPDATE agent_work_session aws
+    SET tool_call_count = COALESCE(agg.tool_call_count, 0),
+        last_tool_started_at = agg.last_tool_started_at,
+        last_tool_finished_at = agg.last_tool_finished_at,
+        last_error_message = agg.last_error_message
+    FROM (
+        SELECT
+            ws.work_session_id,
+            COUNT(al.action_log_id)::INTEGER AS tool_call_count,
+            MAX(al.started_at) AS last_tool_started_at,
+            MAX(al.finished_at) AS last_tool_finished_at,
+            (
+                SELECT sub.error_message
+                FROM agent_action_log sub
+                WHERE sub.job_id = ws.job_id
+                  AND sub.error_message IS NOT NULL
+                ORDER BY COALESCE(sub.finished_at, sub.started_at) DESC, sub.action_log_id DESC
+                LIMIT 1
+            ) AS last_error_message
+        FROM agent_work_session ws
+        LEFT JOIN agent_action_log al ON al.job_id = ws.job_id
+        WHERE ws.work_session_id = p_work_session_id
+        GROUP BY ws.work_session_id, ws.job_id
+    ) agg
+    WHERE aws.work_session_id = agg.work_session_id;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP VIEW IF EXISTS v_agent_job_overview;
+DROP VIEW IF EXISTS v_agent_memory_active;
+DROP VIEW IF EXISTS v_agent_mcp_catalog;
+DROP VIEW IF EXISTS v_agent_skill_catalog;
+
+CREATE VIEW v_agent_skill_catalog AS
+SELECT
+    s.skill_id,
+    s.skill_key,
+    s.name,
+    s.description,
+    s.triggers_text,
+    s.tool_whitelist_json,
+    s.plan_template_json,
+    s.inputs_schema_json,
+    s.outputs_schema_json,
+    s.visibility,
+    s.owner_user_id,
+    s.created_at,
+    s.updated_at,
+    (COALESCE(s.name, '') || ' ' || COALESCE(s.description, '') || ' ' || COALESCE(s.triggers_text, '')) AS search_text
+FROM agent_skill s;
+
+CREATE VIEW v_agent_mcp_catalog AS
+SELECT
+    m.mcp_server_id,
+    m.name,
+    m.description,
+    m.endpoint,
+    m.transport,
+    m.auth_type,
+    m.headers_json,
+    m.tool_namespace,
+    m.enabled,
+    m.metadata_json,
+    m.visibility,
+    m.owner_user_id,
+    m.created_at,
+    m.updated_at
+FROM agent_mcp_server m;
+
+CREATE VIEW v_agent_memory_active AS
+SELECT
+    am.memory_id,
+    am.user_id,
+    am.scope,
+    am.scope_key,
+    am.kind,
+    am.title,
+    am.content,
+    am.source_job_id,
+    am.created_at,
+    am.updated_at,
+    am.expires_at
+FROM agent_memory am
+WHERE am.expires_at IS NULL
+   OR am.expires_at > CURRENT_TIMESTAMP;
+
+CREATE VIEW v_agent_job_overview AS
+SELECT
+    bj.job_id,
+    bj.task_type,
+    bj.status,
+    bj.agent_phase,
+    bj.cancel_requested_at,
+    bj.requested_by AS user_id,
+    bj.priority,
+    bj.trace_id,
+    bj.created_at,
+    bj.updated_at,
+    bj.started_at,
+    bj.finished_at,
+    ap.plan_id,
+    ap.plan_hash,
+    ap.summary AS plan_summary,
+    ap.chosen_skill_id,
+    aws.work_session_id,
+    aws.status AS work_session_status,
+    aws.checkpoint_version,
+    aws.last_checkpoint_at,
+    aws.tool_call_count,
+    aws.last_tool_started_at,
+    aws.last_tool_finished_at,
+    aws.last_error_message,
+    COALESCE(al.action_count, 0) AS action_count
+FROM background_job bj
+LEFT JOIN agent_plan ap ON ap.job_id = bj.job_id
+LEFT JOIN agent_work_session aws ON aws.job_id = bj.job_id
+LEFT JOIN (
+    SELECT job_id, COUNT(*) AS action_count
+    FROM agent_action_log
+    GROUP BY job_id
+) al ON al.job_id = bj.job_id;
