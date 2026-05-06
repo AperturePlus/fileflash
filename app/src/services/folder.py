@@ -11,6 +11,7 @@ from ..models.tables_storage import File, Folder
 from ..schemas.common import PaginatedData, PaginationMeta
 from ..schemas.file import (
     ContentItem,
+    DeleteFolderResponse,
     FileItem,
     FolderItem,
     FolderPathResponse,
@@ -208,6 +209,10 @@ class FolderService:
             revoked_share_count=int(moved["revoked_share_count"]),
             moved_at=moved["moved_at"],
         )
+
+    async def delete_folder(self, *, user_id: int, folder_id: str) -> DeleteFolderResponse:
+        deleter = FileService(db=self.db)
+        return await deleter.delete_folder(user_id=user_id, folder_id=folder_id)
 
     # ------------------------------------------------------------------
     # helpers

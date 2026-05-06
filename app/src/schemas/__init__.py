@@ -21,6 +21,7 @@ from .agent_skill import (
 from .common import ApiResponse, CamelModel, PageQuery, PaginatedData, PaginationMeta
 from .file import (
     AdminFileAuditItem,
+    BatchDownloadRequest,
     BatchMoveItemResult,
     BatchFilesRequest,
     BatchFilesResponse,
@@ -147,6 +148,7 @@ __all__ = [
     "ApiResponse",
     "BatchFilesRequest",
     "BatchFilesResponse",
+    "BatchDownloadRequest",
     "BatchMoveItemResult",
     "BroadcastNotificationRequest",
     "BreakdownDetail",

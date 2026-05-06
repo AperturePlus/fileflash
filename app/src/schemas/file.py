@@ -199,6 +199,11 @@ class BatchFilesRequest(CamelModel):
     share_handling: ShareHandling = "keep"
 
 
+class BatchDownloadRequest(CamelModel):
+    file_ids: list[str] = Field(default_factory=list)
+    folder_ids: list[str] = Field(default_factory=list)
+
+
 class BatchMoveItemResult(CamelModel):
     item_type: Literal["file", "folder"]
     item_id: str

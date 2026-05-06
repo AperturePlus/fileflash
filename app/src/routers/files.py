@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import os
+
+from fastapi import APIRouter, Depends, Header, Query
+from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 
 from ..core.deps import get_archive_service, get_current_user, get_file_service
 from ..core.errors import ApiError, api_success
 from ..models.tables_identity import User
 from ..schemas.archive import ArchiveExtractRequest
-from ..schemas.file import BatchFilesRequest, GetFilesQuery, MoveFileRequest
+from ..schemas.file import BatchDownloadRequest, BatchFilesRequest, GetFilesQuery, MoveFileRequest
 from ..schemas.job import to_background_job_response
 from ..services.archive import ArchiveService
 from ..services.file import FileService
@@ -61,7 +65,25 @@ async def batch_files(
     file_service: FileService = Depends(get_file_service),
 ):
     result = await file_service.batch_files(user_id=current_user.user_id, payload=payload)
-    return api_success(data=result.model_dump(by_alias=True), message="Batch move completed successfully")
+    return api_success(data=result.model_dump(by_alias=True), message="Batch operation completed successfully")
+
+
+@router.post("/batch-download")
+async def batch_download_files(
+    payload: BatchDownloadRequest,
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    archive_path, archive_name = await file_service.create_batch_download_archive(
+        user_id=current_user.user_id,
+        payload=payload,
+    )
+    return FileResponse(
+        archive_path,
+        media_type="application/zip",
+        filename=archive_name,
+        background=BackgroundTask(lambda p: os.path.exists(p) and os.remove(p), archive_path),
+    )
 
 
 @router.get("/{file_id}")
@@ -77,6 +99,39 @@ async def get_file(
 
     result = await file_service.get_file(user_id=current_user.user_id, file_id=fid)
     return api_success(data=result.model_dump(by_alias=True))
+
+
+@router.get("/{file_id}/download")
+async def download_file(
+    file_id: str,
+    range_header: str | None = Header(default=None, alias="Range"),
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    result = await file_service.get_download_stream(
+        user_id=current_user.user_id,
+        file_id=file_id,
+        range_header=range_header,
+    )
+    return StreamingResponse(
+        result.stream,
+        media_type=result.content_type,
+        headers=result.headers,
+        status_code=result.status_code,
+    )
+
+
+@router.delete("/{file_id}")
+async def delete_file(
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    result = await file_service.delete_file(user_id=current_user.user_id, file_id=file_id)
+    return api_success(
+        data=result.model_dump(by_alias=True),
+        message="File moved to recycle bin successfully",
+    )
 
 
 @router.post("/{file_id}/archive/preview")

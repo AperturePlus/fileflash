@@ -137,8 +137,9 @@ def get_archive_service(
 
 def get_file_service(
     db: AsyncSession = Depends(get_db),
+    storage: MinioObjectStorageClient = Depends(get_object_storage),
 ) -> FileService:
-    return FileService(db=db)
+    return FileService(db=db, storage=storage)
 
 
 def get_folder_service(

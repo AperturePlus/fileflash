@@ -99,3 +99,16 @@ async def move_folder(
 ):
     result = await folder_service.move_folder(user_id=current_user.user_id, folder_id=folder_id, payload=payload)
     return api_success(data=result.model_dump(by_alias=True), message="Folder moved successfully")
+
+
+@router.delete("/{folder_id}")
+async def delete_folder(
+    folder_id: str,
+    current_user: User = Depends(get_current_user),
+    folder_service: FolderService = Depends(get_folder_service),
+):
+    result = await folder_service.delete_folder(user_id=current_user.user_id, folder_id=folder_id)
+    return api_success(
+        data=result.model_dump(by_alias=True),
+        message="Folder moved to recycle bin successfully",
+    )
