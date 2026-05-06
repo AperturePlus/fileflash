@@ -11,10 +11,14 @@ export function useBatchActions(
 
   const handleBatchDownload = async () => {
     if (selectedItems.value.size === 0) return;
-    const idsToDownload = Array.from(selectedItems.value);
+    const selected = Array.from(selectedItems.value)
+      .map((id) => fileStore.items.find((item) => item.id === id))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    const fileIds = selected.filter((item) => item.itemType === 'file').map((item) => item.id);
+    const folderIds = selected.filter((item) => item.itemType === 'folder').map((item) => item.id);
 
     try {
-      const blob = await batchDownloadFiles(idsToDownload);
+      const blob = await batchDownloadFiles({ fileIds, folderIds });
       if (!(blob instanceof Blob)) {
         throw new Error('Response is not a valid Blob');
       }
@@ -31,7 +35,7 @@ export function useBatchActions(
       a.remove();
       window.URL.revokeObjectURL(url);
       clearSelection();
-      ui.toast({ type: 'success', message: `Downloaded ${idsToDownload.length} item(s).` });
+      ui.toast({ type: 'success', message: `Downloaded ${selected.length} item(s).` });
     } catch (error) {
       console.error('Batch download failed:', error);
       ui.toast({
@@ -54,8 +58,13 @@ export function useBatchActions(
     if (!confirmed) return;
 
     const idsToDelete = Array.from(selectedItems.value);
+    const selected = idsToDelete
+      .map((id) => fileStore.items.find((item) => item.id === id))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    const fileIds = selected.filter((item) => item.itemType === 'file').map((item) => item.id);
+    const folderIds = selected.filter((item) => item.itemType === 'folder').map((item) => item.id);
     try {
-      const result = await batchFiles({ action: 'delete', fileIds: idsToDelete, folderIds: [] });
+      const result = await batchFiles({ action: 'delete', fileIds, folderIds });
       if (!result) throw new Error('Delete failed');
       clearSelection();
       await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root');

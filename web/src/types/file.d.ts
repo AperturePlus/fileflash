@@ -432,6 +432,11 @@ export interface BatchFilesRequest {
   shareHandling?: 'keep' | 'revoke';
 }
 
+export interface BatchDownloadRequest {
+  fileIds: string[];
+  folderIds?: string[];
+}
+
 export interface BatchMoveItemResult {
   itemType: 'file' | 'folder';
   itemId: string;

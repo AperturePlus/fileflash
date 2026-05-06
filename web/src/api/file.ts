@@ -13,6 +13,7 @@ import type {
   CopyFileRequest,
   BatchFilesRequest,
   BatchFilesResponse,
+  BatchDownloadRequest,
   UploadPreflightRequest,
   UploadPreflightResponse,
   BatchUploadPreflightRequest,
@@ -202,8 +203,8 @@ export const deleteFile = (fileId: string) => {
  * @param fileIds 要下载的文件ID列表
  * @returns zip文件流
  */
-export const batchDownloadFiles = (fileIds: string[]) => {
-  return http.post<Blob>('/files/batch-download', { fileIds }, { responseType: 'blob' });
+export const batchDownloadFiles = (data: BatchDownloadRequest) => {
+  return http.post<Blob>('/files/batch-download', data, { responseType: 'blob' });
 };
 
 /**

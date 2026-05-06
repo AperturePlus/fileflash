@@ -164,6 +164,16 @@ function collectFolderSubtreeIds(rootFolderId: string): { folderIds: string[]; f
   return { folderIds, fileIds };
 }
 
+function buildFolderRelativeZipPath(rootFolderId: string, fileId: string, fallbackName: string): string {
+  const path = vfsApi.getPath(fileId);
+  const rootIndex = path.findIndex((item) => item.id === rootFolderId);
+  if (rootIndex < 0) {
+    return fallbackName;
+  }
+  const folderSegments = path.slice(rootIndex, -1).map((item) => item.name);
+  return [...folderSegments, fallbackName].join('/');
+}
+
 function revokeActiveShares(fileIds: string[], folderIds: string[]): number {
   const fileSet = new Set(fileIds);
   const folderSet = new Set(folderIds);
@@ -792,16 +802,36 @@ export const setupFileMocks = () => {
   });
 
   Mock.mock(/\/api\/v1\/files\/batch-download$/, 'post', async (options) => {
-    const { fileIds = [] } = JSON.parse(options.body || '{}');
+    const { fileIds = [], folderIds = [] } = JSON.parse(options.body || '{}');
     const zip = new JSZip();
+    const zipPaths = new Map<string, string>();
 
     fileIds.forEach((fileId: string) => {
       const node = vfsApi.get(fileId);
       if (!node || node.type !== 'file' || node.isTrashed) return;
-      zip.file(node.name, `Mock content for ${node.name}`);
+      zipPaths.set(fileId, node.name);
+    });
+    folderIds.forEach((folderId: string) => {
+      const folder = vfsApi.get(folderId);
+      if (!folder || folder.type !== 'folder' || folder.isTrashed) return;
+      const subtree = collectFolderSubtreeIds(folderId);
+      subtree.fileIds.forEach((id) => {
+        const node = vfsApi.get(id);
+        if (!node || node.type !== 'file' || node.isTrashed) return;
+        const relativePath = buildFolderRelativeZipPath(folderId, id, node.name);
+        if (!zipPaths.has(id)) {
+          zipPaths.set(id, relativePath);
+        }
+      });
     });
 
-    addLog('file_batch_download', { count: fileIds.length });
+    Array.from(zipPaths.entries()).forEach(([fileId, zipPath]) => {
+      const node = vfsApi.get(fileId);
+      if (!node || node.type !== 'file' || node.isTrashed) return;
+      zip.file(zipPath, `Mock content for ${node.name}`);
+    });
+
+    addLog('file_batch_download', { count: zipPaths.size });
     return zip.generateAsync({ type: 'blob' });
   });
 

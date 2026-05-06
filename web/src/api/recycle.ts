@@ -28,7 +28,7 @@ export const restoreItem = (itemId: string, data: RestoreRecycleItemRequest) => 
  * @returns 删除后的项目信息
  */
 export const permanentDelete = (itemId: string, _itemType: string) => {
-  return http.delete<{ }>(`/recycle-bin/${itemId}`);
+  return http.delete<{ }>(`/recycle-bin/${itemId}?itemType=${encodeURIComponent(_itemType)}`);
 };
 
 /**
