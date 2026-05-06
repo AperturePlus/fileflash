@@ -21,6 +21,7 @@ import {
   NTag,
   NTimeline,
   NTimelineItem,
+  NPopover,
   useMessage,
 } from 'naive-ui';
 import { cancelAgentJob, executeAgentPlan, getAgentJob, planAgentTask } from '../../../api/agent';
@@ -55,6 +56,7 @@ const agentError = ref('');
 
 const isPlanning = ref(false);
 const isExecuting = ref(false);
+const isPromptFocused = ref(false);
 
 let planPollTimer: ReturnType<typeof setInterval> | null = null;
 let executePollTimer: ReturnType<typeof setInterval> | null = null;
@@ -260,61 +262,76 @@ onBeforeUnmount(() => {
 
 <template>
   <NGrid :x-gap="16" :y-gap="16" :cols="24" responsive="screen">
-    <NGridItem :span="24" :md="9" :lg="8">
-      <NCard class="control-card" :title="t('agent.workspace.controls')">
-        <NForm label-placement="top" :show-feedback="false">
-          <NFormItem :label="t('agent.fields.task')">
-            <NInput
-              v-model:value="taskInput"
-              type="textarea"
-              :autosize="{ minRows: 4, maxRows: 8 }"
-              :placeholder="t('agent.fields.taskPlaceholder')"
-            />
-          </NFormItem>
+    <NGridItem :span="24" :md="10" :lg="10">
+      <div class="rich-prompt-box" :class="{ 'is-focused': isPromptFocused }">
+        <NInput
+          v-model:value="taskInput"
+          type="textarea"
+          class="borderless-input"
+          :autosize="{ minRows: 4, maxRows: 12 }"
+          :placeholder="t('agent.fields.taskPlaceholder')"
+          @focus="isPromptFocused = true"
+          @blur="isPromptFocused = false"
+        />
 
-          <NFormItem :label="t('agent.fields.executionPolicy')">
-            <NRadioGroup v-model:value="executionPolicy">
-              <NRadioButton value="planOnly">Plan Only</NRadioButton>
-              <NRadioButton value="confirm">Confirm</NRadioButton>
-              <NRadioButton value="autopilot">Autopilot</NRadioButton>
-            </NRadioGroup>
-          </NFormItem>
-
-          <NDivider />
-
-          <NFormItem :label="t('agent.fields.allowFileContent')">
-            <NSwitch v-model:value="allowFileContent" />
-          </NFormItem>
-
-          <NFormItem :label="t('agent.fields.maxReadBytes')">
-            <NInputNumber v-model:value="maxReadBytes" :min="1024" :step="1024" />
-          </NFormItem>
-
-          <NFormItem :label="t('agent.fields.allowedMimeTypes')">
-            <NInput v-model:value="allowedMimeTypesInput" placeholder="image/*,application/pdf" />
-          </NFormItem>
-
-          <NDivider />
-
-          <NFormItem :label="t('agent.fields.maxSteps')">
-            <NInputNumber v-model:value="maxSteps" :min="1" :max="100" />
-          </NFormItem>
-
-          <NFormItem :label="t('agent.fields.budgetTokens')">
-            <NInputNumber v-model:value="budgetTokens" :min="1000" :max="100000" :step="1000" />
-          </NFormItem>
-        </NForm>
-
-        <NSpace>
-          <NButton type="primary" :loading="isPlanning" @click="submitPlan">
-            {{ t('agent.actions.plan') }}
-          </NButton>
-          <NButton quaternary @click="resetResultState">{{ t('agent.actions.reset') }}</NButton>
-        </NSpace>
-      </NCard>
+        <div class="prompt-bottom-bar">
+          <div class="bar-left">
+            <NPopover trigger="click" placement="bottom-start" :style="{ width: '320px' }">
+              <template #trigger>
+                <NButton size="small" quaternary class="settings-btn">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5a3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97c0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11.5c-.04.34-.07.67-.07 1c0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66Z"/></svg>
+                  </template>
+                  {{ executionPolicy }}
+                </NButton>
+              </template>
+              
+              <div class="popover-settings">
+                <div class="popover-header">{{ t('agent.workspace.advancedSettings') }}</div>
+                <NForm label-placement="left" :label-width="140" :show-feedback="false" size="small">
+                  <NFormItem :label="t('agent.fields.executionPolicy')">
+                    <NRadioGroup v-model:value="executionPolicy">
+                      <NSpace vertical>
+                        <NRadioButton value="planOnly">Plan Only</NRadioButton>
+                        <NRadioButton value="confirm">Confirm</NRadioButton>
+                        <NRadioButton value="autopilot">Autopilot</NRadioButton>
+                      </NSpace>
+                    </NRadioGroup>
+                  </NFormItem>
+                  <NFormItem :label="t('agent.fields.allowFileContent')">
+                    <NSwitch v-model:value="allowFileContent" />
+                  </NFormItem>
+                  <NFormItem :label="t('agent.fields.maxReadBytes')">
+                    <NInputNumber v-model:value="maxReadBytes" :min="1024" :step="1024" />
+                  </NFormItem>
+                  <NFormItem :label="t('agent.fields.allowedMimeTypes')">
+                    <NInput v-model:value="allowedMimeTypesInput" placeholder="image/*,application/pdf" />
+                  </NFormItem>
+                  <NFormItem :label="t('agent.fields.maxSteps')">
+                    <NInputNumber v-model:value="maxSteps" :min="1" :max="100" />
+                  </NFormItem>
+                  <NFormItem :label="t('agent.fields.budgetTokens')">
+                    <NInputNumber v-model:value="budgetTokens" :min="1000" :max="100000" :step="1000" />
+                  </NFormItem>
+                </NForm>
+              </div>
+            </NPopover>
+          </div>
+          <div class="bar-right">
+            <NButton v-if="planResult || isExecuting" size="small" quaternary @click="resetResultState">
+              {{ t('agent.actions.reset') }}
+            </NButton>
+            <NButton circle type="primary" size="small" :loading="isPlanning" @click="submitPlan" class="submit-btn">
+              <template #icon>
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 20V4l19 8l-19 8zm2-3l11.85-5L5 7v3.5l6 1.5l-6 1.5V17z"/></svg>
+              </template>
+            </NButton>
+          </div>
+        </div>
+      </div>
     </NGridItem>
 
-    <NGridItem :span="24" :md="15" :lg="16">
+    <NGridItem :span="24" :md="14" :lg="14">
       <NSpace vertical :size="16">
         <NGrid :cols="3" :x-gap="12">
           <NGridItem>
@@ -434,8 +451,72 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.control-card {
-  height: 100%;
+.rich-prompt-box {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.rich-prompt-box.is-focused {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.15);
+}
+
+.borderless-input {
+  --n-border: none !important;
+  --n-border-hover: none !important;
+  --n-border-focus: none !important;
+  --n-box-shadow-focus: none !important;
+  background-color: transparent;
+  padding: 12px 16px;
+  font-size: 15px;
+}
+
+.borderless-input :deep(.n-input__textarea-el) {
+  background-color: transparent;
+}
+
+.prompt-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: var(--color-bg-primary);
+  border-top: 1px solid transparent; /* visually grouping with the prompt */
+}
+
+.bar-left, .bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-btn {
+  text-transform: capitalize;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.submit-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.popover-settings {
+  padding: 8px;
+}
+
+.popover-header {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 8px;
 }
 
 .plan-card :deep(.n-timeline) {

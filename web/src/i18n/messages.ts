@@ -30,6 +30,7 @@ export type LocaleKey =
   | 'agent.nav.workspace'
   | 'agent.nav.skills'
   | 'agent.workspace.controls'
+  | 'agent.workspace.advancedSettings'
   | 'agent.workspace.planPreview'
   | 'agent.workspace.executionResult'
   | 'agent.workspace.emptyPlan'
@@ -163,6 +164,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.nav.workspace': '工作台',
     'agent.nav.skills': 'Skills',
     'agent.workspace.controls': '任务与策略',
+    'agent.workspace.advancedSettings': '高级设置',
     'agent.workspace.planPreview': '规划预览',
     'agent.workspace.executionResult': '执行结果',
     'agent.workspace.emptyPlan': '输入任务后点击“生成计划”，在这里查看规划结果。',
@@ -291,6 +293,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.nav.workspace': 'Workspace',
     'agent.nav.skills': 'Skills',
     'agent.workspace.controls': 'Task & Policy',
+    'agent.workspace.advancedSettings': 'Advanced Settings',
     'agent.workspace.planPreview': 'Plan Preview',
     'agent.workspace.executionResult': 'Execution Result',
     'agent.workspace.emptyPlan': 'Describe a task and click Plan to generate the action plan.',
