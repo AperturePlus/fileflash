@@ -22,3 +22,13 @@ def test_agent_related_settings_defaults():
     assert settings.agent_tool_timeout_sec == 30
     assert settings.agent_mcp_endpoints == ()
 
+
+def test_app_env_detection():
+    dev = Settings(FF_DB_URI="postgresql://root:pwd@localhost:5432/fileflash", APP_ENV="development")
+    assert dev.is_development_env is True
+    assert dev.is_production_env is False
+
+    prod = Settings(FF_DB_URI="postgresql://root:pwd@localhost:5432/fileflash", APP_ENV="prod")
+    assert prod.is_development_env is False
+    assert prod.is_production_env is True
+

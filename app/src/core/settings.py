@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     app_name: str = "FileFlash API"
     api_v1_prefix: str = "/api/v1"
+    app_env: str = Field(default="production", alias="APP_ENV")
 
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     ff_db_uri: str | None = Field(default=None, alias="FF_DB_URI")
@@ -170,6 +171,18 @@ class Settings(BaseSettings):
     @property
     def upload_session_ttl_seconds(self) -> int:
         return max(1, self.upload_session_ttl_hours) * 3600
+
+    @property
+    def normalized_app_env(self) -> str:
+        return self.app_env.strip().lower()
+
+    @property
+    def is_development_env(self) -> bool:
+        return self.normalized_app_env in {"dev", "development", "local"}
+
+    @property
+    def is_production_env(self) -> bool:
+        return self.normalized_app_env in {"prod", "production"}
 
     @property
     def agent_mcp_endpoints(self) -> tuple[str, ...]:
