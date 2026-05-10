@@ -6,7 +6,6 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
-    DateTime,
     ForeignKey,
     Identity,
     Index,
@@ -28,6 +27,7 @@ from .enums import (
     AgentSkillVisibility,
 )
 from .pg import pg_enum
+from .types import UTCDateTime as DateTime
 
 
 class AgentUserSetting(Base):

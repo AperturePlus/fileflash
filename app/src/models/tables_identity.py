@@ -6,7 +6,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CHAR,
-    DateTime,
     ForeignKey,
     Identity,
     Index,
@@ -20,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 from .enums import UiLanguage, UserRole, UserStatus
 from .pg import pg_enum
+from .types import UTCDateTime as DateTime
 
 
 class User(Base):

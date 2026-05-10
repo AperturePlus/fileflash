@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
-    DateTime,
     ForeignKey,
     Identity,
     Index,
@@ -22,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 from .enums import ScanResult
 from .pg import pg_enum
+from .types import UTCDateTime as DateTime
 
 
 class Log(Base):
