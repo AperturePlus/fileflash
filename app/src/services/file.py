@@ -13,6 +13,13 @@ from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
+from ..db.transaction import (
+    apply_local_lock_timeout,
+    is_retryable_database_error,
+    is_unique_violation_error,
+    run_with_transaction_retry,
+    to_retryable_concurrency_error,
+)
 from ..models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType, ShareStatus, UploadStatus
 from ..models.tables_access_share import FavoriteItem, Share
 from ..models.tables_identity import User
@@ -32,6 +39,7 @@ from ..schemas.file import (
     GetFilesQuery,
     MoveFileRequest,
     MoveFileResponse,
+    RenameFileRequest,
 )
 from ..schemas.recycle import (
     ClearRecycleBinResponse,
@@ -135,6 +143,77 @@ class FileService:
             is_starred=is_starred,
             status=True,
         )
+
+    async def rename_file(
+        self,
+        *,
+        user_id: int,
+        file_id: str,
+        payload: RenameFileRequest,
+    ) -> FileDetails:
+        async def _operation() -> int:
+            await apply_local_lock_timeout(self.db)
+            file_row = await self._get_active_file(user_id=user_id, file_id=file_id, for_update=True)
+
+            requested_name = payload.file_name.strip()
+            if not requested_name:
+                raise ApiError(status_code=400, code=400, message="fileName cannot be empty")
+
+            file_row.file_name = await self._next_available_file_name(
+                user_id=user_id,
+                folder_id=int(file_row.folder_id),
+                original_name=requested_name,
+                exclude_file_id=int(file_row.file_id),
+            )
+            file_row.updated_at = datetime.now(UTC)
+            await self.db.commit()
+            return int(file_row.file_id)
+
+        try:
+            renamed_file_id = await run_with_transaction_retry(
+                self.db,
+                _operation,
+                retry_on_unique_violation=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if is_retryable_database_error(exc) or is_unique_violation_error(exc):
+                raise to_retryable_concurrency_error(exc) from exc
+            raise
+
+        return await self.get_file(user_id=user_id, file_id=renamed_file_id)
+
+    async def toggle_file_star(
+        self,
+        *,
+        user_id: int,
+        file_id: str,
+        is_starred: bool,
+    ) -> FileDetails:
+        file_row = await self._get_active_file(user_id=user_id, file_id=file_id, for_update=True)
+        favorite = await self.db.scalar(
+            select(FavoriteItem).where(
+                and_(
+                    FavoriteItem.user_id == user_id,
+                    FavoriteItem.item_type == FavoriteItemType.FILE,
+                    FavoriteItem.file_id == int(file_row.file_id),
+                )
+            )
+        )
+
+        if is_starred and favorite is None:
+            self.db.add(
+                FavoriteItem(
+                    user_id=user_id,
+                    item_type=FavoriteItemType.FILE,
+                    file_id=int(file_row.file_id),
+                    folder_id=None,
+                )
+            )
+        elif not is_starred and favorite is not None:
+            await self.db.delete(favorite)
+
+        await self.db.commit()
+        return await self.get_file(user_id=user_id, file_id=int(file_row.file_id))
 
     async def get_download_stream(
         self,
@@ -383,49 +462,62 @@ class FileService:
         item_id: str,
         payload: RestoreRecycleItemRequest,
     ) -> RestoreRecycleItemResponse:
-        if payload.item_type == "file":
-            file_row = await self._get_deleted_file(user_id=user_id, file_id=item_id)
-            target_folder_id = await self._resolve_restore_target_folder_id(
+        async def _operation() -> RestoreRecycleItemResponse:
+            await apply_local_lock_timeout(self.db)
+            if payload.item_type == "file":
+                file_row = await self._get_deleted_file(user_id=user_id, file_id=item_id, for_update=True)
+                target_folder_id = await self._resolve_restore_target_folder_id(
+                    user_id=user_id,
+                    original_folder_id=int(file_row.folder_id),
+                    requested_target_folder_id=payload.target_folder_id,
+                )
+                final_name = await self._next_available_file_name(
+                    user_id=user_id,
+                    folder_id=target_folder_id,
+                    original_name=file_row.file_name,
+                    exclude_file_id=int(file_row.file_id),
+                )
+                now = datetime.now(UTC)
+                file_row.status = FileStatus.ACTIVE
+                file_row.folder_id = target_folder_id
+                file_row.file_name = final_name
+                file_row.deleted_at = None
+                file_row.deleted_by = None
+                file_row.restored_at = now
+                file_row.updated_at = now
+                await self.db.commit()
+                return RestoreRecycleItemResponse(
+                    item_type="file",
+                    id=str(file_row.file_id),
+                    name=file_row.file_name,
+                    restored_to=str(target_folder_id),
+                    restored_at=now,
+                )
+
+            restored_name, restored_at, restored_to = await self._restore_deleted_folder(
                 user_id=user_id,
-                original_folder_id=int(file_row.folder_id),
+                folder_id=item_id,
                 requested_target_folder_id=payload.target_folder_id,
             )
-            final_name = await self._next_available_file_name(
-                user_id=user_id,
-                folder_id=target_folder_id,
-                original_name=file_row.file_name,
-                exclude_file_id=int(file_row.file_id),
-            )
-            now = datetime.now(UTC)
-            file_row.status = FileStatus.ACTIVE
-            file_row.folder_id = target_folder_id
-            file_row.file_name = final_name
-            file_row.deleted_at = None
-            file_row.deleted_by = None
-            file_row.restored_at = now
-            file_row.updated_at = now
             await self.db.commit()
             return RestoreRecycleItemResponse(
-                item_type="file",
-                id=str(file_row.file_id),
-                name=file_row.file_name,
-                restored_to=str(target_folder_id),
-                restored_at=now,
+                item_type="folder",
+                id=item_id,
+                name=restored_name,
+                restored_to=restored_to,
+                restored_at=restored_at,
             )
 
-        restored_name, restored_at, restored_to = await self._restore_deleted_folder(
-            user_id=user_id,
-            folder_id=item_id,
-            requested_target_folder_id=payload.target_folder_id,
-        )
-        await self.db.commit()
-        return RestoreRecycleItemResponse(
-            item_type="folder",
-            id=item_id,
-            name=restored_name,
-            restored_to=restored_to,
-            restored_at=restored_at,
-        )
+        try:
+            return await run_with_transaction_retry(
+                self.db,
+                _operation,
+                retry_on_unique_violation=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if is_retryable_database_error(exc) or is_unique_violation_error(exc):
+                raise to_retryable_concurrency_error(exc) from exc
+            raise
 
     async def permanent_delete_recycle_item(
         self,
@@ -578,14 +670,27 @@ class FileService:
         return self._paginate(items, len(items), 1, max(len(items), 1))
 
     async def move_file(self, *, user_id: int, file_id: str, payload: MoveFileRequest) -> MoveFileResponse:
-        moved = await self._move_file_record(
-            user_id=user_id,
-            file_id=file_id,
-            target_folder_id=payload.target_folder_id,
-            share_handling=payload.share_handling,
-        )
-        await self.db.commit()
-        return moved
+        async def _operation() -> MoveFileResponse:
+            await apply_local_lock_timeout(self.db)
+            moved = await self._move_file_record(
+                user_id=user_id,
+                file_id=file_id,
+                target_folder_id=payload.target_folder_id,
+                share_handling=payload.share_handling,
+            )
+            await self.db.commit()
+            return moved
+
+        try:
+            return await run_with_transaction_retry(
+                self.db,
+                _operation,
+                retry_on_unique_violation=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if is_retryable_database_error(exc) or is_unique_violation_error(exc):
+                raise to_retryable_concurrency_error(exc) from exc
+            raise
 
     async def batch_files(self, *, user_id: int, payload: BatchFilesRequest) -> BatchFilesResponse:
         file_ids = list(dict.fromkeys(payload.file_ids))
@@ -713,7 +818,7 @@ class FileService:
         target_folder_id: str,
         share_handling: str,
     ) -> MoveFileResponse:
-        file_row = await self._get_active_file(user_id=user_id, file_id=file_id)
+        file_row = await self._get_active_file(user_id=user_id, file_id=file_id, for_update=True)
         target_folder_num = await self._resolve_folder_id(user_id, target_folder_id)
         moved_at = datetime.now(UTC)
 
@@ -752,7 +857,7 @@ class FileService:
         target_parent_id: str,
         share_handling: str,
     ) -> dict[str, str | int | datetime]:
-        folder_row = await self._get_active_folder(user_id=user_id, folder_id=folder_id)
+        folder_row = await self._get_active_folder(user_id=user_id, folder_id=folder_id, for_update=True)
         if folder_row.folder_type == FolderType.ROOT:
             raise ApiError(status_code=400, code=400, message="Root folder cannot be moved")
 
@@ -792,63 +897,67 @@ class FileService:
             "moved_at": moved_at,
         }
 
-    async def _get_active_file(self, *, user_id: int, file_id: str) -> File:
+    async def _get_active_file(self, *, user_id: int, file_id: str, for_update: bool = False) -> File:
         fid = self._parse_id(file_id, "fileId")
-        file_row = await self.db.scalar(
-            select(File).where(
-                and_(
-                    File.file_id == fid,
-                    File.owner_id == user_id,
-                    File.status == FileStatus.ACTIVE,
-                    File.is_latest.is_(True),
-                )
+        statement = select(File).where(
+            and_(
+                File.file_id == fid,
+                File.owner_id == user_id,
+                File.status == FileStatus.ACTIVE,
+                File.is_latest.is_(True),
             )
         )
+        if for_update:
+            statement = statement.with_for_update()
+        file_row = await self.db.scalar(statement)
         if file_row is None:
             raise ApiError(status_code=404, code=404, message="File not found")
         return file_row
 
-    async def _get_active_folder(self, *, user_id: int, folder_id: str) -> Folder:
+    async def _get_active_folder(self, *, user_id: int, folder_id: str, for_update: bool = False) -> Folder:
         fid = self._parse_id(folder_id, "folderId")
-        folder_row = await self.db.scalar(
-            select(Folder).where(
-                and_(
-                    Folder.folder_id == fid,
-                    Folder.owner_id == user_id,
-                    Folder.status == FolderStatus.ACTIVE,
-                )
+        statement = select(Folder).where(
+            and_(
+                Folder.folder_id == fid,
+                Folder.owner_id == user_id,
+                Folder.status == FolderStatus.ACTIVE,
             )
         )
+        if for_update:
+            statement = statement.with_for_update()
+        folder_row = await self.db.scalar(statement)
         if folder_row is None:
             raise ApiError(status_code=404, code=404, message="Folder not found")
         return folder_row
 
-    async def _get_deleted_file(self, *, user_id: int, file_id: str) -> File:
+    async def _get_deleted_file(self, *, user_id: int, file_id: str, for_update: bool = False) -> File:
         fid = self._parse_id(file_id, "fileId")
-        file_row = await self.db.scalar(
-            select(File).where(
-                and_(
-                    File.file_id == fid,
-                    File.owner_id == user_id,
-                    File.status == FileStatus.DELETED,
-                )
+        statement = select(File).where(
+            and_(
+                File.file_id == fid,
+                File.owner_id == user_id,
+                File.status == FileStatus.DELETED,
             )
         )
+        if for_update:
+            statement = statement.with_for_update()
+        file_row = await self.db.scalar(statement)
         if file_row is None:
             raise ApiError(status_code=404, code=404, message="File not found in recycle bin")
         return file_row
 
-    async def _get_deleted_folder(self, *, user_id: int, folder_id: str) -> Folder:
+    async def _get_deleted_folder(self, *, user_id: int, folder_id: str, for_update: bool = False) -> Folder:
         fid = self._parse_id(folder_id, "folderId")
-        folder_row = await self.db.scalar(
-            select(Folder).where(
-                and_(
-                    Folder.folder_id == fid,
-                    Folder.owner_id == user_id,
-                    Folder.status == FolderStatus.DELETED,
-                )
+        statement = select(Folder).where(
+            and_(
+                Folder.folder_id == fid,
+                Folder.owner_id == user_id,
+                Folder.status == FolderStatus.DELETED,
             )
         )
+        if for_update:
+            statement = statement.with_for_update()
+        folder_row = await self.db.scalar(statement)
         if folder_row is None:
             raise ApiError(status_code=404, code=404, message="Folder not found in recycle bin")
         return folder_row
@@ -1139,7 +1248,7 @@ class FileService:
         folder_id: str,
         requested_target_folder_id: str | None,
     ) -> tuple[str, datetime, str]:
-        folder_row = await self._get_deleted_folder(user_id=user_id, folder_id=folder_id)
+        folder_row = await self._get_deleted_folder(user_id=user_id, folder_id=folder_id, for_update=True)
         subtree_ids = await self._collect_folder_subtree_all_status(
             user_id=user_id,
             root_folder_id=int(folder_row.folder_id),
