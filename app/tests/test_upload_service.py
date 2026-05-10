@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,7 +11,7 @@ from src.core.errors import ApiError
 from src.core.settings import Settings
 from src.models.enums import UploadPartStatus, UploadTaskStatus
 from src.models.tables_storage import File, UploadTask, UploadTaskPart
-from src.s3.minio_client import ObjectStat, ObjectWriteResult
+from src.s3.minio_client import ObjectStat, ObjectStorageAuthError, ObjectWriteResult
 from src.schemas.file import MergeChunksRequest, UploadPreflightRequest
 from src.services.upload import UploadService
 
@@ -28,11 +29,16 @@ class DummySession:
         self.commits += 1
 
     async def flush(self) -> None:
+        now = datetime.now(UTC)
         for index, obj in enumerate(self.added, start=1):
             if isinstance(obj, UploadTask) and obj.task_id is None:
                 obj.task_id = index
             if isinstance(obj, File) and obj.file_id is None:
                 obj.file_id = index
+            if isinstance(obj, File) and obj.created_at is None:
+                obj.created_at = now
+            if isinstance(obj, File) and obj.updated_at is None:
+                obj.updated_at = now
 
     async def scalar(self, _query: object) -> object | None:
         return None
@@ -128,6 +134,32 @@ async def test_preflight_creates_upload_session_when_no_hit(monkeypatch: pytest.
     assert len(session.added) == 1
     assert isinstance(session.added[0], UploadTask)
     assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_preflight_returns_503_when_storage_is_unavailable(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    storage.ensure_bucket = AsyncMock(side_effect=ObjectStorageAuthError("bad credentials"))
+    cleanup_mock = AsyncMock()
+    monkeypatch.setattr(service, "_cleanup_expired_tasks", cleanup_mock)
+
+    with pytest.raises(ApiError) as exc:
+        await service.preflight(
+            user_id=3,
+            payload=UploadPreflightRequest(
+                fileHash="c" * 64,
+                fileName="broken.txt",
+                fileSize=16,
+                mimeType="text/plain",
+                parentId="root",
+            ),
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.code == 503
+    assert exc.value.message == "Object storage unavailable"
+    cleanup_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -259,3 +291,199 @@ async def test_merge_marks_failed_on_hash_mismatch(monkeypatch: pytest.MonkeyPat
     assert task.status == UploadTaskStatus.FAILED
     assert session.commits == 1
     storage.remove_object.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_merge_is_idempotent_for_completed_session(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    completed_task = UploadTask(
+        task_id=30,
+        user_id=8,
+        folder_id=12,
+        file_name="final.bin",
+        mime_type="application/octet-stream",
+        bucket_name="fileflash",
+        object_key="objects/u8/final",
+        object_hash=("c" * 32) + (" " * 32),
+        total_size=1024,
+        chunk_size=512,
+        upload_id="upload-complete",
+        status=UploadTaskStatus.COMPLETED,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    file_row = File(
+        file_id=701,
+        uploader_id=8,
+        owner_id=8,
+        folder_id=12,
+        file_name="final.bin",
+        storage_object_id=91,
+        file_size=1024,
+        mime_type="application/octet-stream",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=completed_task))
+    monkeypatch.setattr(service, "_find_completed_file_for_task", AsyncMock(return_value=file_row))
+
+    response = await service.merge_chunks(
+        user_id=8,
+        upload_id="upload-complete",
+        payload=MergeChunksRequest(
+            fileHash="c" * 64,
+            fileName="final.bin",
+            mimeType="application/octet-stream",
+            parentId="12",
+        ),
+    )
+
+    assert response.file_id == "701"
+    assert response.file_name == "final.bin"
+    assert response.object_hash == "c" * 32
+    storage.compose_object.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_merge_allows_padded_task_hash(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    task = UploadTask(
+        task_id=40,
+        user_id=3,
+        folder_id=1,
+        file_name="report.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u3/report",
+        object_hash=("a" * 32) + (" " * 32),
+        total_size=4,
+        chunk_size=2,
+        upload_id="upload-pad-hash",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    parts = [
+        UploadTaskPart(task_id=40, part_number=0, part_size=2, status=UploadPartStatus.UPLOADED),
+        UploadTaskPart(task_id=40, part_number=1, part_size=2, status=UploadPartStatus.UPLOADED),
+    ]
+    session.scalars_queue = [parts]
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=1))
+    monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        service,
+        "_find_storage_object",
+        AsyncMock(return_value=SimpleNamespace(object_id=10, object_key=task.object_key)),
+    )
+    storage.compute_object_hash = AsyncMock(return_value="a" * 32)
+
+    response = await service.merge_chunks(
+        user_id=3,
+        upload_id="upload-pad-hash",
+        payload=MergeChunksRequest(
+            fileHash="a" * 32,
+            fileName="report.txt",
+            mimeType="text/plain",
+            parentId="1",
+        ),
+    )
+
+    assert response.file_name == "report.txt"
+    assert response.object_hash == "a" * 32
+
+
+@pytest.mark.asyncio
+async def test_merge_logs_warning_for_incomplete_chunks(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture):
+    session = DummySession()
+    service, _storage = make_service(session)
+    task = UploadTask(
+        task_id=41,
+        user_id=3,
+        folder_id=1,
+        file_name="partial.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u3/partial",
+        object_hash="d" * 32,
+        total_size=4,
+        chunk_size=2,
+        upload_id="upload-incomplete",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    parts = [UploadTaskPart(task_id=41, part_number=0, part_size=2, status=UploadPartStatus.UPLOADED)]
+    session.scalars_queue = [parts]
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=1))
+    monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
+    caplog.set_level(logging.WARNING, logger="src.services.upload")
+
+    with pytest.raises(ApiError) as exc:
+        await service.merge_chunks(
+            user_id=3,
+            upload_id="upload-incomplete",
+            payload=MergeChunksRequest(
+                fileHash="d" * 32,
+                fileName="partial.txt",
+                mimeType="text/plain",
+                parentId="1",
+            ),
+        )
+
+    assert exc.value.status_code == 400
+    assert "upload-incomplete" in caplog.text
+    assert "incomplete chunks" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_merge_logs_warning_for_non_continuous_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    session = DummySession()
+    service, _storage = make_service(session)
+    task = UploadTask(
+        task_id=42,
+        user_id=4,
+        folder_id=1,
+        file_name="sparse.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u4/sparse",
+        object_hash="e" * 32,
+        total_size=4,
+        chunk_size=2,
+        upload_id="upload-non-contiguous",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    parts = [
+        UploadTaskPart(task_id=42, part_number=0, part_size=2, status=UploadPartStatus.UPLOADED),
+        UploadTaskPart(task_id=42, part_number=2, part_size=2, status=UploadPartStatus.UPLOADED),
+    ]
+    session.scalars_queue = [parts]
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=1))
+    monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
+    caplog.set_level(logging.WARNING, logger="src.services.upload")
+
+    with pytest.raises(ApiError) as exc:
+        await service.merge_chunks(
+            user_id=4,
+            upload_id="upload-non-contiguous",
+            payload=MergeChunksRequest(
+                fileHash="e" * 32,
+                fileName="sparse.txt",
+                mimeType="text/plain",
+                parentId="1",
+            ),
+        )
+
+    assert exc.value.status_code == 400
+    assert "upload-non-contiguous" in caplog.text
+    assert "non-continuous chunks" in caplog.text
