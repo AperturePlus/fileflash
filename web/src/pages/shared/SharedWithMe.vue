@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { acceptSharedItem, deleteShare, getSharedItems, getShares } from '../../api/share';
 import { useFileSelection } from '../../composables/useFileSelection';
 import type { Share, SharedItem } from '../../types/share';
+import { ui } from '../../utils/ui';
 
 const activeTab = ref<'received' | 'links'>('received');
 const isLoading = ref(false);
@@ -65,22 +66,35 @@ const handleBatchAccept = async () => {
 };
 
 const handleDeleteShare = async (share: Share) => {
-  const confirmed = window.confirm(`Delete share link ${share.shareLink}?`);
+  const confirmed = await ui.confirm({
+    title: 'Delete Share Link',
+    message: `Delete share link ${share.shareLink}?`,
+    confirmText: 'Delete',
+    danger: true,
+  });
   if (!confirmed) return;
 
   try {
     await deleteShare(share.shareLink);
     myShares.value = myShares.value.filter((entry) => entry.shareLink !== share.shareLink);
+    ui.toast({ type: 'success', message: 'Share link deleted.' });
   } catch (error) {
     console.error('Failed to delete share link', error);
+    ui.toast({ type: 'error', message: 'Failed to delete share link.' });
   }
 };
 
 const copyShareLink = async (share: Share) => {
+  const link = `${window.location.origin}/share/${share.shareLink}`;
   try {
-    await navigator.clipboard.writeText(`${window.location.origin}/share/${share.shareLink}`);
+    await navigator.clipboard.writeText(link);
+    ui.toast({ type: 'success', message: 'Share link copied.' });
   } catch {
-    window.prompt('Copy this link', `${window.location.origin}/share/${share.shareLink}`);
+    await ui.copyText({
+      title: 'Copy Share Link',
+      message: 'Clipboard is unavailable. Copy this link manually:',
+      text: link,
+    });
   }
 };
 

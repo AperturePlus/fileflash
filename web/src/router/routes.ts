@@ -67,6 +67,31 @@ export const routes: Array<RouteRecordRaw> = [
         meta: { navId: 'settings' }
       },
       {
+        path: 'agent',
+        component: () => import('../pages/agent/index.ts'),
+        meta: { navId: 'agent' },
+        children: [
+          {
+            path: '',
+            name: 'AgentWorkspace',
+            component: () => import('../pages/agent/workspace/index.ts'),
+            meta: { navId: 'agent' }
+          },
+          {
+            path: 'skills',
+            name: 'AgentSkills',
+            component: () => import('../pages/agent/skills/index.ts'),
+            meta: { navId: 'agent' }
+          }
+        ]
+      },
+      {
+        path: 'skills',
+        name: 'SkillsLegacy',
+        redirect: '/agent/skills',
+        meta: { navId: 'agent' }
+      },
+      {
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../pages/dashboard/index.ts'),

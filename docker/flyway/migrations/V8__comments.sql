@@ -253,3 +253,5 @@ COMMENT ON VIEW v_full_path IS '目录全路径视图';
 COMMENT ON VIEW v_user_recycle_bin IS '用户回收站视图';
 COMMENT ON VIEW v_admin_share_overview IS '管理员分享总览视图';
 COMMENT ON VIEW v_user_dashboard IS '管理员用户仪表盘视图';
+COMMENT ON COLUMN background_job.agent_phase IS 'Agent runtime phase marker';
+COMMENT ON COLUMN background_job.cancel_requested_at IS 'When the user requested cancellation';

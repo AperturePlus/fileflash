@@ -85,6 +85,16 @@ export interface FolderItem {
    */
   export interface MoveFolderRequest {
     targetParentId: string;
+    shareHandling?: 'keep' | 'revoke';
+  }
+
+  export interface MoveFolderResponse {
+    folderId: string;
+    targetParentId: string;
+    finalName: string;
+    shareHandling: 'keep' | 'revoke';
+    revokedShareCount: number;
+    movedAt: string;
   }
 
   /**
@@ -391,6 +401,16 @@ export interface RenameFileRequest {
  */
 export interface MoveFileRequest {
   targetFolderId: string;
+  shareHandling?: 'keep' | 'revoke';
+}
+
+export interface MoveFileResponse {
+  fileId: string;
+  targetFolderId: string;
+  finalName: string;
+  shareHandling: 'keep' | 'revoke';
+  revokedShareCount: number;
+  movedAt: string;
 }
 
 /**
@@ -406,8 +426,34 @@ export interface CopyFileRequest {
  */
 export interface BatchFilesRequest {
   action: 'delete' | 'move' | 'copy';
-  fileIds: string[]; // 修改为 string[] 以保持一致性
-  targetFolderId?: string; // 修改为 string 以保持一致性
+  fileIds: string[];
+  folderIds?: string[];
+  targetFolderId?: string;
+  shareHandling?: 'keep' | 'revoke';
+}
+
+export interface BatchDownloadRequest {
+  fileIds: string[];
+  folderIds?: string[];
+}
+
+export interface BatchMoveItemResult {
+  itemType: 'file' | 'folder';
+  itemId: string;
+  success: boolean;
+  finalName?: string | null;
+  movedAt?: string | null;
+  message?: string | null;
+  shareHandling: 'keep' | 'revoke';
+  revokedShareCount: number;
+}
+
+export interface BatchFilesResponse {
+  processed: number;
+  action: 'delete' | 'move' | 'copy';
+  succeeded: number;
+  failed: number;
+  results: BatchMoveItemResult[];
 }
 
 /**
@@ -524,6 +570,7 @@ export interface BackgroundJob<T = any> {
   jobId: string;
   taskType: string;
   status: string;
+  agentPhase?: string | null;
   priority: number;
   payload: Record<string, any>;
   result: T;
@@ -535,8 +582,11 @@ export interface BackgroundJob<T = any> {
   finishedAt?: string | null;
   traceId?: string | null;
   idempotencyKey?: string | null;
+  cancelRequestedAt?: string | null;
   requestedBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+
 

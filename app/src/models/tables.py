@@ -9,6 +9,15 @@ from .tables_access_share import (
     ShareMember,
     UserFolderPreference,
 )
+from .tables_agent import (
+    AgentActionLog,
+    AgentMcpServer,
+    AgentMemory,
+    AgentPlan,
+    AgentSkill,
+    AgentUserSetting,
+    AgentWorkSession,
+)
 from .tables_audit_security import (
     Log,
     ModerationCase,
@@ -39,6 +48,13 @@ from .tables_worker import BackgroundJob
 
 __all__ = [
     "Acl",
+    "AgentActionLog",
+    "AgentMcpServer",
+    "AgentMemory",
+    "AgentPlan",
+    "AgentSkill",
+    "AgentUserSetting",
+    "AgentWorkSession",
     "BackgroundJob",
     "BatchDownloadTask",
     "EmailVerificationToken",

@@ -111,11 +111,40 @@ class PreviewStatus(BaseStrEnum):
 
 
 class ScanResult(BaseStrEnum):
-	PENDING = "pending"
-	CLEAN = "clean"
-	INFECTED = "infected"
-	BLOCKED = "blocked"
-	FAILED = "failed"
+    PENDING = "pending"
+    CLEAN = "clean"
+    INFECTED = "infected"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+
+
+class AgentExecutionPolicy(BaseStrEnum):
+    PLAN_ONLY = "planOnly"
+    CONFIRM = "confirm"
+    AUTOPILOT = "autopilot"
+
+
+class AgentMemoryScope(BaseStrEnum):
+    GLOBAL = "global"
+    WORKSPACE = "workspace"
+    SESSION = "session"
+
+
+class AgentMemoryKind(BaseStrEnum):
+    PREFERENCE = "preference"
+    FACT = "fact"
+    FEEDBACK = "feedback"
+    REFERENCE = "reference"
+
+
+class AgentSkillVisibility(BaseStrEnum):
+    GLOBAL = "global"
+    PRIVATE = "private"
+
+
+class AgentMcpVisibility(BaseStrEnum):
+    SYSTEM = "system"
+    PRIVATE = "private"
 
 
 __all__ = [
@@ -135,8 +164,13 @@ __all__ = [
 	"FavoriteItemType",
 	"ViewMode",
 	"SortBy",
-	"SortDirection",
-	"PreviewStatus",
-	"ScanResult",
+    "SortDirection",
+    "PreviewStatus",
+    "ScanResult",
+    "AgentExecutionPolicy",
+    "AgentMemoryScope",
+    "AgentMemoryKind",
+    "AgentSkillVisibility",
+    "AgentMcpVisibility",
 ]
 

@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 class ShareService:
-    SHARE_CODE_LENGTH = 6
+    SHARE_CODE_LENGTH = 4
     SHARE_ACCESS_TOKEN_TTL_SECONDS = 30 * 60
 
     def __init__(self, *, db: AsyncSession, settings: Settings, storage: MinioObjectStorageClient) -> None:

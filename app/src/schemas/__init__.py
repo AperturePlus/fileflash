@@ -8,9 +8,21 @@ from .auth import (
     TokenResponse,
     VerifyEmailRequest,
 )
+from .agent_skill import (
+    AgentSkillItem,
+    CreateAgentSkillRequest,
+    ImportAgentSkillItem,
+    ImportAgentSkillResult,
+    ImportAgentSkillsRequest,
+    ImportAgentSkillsResponse,
+    ListAgentSkillsQuery,
+    UpdateAgentSkillRequest,
+)
 from .common import ApiResponse, CamelModel, PageQuery, PaginatedData, PaginationMeta
 from .file import (
     AdminFileAuditItem,
+    BatchDownloadRequest,
+    BatchMoveItemResult,
     BatchFilesRequest,
     BatchFilesResponse,
     ContentItem,
@@ -37,6 +49,7 @@ from .file import (
     RenameFileRequest,
     RenameFolderRequest,
     RescanAdminFileResponse,
+    ShareHandling,
     ToggleFileStarRequest,
     ToggleFolderStarRequest,
     UploadPreflightRequest,
@@ -135,6 +148,8 @@ __all__ = [
     "ApiResponse",
     "BatchFilesRequest",
     "BatchFilesResponse",
+    "BatchDownloadRequest",
+    "BatchMoveItemResult",
     "BroadcastNotificationRequest",
     "BreakdownDetail",
     "CamelModel",
@@ -213,6 +228,7 @@ __all__ = [
     "ShareSettings",
     "SaveShareRequest",
     "SaveShareResponse",
+    "ShareHandling",
     "StorageStats",
     "StorageUsagePoint",
     "StorageUsageTrend",

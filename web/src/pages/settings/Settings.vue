@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../store/settings';
 import { useThemeStore } from '../../store/theme';
 import { useUserStore } from '../../store/user';
 import type { AppLanguage } from '../../types/user';
+import { ui } from '../../utils/ui';
 
 const themeStore = useThemeStore();
 const settingsStore = useSettingsStore();
@@ -72,16 +73,22 @@ const updateLanguagePreference = async () => {
     console.error('Failed to update language preference:', error);
     localeStore.setLocale(previousLanguage);
     selectedLanguage.value = previousLanguage;
-    alert(t('settings.language.updateFailed'));
+    ui.toast({ type: 'error', message: t('settings.language.updateFailed') });
   } finally {
     isUpdatingLanguage.value = false;
   }
 };
 
-const resetSettings = () => {
-  if (confirm(t('settings.confirmReset'))) {
-    settingsStore.resetSettings();
-  }
+const resetSettings = async () => {
+  const confirmed = await ui.confirm({
+    title: t('settings.actions.reset'),
+    message: t('settings.confirmReset'),
+    confirmText: t('settings.actions.reset'),
+    danger: true,
+  });
+  if (!confirmed) return;
+  settingsStore.resetSettings();
+  ui.toast({ type: 'success', message: 'Settings reset.' });
 };
 
 const exportSettings = () => {
@@ -102,9 +109,9 @@ const importSettings = (event: Event) => {
     reader.onload = (e) => {
       const result = e.target?.result as string;
       if (settingsStore.importSettings(result)) {
-        alert(t('settings.importSuccess'));
+        ui.toast({ type: 'success', message: t('settings.importSuccess') });
       } else {
-        alert(t('settings.importFailed'));
+        ui.toast({ type: 'error', message: t('settings.importFailed') });
       }
     };
     reader.readAsText(file);

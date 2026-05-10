@@ -23,6 +23,86 @@ export type LocaleKey =
   | 'sidebar.recycleBin'
   | 'sidebar.workspaceTree'
   | 'sidebar.storage'
+  | 'sidebar.skills'
+  | 'sidebar.agent'
+  | 'agent.pageTitle'
+  | 'agent.pageDescription'
+  | 'agent.nav.workspace'
+  | 'agent.nav.skills'
+  | 'agent.workspace.controls'
+  | 'agent.workspace.advancedSettings'
+  | 'agent.workspace.planPreview'
+  | 'agent.workspace.executionResult'
+  | 'agent.workspace.emptyPlan'
+  | 'agent.workspace.executing'
+  | 'agent.workspace.emptyExecution'
+  | 'agent.fields.task'
+  | 'agent.fields.taskPlaceholder'
+  | 'agent.fields.executionPolicy'
+  | 'agent.fields.allowFileContent'
+  | 'agent.fields.maxReadBytes'
+  | 'agent.fields.allowedMimeTypes'
+  | 'agent.fields.maxSteps'
+  | 'agent.fields.budgetTokens'
+  | 'agent.fields.planHash'
+  | 'agent.fields.chosenSkill'
+  | 'agent.actions.plan'
+  | 'agent.actions.reset'
+  | 'agent.actions.execute'
+  | 'agent.actions.cancel'
+  | 'agent.actions.cancelled'
+  | 'agent.metrics.planStatus'
+  | 'agent.metrics.executeStatus'
+  | 'agent.metrics.actions'
+  | 'agent.metrics.tokens'
+  | 'agent.metrics.toolCalls'
+  | 'agent.metrics.durationSec'
+  | 'agent.metrics.appliedActions'
+  | 'agent.metrics.skippedActions'
+  | 'agent.metrics.warnings'
+  | 'agent.errors.title'
+  | 'agent.errors.taskRequired'
+  | 'agent.errors.planFailed'
+  | 'agent.errors.executeFailed'
+  | 'agent.errors.cancelFailed'
+  | 'skills.pageTitle'
+  | 'skills.pageDescription'
+  | 'skills.searchPlaceholder'
+  | 'skills.tab.marketplace'
+  | 'skills.tab.mySkills'
+  | 'skills.actions.refresh'
+  | 'skills.actions.newSkill'
+  | 'skills.actions.edit'
+  | 'skills.actions.delete'
+  | 'skills.actions.save'
+  | 'skills.actions.cancel'
+  | 'skills.actions.pickFile'
+  | 'skills.marketplace.empty'
+  | 'skills.mySkills.empty'
+  | 'skills.form.name'
+  | 'skills.form.description'
+  | 'skills.form.triggers'
+  | 'skills.form.tools'
+  | 'skills.form.planTemplate'
+  | 'skills.form.inputsSchema'
+  | 'skills.form.outputsSchema'
+  | 'skills.admin.importTitle'
+  | 'skills.admin.mode'
+  | 'skills.admin.mode.upsert'
+  | 'skills.admin.mode.insertOnly'
+  | 'skills.admin.jsonPlaceholder'
+  | 'skills.admin.import'
+  | 'skills.admin.results'
+  | 'skills.validation.required'
+  | 'skills.feedback.saved'
+  | 'skills.feedback.saveFailed'
+  | 'skills.feedback.deleted'
+  | 'skills.feedback.emptyImport'
+  | 'skills.feedback.invalidImport'
+  | 'skills.feedback.imported'
+  | 'skills.feedback.importFailed'
+  | 'skills.dialog.deleteTitle'
+  | 'skills.dialog.deleteContentPrefix'
   | 'settings.pageTitle'
   | 'settings.pageDescription'
   | 'settings.tab.appearance'
@@ -77,6 +157,86 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.recycleBin': '回收站',
     'sidebar.workspaceTree': '工作区目录',
     'sidebar.storage': '存储',
+    'sidebar.skills': '技能',
+    'sidebar.agent': 'Agent',
+    'agent.pageTitle': 'Cloud Agent',
+    'agent.pageDescription': '以云端 Agent 模式规划并执行文件操作。',
+    'agent.nav.workspace': '工作台',
+    'agent.nav.skills': 'Skills',
+    'agent.workspace.controls': '任务与策略',
+    'agent.workspace.advancedSettings': '高级设置',
+    'agent.workspace.planPreview': '规划预览',
+    'agent.workspace.executionResult': '执行结果',
+    'agent.workspace.emptyPlan': '输入任务后点击“生成计划”，在这里查看规划结果。',
+    'agent.workspace.executing': 'Agent 正在执行计划，请稍候…',
+    'agent.workspace.emptyExecution': '还没有执行结果。',
+    'agent.fields.task': '任务描述',
+    'agent.fields.taskPlaceholder': '例如：把 Downloads 中的图片按年月归档到 Photos',
+    'agent.fields.executionPolicy': '执行策略',
+    'agent.fields.allowFileContent': '允许读取文件内容',
+    'agent.fields.maxReadBytes': '单文件最大读取字节',
+    'agent.fields.allowedMimeTypes': '允许 MIME Types',
+    'agent.fields.maxSteps': '最大步骤数',
+    'agent.fields.budgetTokens': 'Token 预算',
+    'agent.fields.planHash': 'Plan Hash',
+    'agent.fields.chosenSkill': '已选 Skill',
+    'agent.actions.plan': '生成计划',
+    'agent.actions.reset': '重置',
+    'agent.actions.execute': '确认执行',
+    'agent.actions.cancel': '取消任务',
+    'agent.actions.cancelled': '任务已取消。',
+    'agent.metrics.planStatus': 'Plan 状态',
+    'agent.metrics.executeStatus': 'Execute 状态',
+    'agent.metrics.actions': '步骤数',
+    'agent.metrics.tokens': '预估 Tokens',
+    'agent.metrics.toolCalls': '工具调用',
+    'agent.metrics.durationSec': '预估耗时(秒)',
+    'agent.metrics.appliedActions': '已执行步骤',
+    'agent.metrics.skippedActions': '跳过步骤',
+    'agent.metrics.warnings': '警告',
+    'agent.errors.title': 'Agent 运行异常',
+    'agent.errors.taskRequired': '请先输入任务描述。',
+    'agent.errors.planFailed': '生成计划失败，请稍后重试。',
+    'agent.errors.executeFailed': '执行计划失败，请检查反馈后重试。',
+    'agent.errors.cancelFailed': '取消任务失败。',
+    'skills.pageTitle': '技能',
+    'skills.pageDescription': '浏览全局技能市场，并管理你的私有自定义技能。',
+    'skills.searchPlaceholder': '搜索技能（name/description/triggers）',
+    'skills.tab.marketplace': '技能市场',
+    'skills.tab.mySkills': '我的技能',
+    'skills.actions.refresh': '刷新',
+    'skills.actions.newSkill': '新增技能',
+    'skills.actions.edit': '编辑',
+    'skills.actions.delete': '删除',
+    'skills.actions.save': '保存',
+    'skills.actions.cancel': '取消',
+    'skills.actions.pickFile': '选择 JSON 文件',
+    'skills.marketplace.empty': '没有找到技能市场内容。',
+    'skills.mySkills.empty': '还没有私有技能，可以先新增一个。',
+    'skills.form.name': '名称',
+    'skills.form.description': '描述',
+    'skills.form.triggers': '触发词',
+    'skills.form.tools': '工具白名单',
+    'skills.form.planTemplate': '计划模板',
+    'skills.form.inputsSchema': '输入 Schema',
+    'skills.form.outputsSchema': '输出 Schema',
+    'skills.admin.importTitle': '导入全局技能 (Admin)',
+    'skills.admin.mode': '模式',
+    'skills.admin.mode.upsert': 'Upsert',
+    'skills.admin.mode.insertOnly': 'Insert only',
+    'skills.admin.jsonPlaceholder': '粘贴 JSON（数组）或 { items: [] }',
+    'skills.admin.import': '导入',
+    'skills.admin.results': '导入结果',
+    'skills.validation.required': '名称和描述为必填项。',
+    'skills.feedback.saved': 'Skill 已保存。',
+    'skills.feedback.saveFailed': 'Skill 保存失败。',
+    'skills.feedback.deleted': 'Skill 已删除。',
+    'skills.feedback.emptyImport': '请先粘贴或选择导入 JSON。',
+    'skills.feedback.invalidImport': '导入 JSON 格式错误，需要为数组或 { items: [] }。',
+    'skills.feedback.imported': 'Skill 导入完成。',
+    'skills.feedback.importFailed': 'Skill 导入失败。',
+    'skills.dialog.deleteTitle': '删除 Skill',
+    'skills.dialog.deleteContentPrefix': '确认删除 Skill',
     'settings.pageTitle': '设置',
     'settings.pageDescription': '个性化您的 fileflash 体验，管理应用行为和偏好。',
     'settings.tab.appearance': '外观',
@@ -126,6 +286,86 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.recycleBin': 'Recycle Bin',
     'sidebar.workspaceTree': 'Workspace Tree',
     'sidebar.storage': 'Storage',
+    'sidebar.skills': 'Skills',
+    'sidebar.agent': 'Agent',
+    'agent.pageTitle': 'Cloud Agent',
+    'agent.pageDescription': 'Plan and execute cloud agent workflows for file operations.',
+    'agent.nav.workspace': 'Workspace',
+    'agent.nav.skills': 'Skills',
+    'agent.workspace.controls': 'Task & Policy',
+    'agent.workspace.advancedSettings': 'Advanced Settings',
+    'agent.workspace.planPreview': 'Plan Preview',
+    'agent.workspace.executionResult': 'Execution Result',
+    'agent.workspace.emptyPlan': 'Describe a task and click Plan to generate the action plan.',
+    'agent.workspace.executing': 'Agent is executing this plan. Please wait...',
+    'agent.workspace.emptyExecution': 'No execution result yet.',
+    'agent.fields.task': 'Task Prompt',
+    'agent.fields.taskPlaceholder': 'For example: organize images from Downloads into Photos by month',
+    'agent.fields.executionPolicy': 'Execution Policy',
+    'agent.fields.allowFileContent': 'Allow file content reads',
+    'agent.fields.maxReadBytes': 'Max read bytes per file',
+    'agent.fields.allowedMimeTypes': 'Allowed MIME Types',
+    'agent.fields.maxSteps': 'Max Steps',
+    'agent.fields.budgetTokens': 'Token Budget',
+    'agent.fields.planHash': 'Plan Hash',
+    'agent.fields.chosenSkill': 'Chosen Skill',
+    'agent.actions.plan': 'Create Plan',
+    'agent.actions.reset': 'Reset',
+    'agent.actions.execute': 'Execute Plan',
+    'agent.actions.cancel': 'Cancel Job',
+    'agent.actions.cancelled': 'Job cancelled.',
+    'agent.metrics.planStatus': 'Plan Status',
+    'agent.metrics.executeStatus': 'Execute Status',
+    'agent.metrics.actions': 'Actions',
+    'agent.metrics.tokens': 'Estimated Tokens',
+    'agent.metrics.toolCalls': 'Tool Calls',
+    'agent.metrics.durationSec': 'Duration (sec)',
+    'agent.metrics.appliedActions': 'Applied Actions',
+    'agent.metrics.skippedActions': 'Skipped Actions',
+    'agent.metrics.warnings': 'Warnings',
+    'agent.errors.title': 'Agent Error',
+    'agent.errors.taskRequired': 'Please enter a task prompt first.',
+    'agent.errors.planFailed': 'Failed to generate plan. Please retry.',
+    'agent.errors.executeFailed': 'Failed to execute plan. Please retry.',
+    'agent.errors.cancelFailed': 'Failed to cancel job.',
+    'skills.pageTitle': 'Skills',
+    'skills.pageDescription': 'Browse the global marketplace and manage your private custom skills.',
+    'skills.searchPlaceholder': 'Search skills (name/description/triggers)',
+    'skills.tab.marketplace': 'Marketplace',
+    'skills.tab.mySkills': 'My Skills',
+    'skills.actions.refresh': 'Refresh',
+    'skills.actions.newSkill': 'New Skill',
+    'skills.actions.edit': 'Edit',
+    'skills.actions.delete': 'Delete',
+    'skills.actions.save': 'Save',
+    'skills.actions.cancel': 'Cancel',
+    'skills.actions.pickFile': 'Pick JSON File',
+    'skills.marketplace.empty': 'No marketplace skills found.',
+    'skills.mySkills.empty': 'No private skills yet. Create one to get started.',
+    'skills.form.name': 'Name',
+    'skills.form.description': 'Description',
+    'skills.form.triggers': 'Triggers',
+    'skills.form.tools': 'Tool whitelist',
+    'skills.form.planTemplate': 'Plan template',
+    'skills.form.inputsSchema': 'Inputs schema',
+    'skills.form.outputsSchema': 'Outputs schema',
+    'skills.admin.importTitle': 'Import global skills (Admin)',
+    'skills.admin.mode': 'Mode',
+    'skills.admin.mode.upsert': 'Upsert',
+    'skills.admin.mode.insertOnly': 'Insert only',
+    'skills.admin.jsonPlaceholder': 'Paste JSON array or { items: [] }',
+    'skills.admin.import': 'Import',
+    'skills.admin.results': 'Import results',
+    'skills.validation.required': 'Name and description are required.',
+    'skills.feedback.saved': 'Skill saved successfully.',
+    'skills.feedback.saveFailed': 'Failed to save skill.',
+    'skills.feedback.deleted': 'Skill deleted.',
+    'skills.feedback.emptyImport': 'Paste or upload import JSON first.',
+    'skills.feedback.invalidImport': 'Import JSON must be an array or { items: [] }.',
+    'skills.feedback.imported': 'Skill import completed.',
+    'skills.feedback.importFailed': 'Import failed.',
+    'skills.dialog.deleteTitle': 'Delete Skill',
+    'skills.dialog.deleteContentPrefix': 'Delete skill',
     'settings.pageTitle': 'Settings',
     'settings.pageDescription': 'Personalize your fileflash experience and manage app behavior.',
     'settings.tab.appearance': 'Appearance',

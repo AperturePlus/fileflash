@@ -7,9 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db.deps import get_db
 from ..models.tables_identity import User
+from ..models.enums import UserRole
+from ..repositories import (
+    AgentActionLogRepository,
+    AgentMcpRepository,
+    AgentMemoryRepository,
+    AgentPlanRepository,
+    AgentSettingsRepository,
+    AgentSkillRepository,
+    AgentWorkSessionRepository,
+)
 from ..services.archive import ArchiveService
+from ..services.agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
+from ..services.file import FileService
+from ..services.folder import FolderService
 from ..services.job_queue import RedisStreamJobQueue
 from ..services.messaging import InProcessAuthEventPublisher
 from ..services.rate_limiter import RedisRateLimiter
@@ -29,6 +42,10 @@ _job_queue_publisher = RedisStreamJobQueue(
     redis_url=_settings.redis_url,
     stream_key=_settings.worker_queue_stream,
 )
+_agent_job_queue_publisher = RedisStreamJobQueue(
+    redis_url=_settings.redis_url,
+    stream_key=_settings.agent_queue_stream,
+)
 
 
 def get_rate_limiter() -> RedisRateLimiter:
@@ -47,8 +64,18 @@ def get_job_queue_publisher() -> RedisStreamJobQueue:
     return _job_queue_publisher
 
 
+def get_agent_job_queue_publisher() -> RedisStreamJobQueue:
+    return _agent_job_queue_publisher
+
+
 def get_background_job_service(
     queue_publisher: RedisStreamJobQueue = Depends(get_job_queue_publisher),
+) -> BackgroundJobService:
+    return BackgroundJobService(queue_publisher=queue_publisher)
+
+
+def get_agent_background_job_service(
+    queue_publisher: RedisStreamJobQueue = Depends(get_agent_job_queue_publisher),
 ) -> BackgroundJobService:
     return BackgroundJobService(queue_publisher=queue_publisher)
 
@@ -107,6 +134,111 @@ def get_archive_service(
     return ArchiveService(db=db, jobs=jobs)
 
 
+
+def get_file_service(
+    db: AsyncSession = Depends(get_db),
+    storage: MinioObjectStorageClient = Depends(get_object_storage),
+) -> FileService:
+    return FileService(db=db, storage=storage)
+
+
+def get_folder_service(
+    db: AsyncSession = Depends(get_db),
+) -> FolderService:
+    return FolderService(db=db)
+
+
+
+def get_agent_settings_repository(db: AsyncSession = Depends(get_db)) -> AgentSettingsRepository:
+    return AgentSettingsRepository(db)
+
+
+def get_agent_mcp_repository(db: AsyncSession = Depends(get_db)) -> AgentMcpRepository:
+    return AgentMcpRepository(db)
+
+
+def get_agent_skill_repository(db: AsyncSession = Depends(get_db)) -> AgentSkillRepository:
+    return AgentSkillRepository(db)
+
+
+def get_agent_memory_repository(db: AsyncSession = Depends(get_db)) -> AgentMemoryRepository:
+    return AgentMemoryRepository(db)
+
+
+def get_agent_plan_repository(db: AsyncSession = Depends(get_db)) -> AgentPlanRepository:
+    return AgentPlanRepository(db)
+
+
+def get_agent_action_log_repository(db: AsyncSession = Depends(get_db)) -> AgentActionLogRepository:
+    return AgentActionLogRepository(db)
+
+
+def get_agent_work_session_repository(db: AsyncSession = Depends(get_db)) -> AgentWorkSessionRepository:
+    return AgentWorkSessionRepository(db)
+
+
+def get_agent_plan_service(
+    db: AsyncSession = Depends(get_db),
+    jobs: BackgroundJobService = Depends(get_agent_background_job_service),
+    plans: AgentPlanRepository = Depends(get_agent_plan_repository),
+    settings_repo: AgentSettingsRepository = Depends(get_agent_settings_repository),
+    work_sessions: AgentWorkSessionRepository = Depends(get_agent_work_session_repository),
+) -> PlanService:
+    return PlanService(
+        db=db,
+        jobs=jobs,
+        plans=plans,
+        settings=settings_repo,
+        work_sessions=work_sessions,
+    )
+
+
+def get_agent_execute_service(
+    db: AsyncSession = Depends(get_db),
+    jobs: BackgroundJobService = Depends(get_agent_background_job_service),
+    plans: AgentPlanRepository = Depends(get_agent_plan_repository),
+    work_sessions: AgentWorkSessionRepository = Depends(get_agent_work_session_repository),
+) -> ExecuteService:
+    return ExecuteService(
+        db=db,
+        jobs=jobs,
+        plans=plans,
+        work_sessions=work_sessions,
+    )
+
+
+def get_agent_skill_service(
+    db: AsyncSession = Depends(get_db),
+    skills: AgentSkillRepository = Depends(get_agent_skill_repository),
+) -> SkillService:
+    return SkillService(db=db, skills=skills)
+
+
+def get_agent_memory_service(
+    memory: AgentMemoryRepository = Depends(get_agent_memory_repository),
+) -> MemoryService:
+    return MemoryService(memory=memory)
+
+
+def get_agent_settings_service(
+    settings_repo: AgentSettingsRepository = Depends(get_agent_settings_repository),
+) -> SettingsService:
+    return SettingsService(settings_repo=settings_repo)
+
+
+def get_agent_mcp_service(
+    mcp: AgentMcpRepository = Depends(get_agent_mcp_repository),
+) -> McpService:
+    return McpService(mcp=mcp)
+
+
+def get_agent_session_service(
+    action_logs: AgentActionLogRepository = Depends(get_agent_action_log_repository),
+    work_sessions: AgentWorkSessionRepository = Depends(get_agent_work_session_repository),
+) -> SessionService:
+    return SessionService(action_logs=action_logs, work_sessions=work_sessions)
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
     db: AsyncSession = Depends(get_db),
@@ -130,5 +262,11 @@ async def get_current_user(
 async def require_verified_user(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.email_verified:
         raise ApiError(status_code=403, code=403, message="Email verification required")
+    return current_user
+
+
+async def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.ADMIN:
+        raise ApiError(status_code=403, code=403, message="Admin access required")
     return current_user
 

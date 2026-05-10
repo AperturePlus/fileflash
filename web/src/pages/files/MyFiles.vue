@@ -15,6 +15,7 @@ import ShareDialog from '../../components/common/ShareDialog.vue';
 import ExtractArchiveDialog from './components/ExtractArchiveDialog.vue';
 import FileItemsView from './components/FileItemsView.vue';
 import { eventBus } from '../../utils/eventBus';
+import { ui } from '../../utils/ui';
 import type { ContentItem, FileItem, FolderItem } from '../../types/file';
 
 const fileStore = useFileStore();
@@ -37,6 +38,8 @@ const {
   renamingItemId,
   renameInputValue,
   itemToMove,
+  moveItemCount,
+  moveHasActiveShare,
   isMoveDialogVisible,
   itemToShare,
   isShareDialogVisible,
@@ -47,6 +50,7 @@ const {
   handleDownload,
   handleCreateFolder,
   startMove,
+  startMoveForSelection,
   closeMoveDialog,
   handleMoveConfirm,
   startShare,
@@ -81,9 +85,15 @@ const displayItems = computed(() => {
 });
 
 const handleSidebarMove = ({ sourceItemIds, targetFolderId, targetFolderName }: { sourceItemIds: string[]; targetFolderId: string; targetFolderName: string }) => {
-  const canMove = window.confirm(`Move ${sourceItemIds.length} item(s) to \"${targetFolderName}\"?`);
-  if (!canMove) return;
-  handleBatchMove(sourceItemIds, targetFolderId);
+  const canMove = ui.confirm({
+    title: 'Move Items',
+    message: `Move ${sourceItemIds.length} item(s) to "${targetFolderName}"?`,
+    confirmText: 'Move',
+  });
+  canMove.then((confirmed) => {
+    if (!confirmed) return;
+    handleBatchMove(sourceItemIds, targetFolderId, 'keep');
+  });
 };
 
 const handleSearch = async ({ query }: { query: string }) => {
@@ -113,9 +123,14 @@ const navigateByBreadcrumb = (folderId: string) => {
 };
 
 const handleBreadcrumbDrop = ({ sourceItemIds, targetFolderId }: { sourceItemIds: string[]; targetFolderId: string }) => {
-  const canMove = window.confirm(`Move ${sourceItemIds.length} item(s) to this folder?`);
-  if (!canMove) return;
-  handleBatchMove(sourceItemIds, targetFolderId);
+  ui.confirm({
+    title: 'Move Items',
+    message: `Move ${sourceItemIds.length} item(s) to this folder?`,
+    confirmText: 'Move',
+  }).then((confirmed) => {
+    if (!confirmed) return;
+    handleBatchMove(sourceItemIds, targetFolderId, 'keep');
+  });
 };
 
 const handleItemClick = (item: ContentItem) => {
@@ -147,10 +162,14 @@ const handleFolderDrop = (e: DragEvent, folder: FolderItem) => {
   const sourceIds: string[] = JSON.parse(raw);
   if (sourceIds.includes(folder.id)) return;
 
-  const canMove = window.confirm(`Move ${sourceIds.length} item(s) into \"${folder.name}\"?`);
-  if (!canMove) return;
-
-  handleBatchMove(sourceIds, folder.id);
+  ui.confirm({
+    title: 'Move Items',
+    message: `Move ${sourceIds.length} item(s) into "${folder.name}"?`,
+    confirmText: 'Move',
+  }).then((confirmed) => {
+    if (!confirmed) return;
+    handleBatchMove(sourceIds, folder.id, 'keep');
+  });
 };
 
 const handleToggleStar = async (item: ContentItem) => {
@@ -211,6 +230,7 @@ onUnmounted(() => {
       <div class="header-actions">
         <div v-if="selectedCount > 0" class="batch-actions">
           <span>{{ selectedCount }} selected</span>
+          <button class="secondary-btn" @click="startMoveForSelection(Array.from(selectedItems))">Move</button>
           <button class="secondary-btn" @click="handleBatchDownload">Download</button>
           <button class="danger-btn" @click="handleBatchDelete">Delete</button>
         </div>
@@ -221,7 +241,7 @@ onUnmounted(() => {
         </div>
 
         <button class="secondary-btn" @click="setSort('name')">
-          Sort: {{ sortKey }} {{ sortDirection === 'asc' ? '↑' : '↓' }}
+          Sort: {{ sortKey }} {{ sortDirection === 'asc' ? 'ASC' : 'DESC' }}
         </button>
 
         <button class="secondary-btn" @click="handleCreateFolder">New Folder</button>
@@ -232,6 +252,9 @@ onUnmounted(() => {
     <MoveItemDialog
       :is-visible="isMoveDialogVisible"
       :item-to-move="itemToMove"
+      :item-count="moveItemCount"
+      :has-active-share="moveHasActiveShare"
+      :default-share-handling="'keep'"
       @close="closeMoveDialog"
       @confirm="handleMoveConfirm"
     />
@@ -502,5 +525,6 @@ onUnmounted(() => {
   }
 }
 </style>
+
 
 

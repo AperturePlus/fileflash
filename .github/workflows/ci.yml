@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    env:
+      FF_DB_URI: postgresql://admin:psgl-ff-db@localhost:5432/fileflash
+      JWT_SECRET_KEY: unit-test-secret-key-1234567890abcd
+      OBJECT_STORAGE_ENDPOINT: localhost:9000
+      OBJECT_STORAGE_ACCESS_KEY: admin
+      OBJECT_STORAGE_SECRET_KEY: minio-admin
+      OBJECT_STORAGE_BUCKET: fileflash
+      OBJECT_STORAGE_SECURE: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          working-directory: app
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Start PostgreSQL and run migrations
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker compose -f docker/postgresql-16/docker-compose.yaml up -d postgres
+          docker compose -f docker/postgresql-16/docker-compose.yaml run --rm flyway
+
+      - name: Start MinIO
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker compose -f docker/minio/docker-compose.yaml up -d minio
+          for i in {1..30}; do
+            if curl -fsS http://localhost:9000/minio/health/live > /dev/null; then
+              echo "MinIO is healthy"
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:9000/minio/health/live > /dev/null || (docker compose -f docker/minio/docker-compose.yaml logs minio && exit 1)
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Stop infrastructure
+        if: ${{ always() }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker compose -f docker/minio/docker-compose.yaml down -v --remove-orphans
+          docker compose -f docker/postgresql-16/docker-compose.yaml down -v --remove-orphans
+
+  web:
+    name: Web (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.8"
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check
+        run: bun run check
+
+      - name: Build
+        run: bun run build

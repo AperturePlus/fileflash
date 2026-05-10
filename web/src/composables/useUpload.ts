@@ -3,6 +3,7 @@ import type { Ref } from 'vue';
 import { useFileStore } from '../store/file';
 import { uploadFile, type UploadProgressData } from '../utils/uploader';
 import { eventBus } from '../utils/eventBus';
+import { ui } from '../utils/ui';
 
 interface UploadTask {
   id: number;
@@ -94,7 +95,7 @@ export function useUpload(currentFolderId: Ref<string | null>) {
       eventBus.emit('refresh-file-tree');
     } catch (error) {
       console.error('Upload failed:', error);
-      alert(`Upload of ${file.name} failed!`);
+      ui.toast({ type: 'error', message: `Upload of ${file.name} failed.` });
     } finally {
       setTimeout(() => {
         uploadTasks.value = uploadTasks.value.filter(t => t.id !== taskId);

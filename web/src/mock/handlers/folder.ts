@@ -1,5 +1,5 @@
 import Mock from 'mockjs';
-import { addLog } from '../state';
+import { addLog, mockShares } from '../state';
 import { vfsApi, type VfsNode } from '../vfs';
 
 function parseUrl(url: string) {
@@ -69,6 +69,63 @@ function buildPagination(count: number) {
     hasPrev: false,
     hasNext: false,
   };
+}
+
+function nextAvailableFolderName(parentId: string, originalName: string, excludeId: string) {
+  const hasConflict = (candidate: string) =>
+    vfsApi
+      .getChildren(parentId)
+      .some((node) => !node.isTrashed && node.type === 'folder' && node.id !== excludeId && node.name === candidate);
+
+  if (!hasConflict(originalName)) {
+    return originalName;
+  }
+
+  const stem = originalName.trim() || 'Folder';
+  let index = 1;
+  while (true) {
+    const candidate = `${stem} (${index})`;
+    if (!hasConflict(candidate)) {
+      return candidate;
+    }
+    index += 1;
+  }
+}
+
+function collectSubtreeIds(rootFolderId: string): { folderIds: string[]; fileIds: string[] } {
+  const folderIds: string[] = [];
+  const fileIds: string[] = [];
+
+  const walk = (folderId: string) => {
+    folderIds.push(folderId);
+    vfsApi.getChildren(folderId).forEach((node) => {
+      if (node.isTrashed) return;
+      if (node.type === 'folder') {
+        walk(node.id);
+      } else {
+        fileIds.push(node.id);
+      }
+    });
+  };
+
+  walk(rootFolderId);
+  return { folderIds, fileIds };
+}
+
+function revokeShares(fileIds: string[], folderIds: string[]) {
+  const fileSet = new Set(fileIds);
+  const folderSet = new Set(folderIds);
+  let revoked = 0;
+
+  for (let index = mockShares.length - 1; index >= 0; index -= 1) {
+    const share = mockShares[index];
+    const matchFile = share.itemType === 'file' && fileSet.has(share.itemInfo.id);
+    const matchFolder = share.itemType === 'folder' && folderSet.has(share.itemInfo.id);
+    if (!matchFile && !matchFolder) continue;
+    mockShares.splice(index, 1);
+    revoked += 1;
+  }
+  return revoked;
 }
 
 export const setupFolderMocks = () => {
@@ -222,17 +279,67 @@ export const setupFolderMocks = () => {
 
   Mock.mock(/\/api\/v1\/folders\/([^/]+)\/move$/, 'patch', (options) => {
     const folderId = (options.url.match(/\/api\/v1\/folders\/([^/]+)\/move/) || [])[1];
-    const { targetParentId } = JSON.parse(options.body || '{}');
+    const { targetParentId, shareHandling = 'keep' } = JSON.parse(options.body || '{}');
+    const folder = vfsApi.get(folderId);
+    if (!folder || folder.type !== 'folder' || folder.isTrashed) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Folder not found',
+        data: null,
+      };
+    }
+    if (folder.id === 'root') {
+      return {
+        success: false,
+        code: 400,
+        message: 'Root folder cannot be moved',
+        data: null,
+      };
+    }
 
-    const movedFolder = vfsApi.move(folderId, targetParentId);
-    addLog('folder_move', { folderId, targetParentId });
+    const targetFolder = vfsApi.get(targetParentId);
+    if (!targetFolder || targetFolder.type !== 'folder' || targetFolder.isTrashed) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Target folder not found',
+        data: null,
+      };
+    }
+
+    const finalName = nextAvailableFolderName(targetParentId, folder.name, folder.id);
+    try {
+      vfsApi.move(folderId, targetParentId);
+      if (finalName !== folder.name) {
+        vfsApi.rename(folderId, finalName);
+      }
+    } catch (error) {
+      return {
+        success: false,
+        code: 409,
+        message: (error as Error)?.message || 'Move failed',
+        data: null,
+      };
+    }
+
+    let revokedShareCount = 0;
+    if (shareHandling === 'revoke') {
+      const ids = collectSubtreeIds(folderId);
+      revokedShareCount = revokeShares(ids.fileIds, ids.folderIds);
+    }
+    const movedFolder = vfsApi.get(folderId)!;
+    addLog('folder_move', { folderId, targetParentId, shareHandling });
 
     return {
       success: true,
       code: 200,
       data: {
         folderId: movedFolder.id,
-        targetParentId,
+        targetParentId: targetParentId,
+        finalName: movedFolder.name,
+        shareHandling,
+        revokedShareCount,
         movedAt: movedFolder.updatedAt,
       },
     };

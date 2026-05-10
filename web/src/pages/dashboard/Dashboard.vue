@@ -13,6 +13,7 @@ import type { LogItem } from '../../types/log';
 import type { NotificationItem } from '../../types/notification';
 import type { AdminFileAuditItem } from '../../types/file';
 import type { SystemHealth, RateLimitStatus } from '../../types/system';
+import { ui } from '../../utils/ui';
 
 const isLoading = ref(false);
 const noticeText = ref('');
@@ -107,15 +108,25 @@ const handleUpdateUserStatus = async (user: any, status: 'active' | 'suspended')
 
 const handleAdjustQuota = async (user: any) => {
   const currentGb = (user.storageLimit / 1024 / 1024 / 1024).toFixed(1);
-  const next = window.prompt(`Set quota for ${user.username} (GB)`, currentGb);
-  if (!next) return;
+  const next = await ui.promptText({
+    title: 'Adjust Storage Quota',
+    message: `Set quota for ${user.username} (GB)`,
+    defaultValue: currentGb,
+    placeholder: 'e.g. 20',
+    confirmText: 'Update',
+  });
+  if (next === null) return;
 
   const parsed = Number(next);
-  if (!Number.isFinite(parsed) || parsed <= 0) return;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    ui.toast({ type: 'warning', message: 'Please enter a valid positive number.' });
+    return;
+  }
 
   const result = await updateStorageQuota(user.userId, Math.round(parsed * 1024 * 1024 * 1024));
   user.storageLimit = result.storageLimit;
   user.usagePercentage = result.usagePercentage;
+  ui.toast({ type: 'success', message: 'Storage quota updated.' });
 };
 
 const handleResolveViolation = async (violationId: string) => {
