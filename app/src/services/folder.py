@@ -1,0 +1,324 @@
+from __future__ import annotations
+
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.errors import ApiError
+from ..models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
+from ..models.tables_access_share import FavoriteItem
+from ..models.tables_identity import User
+from ..models.tables_storage import File, Folder
+from ..schemas.common import PaginatedData, PaginationMeta
+from ..schemas.file import (
+    ContentItem,
+    DeleteFolderResponse,
+    FileItem,
+    FolderItem,
+    FolderPathResponse,
+    FolderSizeResponse,
+    GetFolderContentsQuery,
+    MoveFolderRequest,
+    MoveFolderResponse,
+    PathItem,
+)
+from .file import FileService
+
+_SORT_COLUMNS_FILE = {
+    "name": File.file_name,
+    "size": File.file_size,
+    "createdAt": File.created_at,
+    "updatedAt": File.updated_at,
+}
+_SORT_COLUMNS_FOLDER = {
+    "name": Folder.folder_name,
+    "size": Folder.cached_size,
+    "createdAt": Folder.created_at,
+    "updatedAt": Folder.updated_at,
+}
+
+
+class FolderService:
+    def __init__(self, *, db: AsyncSession) -> None:
+        self.db = db
+
+    async def get_root_contents(
+        self, *, user_id: int, query: GetFolderContentsQuery,
+    ) -> PaginatedData[ContentItem]:
+        root = await self._get_root_folder(user_id)
+        query.folder_id = str(root.folder_id)
+        return await self.get_folder_contents(user_id=user_id, query=query)
+
+    async def get_folder_contents(
+        self, *, user_id: int, query: GetFolderContentsQuery,
+    ) -> PaginatedData[ContentItem]:
+        folder_id = self._parse_id(query.folder_id, "folderId")
+        await self._ensure_folder_access(user_id, folder_id)
+
+        # sub-folders
+        folder_q = (
+            select(Folder, User.username)
+            .join(User, User.user_id == Folder.owner_id)
+            .where(
+                and_(
+                    Folder.parent_folder_id == folder_id,
+                    Folder.owner_id == user_id,
+                    Folder.status == FolderStatus.ACTIVE,
+                )
+            )
+        )
+        if query.search:
+            folder_q = folder_q.where(func.lower(Folder.folder_name).contains(query.search.lower()))
+
+        fcol = _SORT_COLUMNS_FOLDER.get(query.sort or "name", Folder.folder_name)
+        folder_q = folder_q.order_by(fcol.desc() if query.order == "desc" else fcol.asc())
+        folder_rows = (await self.db.execute(folder_q)).all()
+
+        # files
+        file_q = (
+            select(File, User.username)
+            .join(User, User.user_id == File.owner_id)
+            .where(
+                and_(
+                    File.folder_id == folder_id,
+                    File.owner_id == user_id,
+                    File.status == FileStatus.ACTIVE,
+                    File.is_latest.is_(True),
+                )
+            )
+        )
+        if query.search:
+            file_q = file_q.where(func.lower(File.file_name).contains(query.search.lower()))
+
+        col = _SORT_COLUMNS_FILE.get(query.sort or "name", File.file_name)
+        file_q = file_q.order_by(col.desc() if query.order == "desc" else col.asc())
+        file_rows = (await self.db.execute(file_q)).all()
+
+        # starred lookup
+        folder_ids = [r[0].folder_id for r in folder_rows]
+        file_ids = [r[0].file_id for r in file_rows]
+        starred_folders = await self._starred_folder_ids(user_id, folder_ids)
+        starred_files = await self._starred_file_ids(user_id, file_ids)
+
+        # merge: folders first, then files
+        all_items: list[ContentItem] = []
+        for folder, uname in folder_rows:
+            all_items.append(self._to_folder_item(folder, uname, folder.folder_id in starred_folders))
+        for f, uname in file_rows:
+            all_items.append(self._to_file_item(f, uname, f.file_id in starred_files))
+
+        total = len(all_items)
+        per_page = query.per_page
+        offset = (query.page - 1) * per_page
+        page_items = all_items[offset : offset + per_page]
+
+        return self._paginate(page_items, total, query.page, per_page)
+
+    async def list_folders(self, *, user_id: int, parent_id: str | None, page: int, per_page: int) -> PaginatedData[FolderItem]:
+        base = (
+            select(Folder, User.username)
+            .join(User, User.user_id == Folder.owner_id)
+            .where(and_(Folder.owner_id == user_id, Folder.status == FolderStatus.ACTIVE))
+        )
+        if parent_id:
+            pid = self._parse_id(parent_id, "parentId")
+            base = base.where(Folder.parent_folder_id == pid)
+
+        base = base.order_by(Folder.folder_name.asc())
+        total = await self.db.scalar(select(func.count()).select_from(base.subquery()))
+        total = total or 0
+
+        offset = (page - 1) * per_page
+        rows = (await self.db.execute(base.offset(offset).limit(per_page))).all()
+
+        starred = await self._starred_folder_ids(user_id, [r[0].folder_id for r in rows])
+        items = [self._to_folder_item(folder, uname, folder.folder_id in starred) for folder, uname in rows]
+        return self._paginate(items, total, page, per_page)
+
+    async def get_folder_path(self, *, user_id: int, folder_id: int) -> FolderPathResponse:
+        path_items: list[PathItem] = []
+        current_id: int | None = folder_id
+
+        while current_id is not None:
+            folder = await self.db.scalar(
+                select(Folder).where(
+                    and_(Folder.folder_id == current_id, Folder.owner_id == user_id, Folder.status == FolderStatus.ACTIVE)
+                )
+            )
+            if folder is None:
+                raise ApiError(status_code=404, code=404, message="Folder not found")
+            path_items.append(PathItem(folder_id=str(folder.folder_id), name=folder.folder_name))
+            current_id = folder.parent_folder_id
+
+        path_items.reverse()
+        full_path = "/".join(item.name for item in path_items)
+        return FolderPathResponse(full_path=full_path, path_items=path_items)
+
+    async def get_folder_size(self, *, user_id: int, folder_id: int) -> FolderSizeResponse:
+        await self._ensure_folder_access(user_id, folder_id)
+
+        # Recursive CTE to collect all descendant folder IDs
+        cte = (
+            select(Folder.folder_id)
+            .where(and_(Folder.folder_id == folder_id, Folder.status == FolderStatus.ACTIVE))
+            .cte(name="descendants", recursive=True)
+        )
+        cte = cte.union_all(
+            select(Folder.folder_id).where(
+                and_(Folder.parent_folder_id == cte.c.folder_id, Folder.status == FolderStatus.ACTIVE)
+            )
+        )
+
+        all_folder_ids = select(cte.c.folder_id)
+
+        total_size = await self.db.scalar(
+            select(func.coalesce(func.sum(File.file_size), 0)).where(
+                and_(File.folder_id.in_(all_folder_ids), File.status == FileStatus.ACTIVE, File.is_latest.is_(True))
+            )
+        )
+        file_count = await self.db.scalar(
+            select(func.count()).where(
+                and_(File.folder_id.in_(all_folder_ids), File.status == FileStatus.ACTIVE, File.is_latest.is_(True))
+            )
+        )
+        folder_count = await self.db.scalar(select(func.count()).select_from(all_folder_ids.subquery()))
+        # exclude the folder itself from count
+        folder_count = max(0, (folder_count or 0) - 1)
+
+        return FolderSizeResponse(
+            total_size=total_size or 0,
+            file_count=file_count or 0,
+            folder_count=folder_count,
+        )
+
+    async def move_folder(
+        self, *, user_id: int, folder_id: str, payload: MoveFolderRequest,
+    ) -> MoveFolderResponse:
+        mover = FileService(db=self.db)
+        moved = await mover._move_folder_record(
+            user_id=user_id,
+            folder_id=folder_id,
+            target_parent_id=payload.target_parent_id,
+            share_handling=payload.share_handling,
+        )
+        await self.db.commit()
+        return MoveFolderResponse(
+            folder_id=str(moved["folder_id"]),
+            target_parent_id=str(moved["target_parent_id"]),
+            final_name=str(moved["final_name"]),
+            share_handling=str(moved["share_handling"]),
+            revoked_share_count=int(moved["revoked_share_count"]),
+            moved_at=moved["moved_at"],
+        )
+
+    async def delete_folder(self, *, user_id: int, folder_id: str) -> DeleteFolderResponse:
+        deleter = FileService(db=self.db)
+        return await deleter.delete_folder(user_id=user_id, folder_id=folder_id)
+
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    async def _get_root_folder(self, user_id: int) -> Folder:
+        folder = await self.db.scalar(
+            select(Folder).where(
+                and_(
+                    Folder.owner_id == user_id,
+                    Folder.parent_folder_id.is_(None),
+                    Folder.folder_type == FolderType.ROOT,
+                    Folder.status == FolderStatus.ACTIVE,
+                )
+            )
+        )
+        if folder is None:
+            raise ApiError(status_code=404, code=404, message="Root folder not found")
+        return folder
+
+    async def _ensure_folder_access(self, user_id: int, folder_id: int) -> None:
+        exists = await self.db.scalar(
+            select(Folder.folder_id).where(
+                and_(Folder.folder_id == folder_id, Folder.owner_id == user_id, Folder.status == FolderStatus.ACTIVE)
+            )
+        )
+        if exists is None:
+            raise ApiError(status_code=404, code=404, message="Folder not found")
+
+    async def _starred_file_ids(self, user_id: int, file_ids: list[int]) -> set[int]:
+        if not file_ids:
+            return set()
+        return set(
+            await self.db.scalars(
+                select(FavoriteItem.file_id).where(
+                    and_(
+                        FavoriteItem.user_id == user_id,
+                        FavoriteItem.item_type == FavoriteItemType.FILE,
+                        FavoriteItem.file_id.in_(file_ids),
+                    )
+                )
+            )
+        )
+
+    async def _starred_folder_ids(self, user_id: int, folder_ids: list[int]) -> set[int]:
+        if not folder_ids:
+            return set()
+        return set(
+            await self.db.scalars(
+                select(FavoriteItem.folder_id).where(
+                    and_(
+                        FavoriteItem.user_id == user_id,
+                        FavoriteItem.item_type == FavoriteItemType.FOLDER,
+                        FavoriteItem.folder_id.in_(folder_ids),
+                    )
+                )
+            )
+        )
+
+    @staticmethod
+    def _parse_id(value: str, name: str) -> int:
+        try:
+            return int(value)
+        except ValueError as exc:
+            raise ApiError(status_code=400, code=400, message=f"Invalid {name}") from exc
+
+    @staticmethod
+    def _to_file_item(f: File, owner_name: str, is_starred: bool) -> FileItem:
+        return FileItem(
+            id=str(f.file_id),
+            name=f.file_name,
+            size=f.file_size,
+            mime_type=f.mime_type or "application/octet-stream",
+            owner_name=owner_name,
+            updated_at=f.updated_at,
+            created_at=f.created_at,
+            folder_id=str(f.folder_id),
+            permission="owner",
+            is_starred=is_starred,
+        )
+
+    @staticmethod
+    def _to_folder_item(folder: Folder, owner_name: str, is_starred: bool) -> FolderItem:
+        return FolderItem(
+            id=str(folder.folder_id),
+            name=folder.folder_name,
+            size=folder.cached_size,
+            owner_name=owner_name,
+            updated_at=folder.updated_at,
+            created_at=folder.created_at,
+            parent_folder_id=str(folder.parent_folder_id) if folder.parent_folder_id else None,
+            permission="owner",
+            is_starred=is_starred,
+        )
+
+    @staticmethod
+    def _paginate(items: list, total: int, page: int, per_page: int) -> PaginatedData:
+        total_pages = max(1, -(-total // per_page))
+        return PaginatedData(
+            items=items,
+            pagination=PaginationMeta(
+                total_items=total,
+                total_pages=total_pages,
+                per_page=per_page,
+                current_page=page,
+                has_prev=page > 1,
+                has_next=page < total_pages,
+            ),
+        )

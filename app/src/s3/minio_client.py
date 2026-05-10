@@ -165,3 +165,37 @@ class MinioObjectStorageClient:
         finally:
             await asyncio.to_thread(response.close)
             await asyncio.to_thread(response.release_conn)
+
+    async def iter_object_range(
+        self,
+        *,
+        object_key: str,
+        start: int,
+        end: int,
+        chunk_size: int = 1024 * 1024,
+    ) -> AsyncIterator[bytes]:
+        await self.ensure_bucket()
+
+        if start < 0 or end < start:
+            raise ValueError("Invalid byte range")
+
+        length = end - start + 1
+        response = await asyncio.to_thread(
+            self._client.get_object,
+            self.bucket_name,
+            object_key,
+            start,
+            length,
+        )
+        remaining = length
+        try:
+            while remaining > 0:
+                read_size = min(chunk_size, remaining)
+                chunk = await asyncio.to_thread(response.read, read_size)
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+        finally:
+            await asyncio.to_thread(response.close)
+            await asyncio.to_thread(response.release_conn)

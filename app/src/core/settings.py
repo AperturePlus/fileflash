@@ -91,8 +91,38 @@ class Settings(BaseSettings):
     worker_queue_group: str = Field(default="fileflash-workers", alias="WORKER_QUEUE_GROUP")
     worker_queue_block_ms: int = Field(default=5000, alias="WORKER_QUEUE_BLOCK_MS")
 
+    agent_enabled: bool = Field(default=False, alias="AGENT_ENABLED")
+    agent_queue_stream: str = Field(default="fileflash:agents", alias="AGENT_QUEUE_STREAM")
+    agent_queue_group: str = Field(default="fileflash-agents", alias="AGENT_QUEUE_GROUP")
+    agent_queue_block_ms: int = Field(default=5000, alias="AGENT_QUEUE_BLOCK_MS")
+    agent_worker_concurrency: int = Field(default=4, alias="AGENT_WORKER_CONCURRENCY")
+    agent_job_timeout_sec: int = Field(default=600, alias="AGENT_JOB_TIMEOUT_SEC")
+    agent_tool_timeout_sec: int = Field(default=30, alias="AGENT_TOOL_TIMEOUT_SEC")
+    agent_job_max_tokens: int = Field(default=50000, alias="AGENT_JOB_MAX_TOKENS")
+    agent_job_max_tool_calls: int = Field(default=100, alias="AGENT_JOB_MAX_TOOL_CALLS")
+    agent_compact_threshold: float = Field(default=0.75, alias="AGENT_COMPACT_THRESHOLD")
+    agent_user_daily_limit: int = Field(default=50, alias="AGENT_USER_DAILY_LIMIT")
+    agent_user_concurrent_limit: int = Field(default=2, alias="AGENT_USER_CONCURRENT_LIMIT")
+    agent_staging_ttl_sec: int = Field(default=86400, alias="AGENT_STAGING_TTL_SEC")
+    agent_sse_enabled: bool = Field(default=False, alias="AGENT_SSE_ENABLED")
+    agent_llm_provider: str = Field(default="anthropic", alias="AGENT_LLM_PROVIDER")
+    agent_llm_model: str = Field(default="claude-sonnet-4-6", alias="AGENT_LLM_MODEL")
+    agent_llm_api_key: str | None = Field(default=None, alias="AGENT_LLM_API_KEY")
+    agent_mcp_endpoints_raw: str = Field(default="[]", alias="AGENT_MCP_ENDPOINTS")
+
     ffmpeg_binary: str = Field(default="ffmpeg", alias="FFMPEG_BINARY")
     ffprobe_binary: str = Field(default="ffprobe", alias="FFPROBE_BINARY")
+
+    archive_preview_max_entries: int = Field(default=2000, alias="ARCHIVE_PREVIEW_MAX_ENTRIES")
+    archive_extract_max_entries: int = Field(default=20000, alias="ARCHIVE_EXTRACT_MAX_ENTRIES")
+    archive_extract_max_total_bytes: int = Field(
+        default=10 * 1024 * 1024 * 1024,
+        alias="ARCHIVE_EXTRACT_MAX_TOTAL_BYTES",
+    )
+    archive_extract_max_file_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        alias="ARCHIVE_EXTRACT_MAX_FILE_BYTES",
+    )
 
     @property
     def resolved_database_url(self) -> str:
@@ -140,6 +170,18 @@ class Settings(BaseSettings):
     @property
     def upload_session_ttl_seconds(self) -> int:
         return max(1, self.upload_session_ttl_hours) * 3600
+
+    @property
+    def agent_mcp_endpoints(self) -> tuple[str, ...]:
+        raw = self.agent_mcp_endpoints_raw.strip()
+        if not raw:
+            return ()
+        if raw.startswith("[") and raw.endswith("]"):
+            candidates = raw.strip("[]")
+            items = [item.strip().strip("'\"") for item in candidates.split(",")]
+        else:
+            items = [item.strip() for item in raw.split(",")]
+        return tuple(item for item in items if item)
 
 
 @lru_cache

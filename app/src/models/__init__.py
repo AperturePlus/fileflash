@@ -1,6 +1,13 @@
 from .base import Base
 from .tables import (
     Acl,
+    AgentActionLog,
+    AgentMcpServer,
+    AgentMemory,
+    AgentPlan,
+    AgentSkill,
+    AgentUserSetting,
+    AgentWorkSession,
     BackgroundJob,
     BatchDownloadTask,
     EmailVerificationToken,
@@ -31,6 +38,13 @@ from .tables import (
 
 __all__ = [
     "Acl",
+    "AgentActionLog",
+    "AgentMcpServer",
+    "AgentMemory",
+    "AgentPlan",
+    "AgentSkill",
+    "AgentUserSetting",
+    "AgentWorkSession",
     "Base",
     "BackgroundJob",
     "BatchDownloadTask",

@@ -23,6 +23,7 @@ const emit = defineEmits<{
   (event: 'cancelRename'): void;
   (event: 'sort', key: 'name' | 'size' | 'updatedAt'): void;
   (event: 'download', item: FileItem): void;
+  (event: 'extractArchive', item: FileItem): void;
   (event: 'startRename', item: ContentItem): void;
   (event: 'startMove', item: ContentItem): void;
   (event: 'startShare', item: ContentItem): void;
@@ -40,6 +41,16 @@ const onDragStart = (event: DragEvent, item: ContentItem) => {
 
 const onFolderDrop = (event: DragEvent, folder: FolderItem) => {
   emit('folderDrop', { event, folder });
+};
+
+const isArchiveFile = (file: FileItem) => {
+  const name = (file.name || '').toLowerCase();
+  return name.endsWith('.zip')
+    || name.endsWith('.7z')
+    || name.endsWith('.tar')
+    || name.endsWith('.tar.gz')
+    || name.endsWith('.tgz')
+    || name.endsWith('.gz');
 };
 </script>
 
@@ -106,6 +117,7 @@ const onFolderDrop = (event: DragEvent, folder: FolderItem) => {
           <template #content>
             <div class="item-menu">
               <button v-if="item.itemType === 'file'" @click="emit('download', item as FileItem)">Download</button>
+              <button v-if="item.itemType === 'file' && isArchiveFile(item as FileItem)" @click="emit('extractArchive', item as FileItem)">Extract...</button>
               <button @click="emit('startRename', item)">Rename</button>
               <button @click="emit('startMove', item)">Move</button>
               <button @click="emit('startShare', item)">Share</button>
@@ -174,6 +186,7 @@ const onFolderDrop = (event: DragEvent, folder: FolderItem) => {
           <template #content>
             <div class="item-menu">
               <button v-if="item.itemType === 'file'" @click="emit('download', item as FileItem)">Download</button>
+              <button v-if="item.itemType === 'file' && isArchiveFile(item as FileItem)" @click="emit('extractArchive', item as FileItem)">Extract...</button>
               <button @click="emit('startRename', item)">Rename</button>
               <button @click="emit('startMove', item)">Move</button>
               <button @click="emit('startShare', item)">Share</button>

@@ -85,6 +85,16 @@ export interface FolderItem {
    */
   export interface MoveFolderRequest {
     targetParentId: string;
+    shareHandling?: 'keep' | 'revoke';
+  }
+
+  export interface MoveFolderResponse {
+    folderId: string;
+    targetParentId: string;
+    finalName: string;
+    shareHandling: 'keep' | 'revoke';
+    revokedShareCount: number;
+    movedAt: string;
   }
 
   /**
@@ -391,6 +401,16 @@ export interface RenameFileRequest {
  */
 export interface MoveFileRequest {
   targetFolderId: string;
+  shareHandling?: 'keep' | 'revoke';
+}
+
+export interface MoveFileResponse {
+  fileId: string;
+  targetFolderId: string;
+  finalName: string;
+  shareHandling: 'keep' | 'revoke';
+  revokedShareCount: number;
+  movedAt: string;
 }
 
 /**
@@ -406,8 +426,34 @@ export interface CopyFileRequest {
  */
 export interface BatchFilesRequest {
   action: 'delete' | 'move' | 'copy';
-  fileIds: string[]; // 修改为 string[] 以保持一致性
-  targetFolderId?: string; // 修改为 string 以保持一致性
+  fileIds: string[];
+  folderIds?: string[];
+  targetFolderId?: string;
+  shareHandling?: 'keep' | 'revoke';
+}
+
+export interface BatchDownloadRequest {
+  fileIds: string[];
+  folderIds?: string[];
+}
+
+export interface BatchMoveItemResult {
+  itemType: 'file' | 'folder';
+  itemId: string;
+  success: boolean;
+  finalName?: string | null;
+  movedAt?: string | null;
+  message?: string | null;
+  shareHandling: 'keep' | 'revoke';
+  revokedShareCount: number;
+}
+
+export interface BatchFilesResponse {
+  processed: number;
+  action: 'delete' | 'move' | 'copy';
+  succeeded: number;
+  failed: number;
+  results: BatchMoveItemResult[];
 }
 
 /**
@@ -467,4 +513,80 @@ export interface GetAdminFilesRequest {
   sort?: 'name' | 'size' | 'createdAt' | 'updatedAt';
   order?: 'asc' | 'desc';
 }
+
+// --- Archive extract / preview ---
+
+export interface ArchiveEntry {
+  path: string;
+  isDir: boolean;
+  size: number;
+  compressedSize?: number;
+}
+
+export interface ArchivePreviewSummary {
+  totalEntries: number;
+  fileCount: number;
+  dirCount: number;
+  totalUncompressedBytes: number;
+  truncated: boolean;
+}
+
+export interface JobResultArchivePreview {
+  archive?: {
+    format: string;
+    fileName: string;
+  };
+  entries: ArchiveEntry[];
+  summary: ArchivePreviewSummary;
+  previewedAt?: string;
+}
+
+export interface ArchiveExtractRequest {
+  targetFolderId: string;
+  createSubfolder: boolean;
+  subfolderName?: string;
+  conflictStrategy?: 'rename' | 'overwrite' | 'skip';
+}
+
+export interface ArchiveExtractSummary {
+  extractedFiles: number;
+  extractedDirs: number;
+  skippedEntries: number;
+  totalBytes?: number;
+}
+
+export interface JobResultArchiveExtract {
+  archive?: {
+    format: string;
+    fileName: string;
+  };
+  summary: ArchiveExtractSummary;
+  extractedFolderId?: string;
+  extractedFolderName?: string;
+  extractedAt?: string;
+}
+
+export interface BackgroundJob<T = any> {
+  jobId: string;
+  taskType: string;
+  status: string;
+  agentPhase?: string | null;
+  priority: number;
+  payload: Record<string, any>;
+  result: T;
+  errorMessage?: string | null;
+  attempt: number;
+  maxAttempts: number;
+  scheduledAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  traceId?: string | null;
+  idempotencyKey?: string | null;
+  cancelRequestedAt?: string | null;
+  requestedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 

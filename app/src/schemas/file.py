@@ -9,6 +9,7 @@ from .common import CamelModel, PageQuery
 
 FileSortField = Literal["name", "size", "createdAt", "updatedAt"]
 SortOrder = Literal["asc", "desc"]
+ShareHandling = Literal["keep", "revoke"]
 
 
 class FileItem(CamelModel):
@@ -77,11 +78,15 @@ class RenameFolderRequest(CamelModel):
 
 class MoveFolderRequest(CamelModel):
     target_parent_id: str
+    share_handling: ShareHandling = "keep"
 
 
 class MoveFolderResponse(CamelModel):
     folder_id: str
     target_parent_id: str
+    final_name: str
+    share_handling: ShareHandling
+    revoked_share_count: int = Field(ge=0, default=0)
     moved_at: datetime
 
 
@@ -151,11 +156,15 @@ class RenameFileRequest(CamelModel):
 
 class MoveFileRequest(CamelModel):
     target_folder_id: str
+    share_handling: ShareHandling = "keep"
 
 
 class MoveFileResponse(CamelModel):
     file_id: str
     target_folder_id: str
+    final_name: str
+    share_handling: ShareHandling
+    revoked_share_count: int = Field(ge=0, default=0)
     moved_at: datetime
 
 
@@ -184,14 +193,34 @@ class DeleteFileResponse(CamelModel):
 
 class BatchFilesRequest(CamelModel):
     action: Literal["delete", "move", "copy"]
-    file_ids: list[str] = Field(min_length=1)
+    file_ids: list[str] = Field(default_factory=list)
+    folder_ids: list[str] = Field(default_factory=list)
     target_folder_id: str | None = None
+    share_handling: ShareHandling = "keep"
+
+
+class BatchDownloadRequest(CamelModel):
+    file_ids: list[str] = Field(default_factory=list)
+    folder_ids: list[str] = Field(default_factory=list)
+
+
+class BatchMoveItemResult(CamelModel):
+    item_type: Literal["file", "folder"]
+    item_id: str
+    success: bool
+    final_name: str | None = None
+    moved_at: datetime | None = None
+    message: str | None = None
+    share_handling: ShareHandling = "keep"
+    revoked_share_count: int = Field(ge=0, default=0)
 
 
 class BatchFilesResponse(CamelModel):
     processed: int = Field(ge=0)
     action: Literal["delete", "move", "copy"]
     succeeded: int = Field(ge=0)
+    failed: int = Field(ge=0, default=0)
+    results: list[BatchMoveItemResult] = Field(default_factory=list)
 
 
 class GetAdminFilesQuery(PageQuery):

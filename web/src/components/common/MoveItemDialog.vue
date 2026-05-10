@@ -1,20 +1,46 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import type { ContentItem, FolderItem } from '../../types/file';
 import { getFolderContents } from '../../api/folder';
 import FolderTreeNode from './FolderTreeNode.vue';
+import { ui } from '../../utils/ui';
 
 interface Props {
   isVisible: boolean;
   itemToMove: ContentItem | null;
+  itemCount?: number;
+  hasActiveShare?: boolean;
+  defaultShareHandling?: 'keep' | 'revoke';
+  enableShareHandling?: boolean;
+  title?: string;
+  prompt?: string;
+  confirmText?: string;
+  rootLabel?: string;
 }
 const props = defineProps<Props>();
 
-const emit = defineEmits(['close', 'confirm']);
+const emit = defineEmits<{
+  (event: 'close'): void;
+  (event: 'confirm', payload: { targetFolderId: string; shareHandling: 'keep' | 'revoke' }): void;
+}>();
 
 const rootFolders = ref<FolderItem[]>([]);
 const isLoading = ref(false);
 const selectedFolderId = ref<string | null>(null);
+const shareHandling = ref<'keep' | 'revoke'>('keep');
+
+const modalTitle = computed(() => {
+  if (props.title) return props.title;
+  const count = props.itemCount || (props.itemToMove ? 1 : 0);
+  if (count <= 1 && props.itemToMove) return `Move '${props.itemToMove.name}'`;
+  if (count > 1) return `Move ${count} items`;
+  return 'Move';
+});
+
+const promptText = computed(() => props.prompt || 'Choose a new location:');
+const confirmButtonText = computed(() => props.confirmText || 'Move Here');
+const rootText = computed(() => props.rootLabel || 'My Files (Root)');
+const showShareHandling = computed(() => props.enableShareHandling !== false && Boolean(props.hasActiveShare));
 
 const fetchRootFolders = async () => {
   if (rootFolders.value.length > 0) return; // Don't re-fetch if already loaded
@@ -46,6 +72,7 @@ onMounted(() => {
 watch(() => props.isVisible, (newValue) => {
   if (newValue) {
     selectedFolderId.value = null;
+    shareHandling.value = props.defaultShareHandling || 'keep';
   }
 });
 
@@ -55,10 +82,13 @@ const handleSelectFolder = (folderId: string) => {
 
 const handleConfirm = () => {
   if (!selectedFolderId.value) {
-    alert('Please select a destination folder.');
+    ui.toast({ type: 'warning', message: 'Please select a destination folder.' });
     return;
   }
-  emit('confirm', selectedFolderId.value);
+  emit('confirm', {
+    targetFolderId: selectedFolderId.value,
+    shareHandling: showShareHandling.value ? shareHandling.value : 'keep',
+  });
 };
 
 </script>
@@ -68,11 +98,22 @@ const handleConfirm = () => {
     <div v-if="isVisible" class="modal-overlay" @click.self="$emit('close')">
       <div class="modal-dialog">
         <header class="modal-header">
-          <h3 class="modal-title">Move '{{ itemToMove?.name }}'</h3>
+          <h3 class="modal-title">{{ modalTitle }}</h3>
           <button class="modal-close" @click="$emit('close')">&times;</button>
         </header>
         <div class="modal-body">
-          <p class="prompt">Choose a new location:</p>
+          <p class="prompt">{{ promptText }}</p>
+          <div v-if="showShareHandling" class="share-options">
+            <div class="share-label">Shared Link Handling</div>
+            <label>
+              <input v-model="shareHandling" type="radio" value="keep" />
+              <span>Keep active share links</span>
+            </label>
+            <label>
+              <input v-model="shareHandling" type="radio" value="revoke" />
+              <span>Revoke active share links after move</span>
+            </label>
+          </div>
           <div class="folder-tree-container">
             <div v-if="isLoading" class="loading-indicator">Loading...</div>
             <div v-else-if="rootFolders.length === 0" class="empty-state">No folders available.</div>
@@ -82,7 +123,7 @@ const handleConfirm = () => {
                 :class="{ 'selected': selectedFolderId === 'root' }"
                 @click="handleSelectFolder('root')"
               >
-                My Files (Root)
+                {{ rootText }}
               </div>
               <FolderTreeNode
                 v-for="folder in rootFolders"
@@ -96,7 +137,7 @@ const handleConfirm = () => {
         </div>
         <footer class="modal-footer">
           <button class="btn btn-secondary" @click="$emit('close')">Cancel</button>
-          <button class="btn btn-primary" @click="handleConfirm" :disabled="!selectedFolderId">Move Here</button>
+          <button class="btn btn-primary" @click="handleConfirm" :disabled="!selectedFolderId">{{ confirmButtonText }}</button>
         </footer>
       </div>
     </div>
@@ -161,6 +202,32 @@ const handleConfirm = () => {
 .prompt {
   margin-bottom: var(--spacing-md);
   color: var(--color-text-secondary);
+}
+
+.share-options {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-bg-primary);
+  padding: 10px 12px;
+  margin-bottom: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-label {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.share-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-primary);
+  cursor: pointer;
 }
 
 .folder-tree-container {

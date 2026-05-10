@@ -77,6 +77,26 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'scan_result_enum') THEN
         CREATE TYPE scan_result_enum AS ENUM ('pending', 'clean', 'infected', 'blocked', 'failed');
     END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_execution_policy_enum') THEN
+        CREATE TYPE agent_execution_policy_enum AS ENUM ('planOnly', 'confirm', 'autopilot');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_memory_scope_enum') THEN
+        CREATE TYPE agent_memory_scope_enum AS ENUM ('global', 'workspace', 'session');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_memory_kind_enum') THEN
+        CREATE TYPE agent_memory_kind_enum AS ENUM ('preference', 'fact', 'feedback', 'reference');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_skill_visibility_enum') THEN
+        CREATE TYPE agent_skill_visibility_enum AS ENUM ('global', 'private');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_mcp_visibility_enum') THEN
+        CREATE TYPE agent_mcp_visibility_enum AS ENUM ('system', 'private');
+    END IF;
 END
 $$;
 

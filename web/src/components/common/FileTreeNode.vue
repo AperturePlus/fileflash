@@ -108,7 +108,7 @@ const handleClick = () => {
       @dragleave="isDragOver = false"
     >
       <span v-if="isFolder" class="arrow" :class="{ expanded: isExpanded }">
-        {{ isExpanded ? '▼' : '►' }}
+        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
       </span>
       <span v-else class="arrow-placeholder"></span>
       <img :src="isFolder ? folderIcon : getIconForFile(node.name)" alt="" class="icon" />
@@ -142,6 +142,10 @@ const handleClick = () => {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.node-content:hover .icon {
+  transform: scale(1.05);
 }
 .node-content:hover {
   background-color: var(--color-bg-tertiary);
@@ -152,12 +156,21 @@ const handleClick = () => {
 }
 .arrow {
   width: 20px;
-  text-align: center;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-right: 4px;
+  color: var(--color-text-tertiary);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-/* .arrow.expanded {
+.arrow svg {
+  width: 16px;
+  height: 16px;
+}
+.arrow.expanded {
   transform: rotate(90deg);
-} */
+}
 .name {
   margin-left: 8px;
   white-space: nowrap;
@@ -181,3 +194,6 @@ const handleClick = () => {
   cursor: pointer;
 }
 </style> 
+
+
+

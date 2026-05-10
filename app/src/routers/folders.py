@@ -1,49 +1,76 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
-from ..core.deps import get_current_user, get_db
-from ..core.errors import api_success
+from ..core.deps import get_current_user, get_folder_service
+from ..core.errors import ApiError, api_success
 from ..models.tables_identity import User
-from ..schemas.file import CreateFolderRequest, FolderContentsQuery, FolderPathResponse, PathItem
-from ..services.folders import FolderService
+from ..schemas.file import GetFolderContentsQuery, MoveFolderRequest
+from ..services.folder import FolderService
 
 router = APIRouter(prefix="/folders", tags=["folders"])
 
 
-def get_folder_service(db=Depends(get_db)) -> FolderService:  # type: ignore[valid-type]
-    return FolderService(db=db)
-
-@router.post("")
-async def create_folder(
-    payload: CreateFolderRequest,
+@router.get("")
+async def list_folders(
+    parent_id: str | None = Query(None, alias="parentId"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=200, alias="perPage"),
     current_user: User = Depends(get_current_user),
     folder_service: FolderService = Depends(get_folder_service),
 ):
-    folder = await folder_service.create_folder(current_user=current_user, payload=payload)
-    return api_success(data=folder.model_dump(by_alias=True), message="Folder created successfully", code=201, status_code=201)
+    result = await folder_service.list_folders(
+        user_id=current_user.user_id,
+        parent_id=parent_id,
+        page=page,
+        per_page=per_page,
+    )
+    return api_success(data=result.model_dump(by_alias=True))
 
 
 @router.get("/root")
 async def get_root_contents(
-    query: FolderContentsQuery = Depends(),
+    sort: str | None = None,
+    order: str | None = None,
+    search: str | None = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=200, alias="perPage"),
     current_user: User = Depends(get_current_user),
     folder_service: FolderService = Depends(get_folder_service),
 ):
-    root_id = await folder_service.get_or_create_root_folder_id(owner_id=current_user.user_id)
-    data = await folder_service.list_folder_contents(current_user=current_user, folder_id=root_id, query=query)
-    return api_success(data=data.model_dump(by_alias=True), message="Folder contents fetched successfully")
+    query = GetFolderContentsQuery(
+        folder_id="0",
+        sort=sort,
+        order=order,
+        search=search,
+        page=page,
+        per_page=per_page,
+    )
+    result = await folder_service.get_root_contents(user_id=current_user.user_id, query=query)
+    return api_success(data=result.model_dump(by_alias=True))
 
 
 @router.get("/{folder_id}")
 async def get_folder_contents(
-    folder_id: int,
-    query: FolderContentsQuery = Depends(),
+    folder_id: str,
+    sort: str | None = None,
+    order: str | None = None,
+    search: str | None = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=200, alias="perPage"),
     current_user: User = Depends(get_current_user),
     folder_service: FolderService = Depends(get_folder_service),
 ):
-    data = await folder_service.list_folder_contents(current_user=current_user, folder_id=folder_id, query=query)
-    return api_success(data=data.model_dump(by_alias=True), message="Folder contents fetched successfully")
+    query = GetFolderContentsQuery(
+        folder_id=folder_id,
+        sort=sort,
+        order=order,
+        search=search,
+        page=page,
+        per_page=per_page,
+    )
+    result = await folder_service.get_folder_contents(user_id=current_user.user_id, query=query)
+    return api_success(data=result.model_dump(by_alias=True))
 
 
 @router.get("/{folder_id}/path")
@@ -52,18 +79,49 @@ async def get_folder_path(
     current_user: User = Depends(get_current_user),
     folder_service: FolderService = Depends(get_folder_service),
 ):
-    # Minimal breadcrumb path. For root, return a single item.
-    if folder_id == "root":
-        root_id = await folder_service.get_or_create_root_folder_id(owner_id=current_user.user_id)
-        return api_success(
-            data=FolderPathResponse(
-                full_path="/My Files",
-                path_items=[PathItem(folder_id=None, name="My Files")],
-            ).model_dump(by_alias=True),
-            message="Folder path fetched successfully",
-        )
+    try:
+        fid = int(folder_id)
+    except ValueError as exc:
+        raise ApiError(status_code=400, code=400, message="Invalid folderId") from exc
 
-    # For non-root, build a simple path chain up to root.
-    path = await folder_service.get_folder_path(current_user_id=current_user.user_id, folder_id=int(folder_id))
-    return api_success(data=path.model_dump(by_alias=True), message="Folder path fetched successfully")
+    result = await folder_service.get_folder_path(user_id=current_user.user_id, folder_id=fid)
+    return api_success(data=result.model_dump(by_alias=True))
 
+
+@router.get("/{folder_id}/size")
+async def get_folder_size(
+    folder_id: str,
+    current_user: User = Depends(get_current_user),
+    folder_service: FolderService = Depends(get_folder_service),
+):
+    try:
+        fid = int(folder_id)
+    except ValueError as exc:
+        raise ApiError(status_code=400, code=400, message="Invalid folderId") from exc
+
+    result = await folder_service.get_folder_size(user_id=current_user.user_id, folder_id=fid)
+    return api_success(data=result.model_dump(by_alias=True))
+
+
+@router.patch("/{folder_id}/move")
+async def move_folder(
+    folder_id: str,
+    payload: MoveFolderRequest,
+    current_user: User = Depends(get_current_user),
+    folder_service: FolderService = Depends(get_folder_service),
+):
+    result = await folder_service.move_folder(user_id=current_user.user_id, folder_id=folder_id, payload=payload)
+    return api_success(data=result.model_dump(by_alias=True), message="Folder moved successfully")
+
+
+@router.delete("/{folder_id}")
+async def delete_folder(
+    folder_id: str,
+    current_user: User = Depends(get_current_user),
+    folder_service: FolderService = Depends(get_folder_service),
+):
+    result = await folder_service.delete_folder(user_id=current_user.user_id, folder_id=folder_id)
+    return api_success(
+        data=result.model_dump(by_alias=True),
+        message="Folder moved to recycle bin successfully",
+    )
