@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -28,35 +29,39 @@ def build_api_payload(*, success: bool, code: int, message: str, data: Any = Non
 
 
 def api_success(data: Any = None, *, code: int = 200, message: str = "OK", status_code: int = 200) -> JSONResponse:
+    payload = build_api_payload(success=True, code=code, message=message, data=data)
     return JSONResponse(
         status_code=status_code,
-        content=build_api_payload(success=True, code=code, message=message, data=data),
+        content=jsonable_encoder(payload),
     )
 
 
 async def api_error_handler(_request: Request, exc: ApiError) -> JSONResponse:
+    payload = build_api_payload(success=False, code=exc.code, message=exc.message, data=exc.data)
     return JSONResponse(
         status_code=exc.status_code,
-        content=build_api_payload(success=False, code=exc.code, message=exc.message, data=exc.data),
+        content=jsonable_encoder(payload),
     )
 
 
 async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
     message = str(exc.detail) if exc.detail else "HTTP error"
+    payload = build_api_payload(success=False, code=exc.status_code, message=message, data=None)
     return JSONResponse(
         status_code=exc.status_code,
-        content=build_api_payload(success=False, code=exc.status_code, message=message, data=None),
+        content=jsonable_encoder(payload),
     )
 
 
 async def validation_exception_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    payload = build_api_payload(
+        success=False,
+        code=422,
+        message="Validation failed",
+        data={"errors": exc.errors()},
+    )
     return JSONResponse(
         status_code=422,
-        content=build_api_payload(
-            success=False,
-            code=422,
-            message="Validation failed",
-            data={"errors": exc.errors()},
-        ),
+        content=jsonable_encoder(payload),
     )
 
