@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 import { useFileStore } from '../store/file';
+import { useSettingsStore } from '../store/settings';
 import { uploadFile, type UploadProgressData } from '../utils/uploader';
 import { eventBus } from '../utils/eventBus';
 import { ui } from '../utils/ui';
@@ -13,6 +14,7 @@ interface UploadTask {
 
 export function useUpload(currentFolderId: Ref<string | null>) {
   const fileStore = useFileStore();
+  const settingsStore = useSettingsStore();
   const uploadTasks = ref<UploadTask[]>([]);
   const isDragging = ref(false);
   let dragCounter = 0;
@@ -60,6 +62,11 @@ export function useUpload(currentFolderId: Ref<string | null>) {
       const newFile = await uploadFile({
         file,
         parentId: currentFolderId.value || 'root',
+        chunkSize: Math.max(1, settingsStore.settings.chunkSize) * 1024 * 1024,
+        concurrency: Math.max(1, settingsStore.settings.maxConcurrentUploads),
+        maxRetries: settingsStore.settings.autoRetryFailedUploads
+          ? Math.max(1, settingsStore.settings.retryAttempts)
+          : 1,
         onUploadProgress: (progressData) => {
           const task = uploadTasks.value.find(t => t.id === taskId);
           if (task) task.progress = progressData;
@@ -84,18 +91,23 @@ export function useUpload(currentFolderId: Ref<string | null>) {
         fileStore.items.unshift(fileItem);
         
         // 显示成功提示
-        console.log(`文件 "${file.name}" 上传成功！`);
+        if (settingsStore.settings.uploadCompleteNotification) {
+          ui.toast({ type: 'success', message: `Uploaded "${file.name}".` });
+        }
       } else {
         // If upload completes but no file data is returned (e.g. second upload),
         // refresh the folder to ensure consistency.
         await fileStore.fetchFolderContents(currentFolderId.value || 'root');
-        console.log(`文件 "${file.name}" 上传完成！`);
+        if (settingsStore.settings.uploadCompleteNotification) {
+          ui.toast({ type: 'success', message: `Uploaded "${file.name}".` });
+        }
       }
 
       eventBus.emit('refresh-file-tree');
     } catch (error) {
       console.error('Upload failed:', error);
-      ui.toast({ type: 'error', message: `Upload of ${file.name} failed.` });
+      const reason = error instanceof Error && error.message ? error.message : 'Unknown error';
+      ui.toast({ type: 'error', message: `Upload of ${file.name} failed: ${reason}` });
     } finally {
       setTimeout(() => {
         uploadTasks.value = uploadTasks.value.filter(t => t.id !== taskId);

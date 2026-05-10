@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useFileStore } from '../../store/file';
+import { useSettingsStore } from '../../store/settings';
 import { useFileSelection } from '../../composables/useFileSelection';
 import { useFileActions } from '../../composables/useFileActions';
 import { useBatchActions } from '../../composables/useBatchActions';
@@ -19,7 +20,9 @@ import { ui } from '../../utils/ui';
 import type { ContentItem, FileItem, FolderItem } from '../../types/file';
 
 const fileStore = useFileStore();
+const settingsStore = useSettingsStore();
 const { items, path, isLoading, currentFolderId } = storeToRefs(fileStore);
+const { settings } = storeToRefs(settingsStore);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const searchQuery = ref('');
@@ -76,6 +79,33 @@ const viewMode = ref<'grid' | 'list'>((localStorage.getItem('fileflash-view-mode
 watch(viewMode, (value) => {
   localStorage.setItem('fileflash-view-mode', value);
 });
+
+let autoRefreshTimer: number | null = null;
+
+const resetAutoRefreshTimer = () => {
+  if (autoRefreshTimer !== null) {
+    window.clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+
+  const seconds = Number(settings.value.autoRefreshInterval || 0);
+  if (seconds <= 0) {
+    return;
+  }
+
+  autoRefreshTimer = window.setInterval(() => {
+    const folderId = currentFolderId.value || 'root';
+    fileStore.fetchFolderContents(folderId);
+  }, seconds * 1000);
+};
+
+watch(
+  () => [settings.value.autoRefreshInterval, currentFolderId.value],
+  () => {
+    resetAutoRefreshTimer();
+  },
+  { immediate: true },
+);
 
 const displayItems = computed(() => {
   if (isSearching.value) {
@@ -210,6 +240,10 @@ onMounted(() => {
 onUnmounted(() => {
   eventBus.off('move-items', handleSidebarMove);
   eventBus.off('search-files', handleSearch);
+  if (autoRefreshTimer !== null) {
+    window.clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
 });
 </script>
 

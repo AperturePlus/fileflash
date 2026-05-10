@@ -2,6 +2,7 @@ import { nextTick, ref } from 'vue';
 import type { Ref } from 'vue';
 import type { ContentItem, FileItem, FolderItem } from '../types/file';
 import { useFileStore } from '../store/file';
+import { useSettingsStore } from '../store/settings';
 import { createFolder, deleteFolder, renameFolder } from '../api/folder';
 import { batchFiles, deleteFile, downloadFile, renameFile } from '../api/file';
 import { getShares } from '../api/share';
@@ -12,6 +13,7 @@ type ShareHandling = 'keep' | 'revoke';
 
 export function useFileActions(currentFolderId: Ref<string | null>) {
   const fileStore = useFileStore();
+  const settingsStore = useSettingsStore();
   const renamingItemId = ref<string | null>(null);
   const renameInputValue = ref('');
   const renameInput = ref<HTMLInputElement | null>(null);
@@ -87,13 +89,15 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
   };
 
   const handleDelete = async (item: ContentItem) => {
-    const confirmed = await ui.confirm({
-      title: 'Move To Trash',
-      message: `Move "${item.name}" to trash?`,
-      confirmText: 'Move',
-      danger: true,
-    });
-    if (!confirmed) return;
+    if (settingsStore.settings.confirmDelete) {
+      const confirmed = await ui.confirm({
+        title: 'Move To Trash',
+        message: `Move "${item.name}" to trash?`,
+        confirmText: 'Move',
+        danger: true,
+      });
+      if (!confirmed) return;
+    }
 
     try {
       if (item.itemType === 'folder') {

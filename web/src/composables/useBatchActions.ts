@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 import { batchDownloadFiles, batchFiles } from '../api/file';
 import { useFileStore } from '../store/file';
+import { useSettingsStore } from '../store/settings';
 import { ui } from '../utils/ui';
 
 export function useBatchActions(
@@ -8,6 +9,7 @@ export function useBatchActions(
   clearSelection: () => void,
 ) {
   const fileStore = useFileStore();
+  const settingsStore = useSettingsStore();
 
   const handleBatchDownload = async () => {
     if (selectedItems.value.size === 0) return;
@@ -49,13 +51,15 @@ export function useBatchActions(
   const handleBatchDelete = async () => {
     if (selectedItems.value.size === 0) return;
 
-    const confirmed = await ui.confirm({
-      title: 'Move To Trash',
-      message: `Move ${selectedItems.value.size} selected item(s) to trash?`,
-      confirmText: 'Move',
-      danger: true,
-    });
-    if (!confirmed) return;
+    if (settingsStore.settings.confirmDelete) {
+      const confirmed = await ui.confirm({
+        title: 'Move To Trash',
+        message: `Move ${selectedItems.value.size} selected item(s) to trash?`,
+        confirmText: 'Move',
+        danger: true,
+      });
+      if (!confirmed) return;
+    }
 
     const idsToDelete = Array.from(selectedItems.value);
     const selected = idsToDelete
