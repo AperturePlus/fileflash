@@ -25,6 +25,7 @@
 # Local agent / test caches
 /.tmp/
 /.uv-cache/
+.superpowers/
 
 docs/design
 .sandbox_*
