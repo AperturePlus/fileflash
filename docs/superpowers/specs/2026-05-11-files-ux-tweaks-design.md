@@ -32,14 +32,14 @@ Scope: `/files` page (MyFiles) — click semantics, preview surface, column resi
 
 ### New files
 
-- `web/src/composables/useFilePreview.ts` — `previewFile: Ref<FileItem | null>`, `openPreview(file, triggerEl?)`, `closePreview()`. Owns body-scroll lock and focus return. `onUnmounted` cleanup.
+- `web/src/composables/useFilePreview.ts` — `previewFile: Ref<FileItem | null>`, `openPreview(file)`, `closePreview()`. Owns body-scroll lock and focus return (captures `document.activeElement` at open time). `onUnmounted` cleanup.
 - `web/src/composables/useColumnResize.ts` — `colWidths: Reactive<{ name: number; size: number; time: number }>`, `onResizeStart(col, event)`. Initial values derived once from container width × default fr ratios. No persistence.
 - `web/src/composables/useNewFolderCancel.ts` — `install(tempId)` / `uninstall()`; attaches capture-phase `pointerdown` to `document`; emits `cancel + toast` when outside-click happens with empty `renameInputValue`.
 - `web/src/components/organisms/files/FilePreviewDialog.vue` — modal organism. Hosts `FileDetailPanel`. Handles ESC, overlay self-click, × button. Teleports to `body`.
 
 ### Extended
 
-- `web/src/composables/useFileSelection.ts` — adds `selectOnly(id)`, `toggleAdd(id)`, `selectRange(toId, items)`, `clear()`, plus `lastSelectedId: Ref<string | null>`. Existing `toggleSelection(id)` is kept for the checkbox path (does not update `lastSelectedId`).
+- `web/src/composables/useFileSelection.ts` — adds `toggleAdd(id)`, `selectRange(toId, items)`, `clear()`, plus `lastSelectedId: Ref<string | null>`. Existing `toggleSelection(id)` is kept for the checkbox path (does not update `lastSelectedId`).
 - `web/src/composables/useFileActions.ts` — `handleCreateFolder` now installs `useNewFolderCancel` after `startRename` and uninstalls in `cancelRename` / `finishRename` exit paths.
 - `web/src/store/file.ts` — `fetchFolderContents` clears `previewFile` (alongside the existing `selectedFile = null`). `selectedFile` remains for future "details summary in right sidebar"; not load-bearing for this work.
 - `web/src/components/atoms/icons.ts` — add `list` and `grid` entries.
@@ -48,12 +48,13 @@ Scope: `/files` page (MyFiles) — click semantics, preview surface, column resi
 - `web/src/components/organisms/files/FileTable.vue` — header gains 4px `resize-handle` between columns; list and grid view both use `var(--col-*)` for grid-template-columns; container `@click.self` emits `clear-selection`. Grid cards mirror the dblclick behavior.
 - `web/src/components/organisms/files/FileToolbar.vue` — view-mode SegmentedControl options switch to icon-only with `ariaLabel` for screen readers.
 - `web/src/pages/files/MyFiles.vue` — adopts `useFilePreview` / `useColumnResize`; splits `onItemClick` into `onItemSelect(item, modifiers)` and `onItemActivate(item)`; handles `clear-selection`. Adds `<FilePreviewDialog />` slot at page root (renders nothing when `previewFile === null`).
-- `web/src/components/templates/MainLayout.vue` — `rightVisible` becomes `ref(false)`. `toggleRight` still flips it; default state is hidden, sidebar body shows a placeholder string (no new component).
+- `web/src/components/templates/MainLayout.vue` — `rightVisible` becomes `ref(false)`. `toggleRight` still flips it; default state is hidden.
+- `web/src/components/organisms/shell/RightSidebar.vue` — stops mounting `FileDetailPanel`; renders a static placeholder div (`<aside><p class="rs-placeholder">Reserved for future use.</p></aside>`). The preview surface is now `FilePreviewDialog`; this sidebar is intentionally empty until a later phase fills it.
 - `web/src/i18n/messages.ts` — add `files.toolbar.aria.list`, `files.toolbar.aria.grid`, `files.toast.newFolderCanceled`, `files.preview.close`, `files.preview.title`.
 
 ### Removed / Deprecated
 
-- Nothing deleted. `RightSidebar.vue` retains its FileDetailPanel mount path but is not driven by `selectedFile` anymore.
+- Nothing on disk is deleted. `RightSidebar.vue` no longer references `FileDetailPanel` (the import goes away). `FileDetailPanel.vue` is still imported by `FilePreviewDialog`, so the file stays.
 
 ## Data Flow
 
@@ -61,23 +62,26 @@ Scope: `/files` page (MyFiles) — click semantics, preview surface, column resi
 
 ```
 FileRow @click(e)
-  ├─ stopPropagation
-  └─ emit('select', { item, modifiers: { shift: e.shiftKey, mod: e.ctrlKey || e.metaKey } })
+  ├─ stopPropagation                         // prevent container @click.self
+  └─ emit('select', { item, modifiers: { shift: e.shiftKey } })
 
 FileTable @click(e) (forwards FileRow events; container @click.self → 'clear-selection')
 
 MyFiles onItemSelect(item, modifiers)
   ├─ modifiers.shift && lastSelectedId  → selection.selectRange(item.id, displayItems)
-  ├─ modifiers.mod                       → selection.toggleAdd(item.id)
   └─ else                                → selection.toggleAdd(item.id)
-                                           (no destructive "selectOnly" by default —
-                                            user picked accumulative semantics)
+
+Note: in accumulative mode every plain click is additive — Ctrl/Cmd would be redundant,
+so we ignore them. Only Shift triggers different behavior (range). Removing modifier-not-used
+branches keeps the contract obvious.
 
 FileRow @dblclick → emit('activate', item)
 MyFiles onItemActivate(item)
   ├─ renaming?         → ignore (FileRow already short-circuits)
   ├─ folder            → fileStore.navigateToFolder(item.id)
-  └─ file              → useFilePreview.openPreview(item, e.currentTarget)
+  └─ file              → useFilePreview.openPreview(item)
+                         // useFilePreview captures document.activeElement internally
+                         // for focus restoration on close — caller passes no trigger.
 ```
 
 Checkbox path stays separate: `FileRow.row__check @change` → `emit('toggleSelect', id)` → `selection.toggleSelection(id)` (does not touch `lastSelectedId`).
@@ -85,14 +89,14 @@ Checkbox path stays separate: `FileRow.row__check @change` → `emit('toggleSele
 ### Preview
 
 ```
-openPreview(file, trigger?)
+openPreview(file)
+  ├─ lastTrigger = document.activeElement as HTMLElement | null   // capture before focus changes
   ├─ previewFile.value = null; await nextTick(); previewFile.value = file   // force re-watch
-  ├─ lastTrigger = trigger
   └─ document.body.style.overflow = 'hidden'
 
 FilePreviewDialog
   ├─ watches previewFile → renders overlay + FileDetailPanel when non-null
-  ├─ on mount: dialog.focus()
+  ├─ on mount / on become-non-null: dialog.focus()
   ├─ ESC keydown / overlay @click.self / × @click → emit('close') → closePreview()
   └─ on close: document.body.style.overflow = ''; lastTrigger?.focus()
 
@@ -203,7 +207,7 @@ interface SegmentedOption {
 
 | File | What it covers |
 |---|---|
-| `useFileSelection.spec.ts` (new) | `selectOnly` / `toggleAdd` / `selectRange` / `clear`; `lastSelectedId` updates; range without anchor degrades to toggleAdd; checkbox-toggle path does not move anchor. |
+| `useFileSelection.spec.ts` (new) | `toggleAdd` / `selectRange` / `clear`; `lastSelectedId` updates; range without anchor degrades to toggleAdd; checkbox-toggle path does not move anchor. |
 | `useFilePreview.spec.ts` (new) | `openPreview` sets preview + records trigger; second open of same file forces re-watch via null-tick; `closePreview` restores body overflow and focus. |
 | `useColumnResize.spec.ts` (new) | Initial widths derived from container; pointerdown→move→up updates value within clamp; visibilitychange triggers cleanup; min/max enforcement. |
 | `FileRow.spec.ts` (new) | Single click emits `select` with modifiers; `Shift`/`Ctrl`/`Meta` flags propagated; dblclick emits `activate`; renaming suppresses dblclick; checkbox change still emits `toggleSelect`. |
