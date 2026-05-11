@@ -9,3 +9,6 @@ export { default as StatBlock } from './StatBlock.vue';
 export { default as ProgressBar } from './ProgressBar.vue';
 export { default as BreadcrumbItem } from './BreadcrumbItem.vue';
 export { default as MenuItem } from './MenuItem.vue';
+export { default as Tab } from './Tab.vue';
+export { default as SegmentedControl } from './SegmentedControl.vue';
+export type { SegmentedOption } from './SegmentedControl.vue';
