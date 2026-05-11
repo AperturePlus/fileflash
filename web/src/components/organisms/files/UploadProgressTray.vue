@@ -2,7 +2,7 @@
 import { Bar, Text } from '../../atoms';
 
 export interface UploadTaskView {
-  id: string;
+  id: string | number;
   name: string;
   progress: { percentage: number };
 }

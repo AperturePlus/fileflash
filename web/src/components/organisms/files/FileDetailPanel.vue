@@ -296,7 +296,7 @@ const loadPreview = async () => {
         pdfDoc.value = await getDocument({
           data: raw,
           disableWorker: true,
-        }).promise;
+        } as Parameters<typeof getDocument>[0]).promise;
         pdfTotalPages.value = pdfDoc.value.numPages;
         isLoading.value = false;
         await nextTick();
