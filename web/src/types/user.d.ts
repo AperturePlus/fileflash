@@ -20,6 +20,7 @@ export interface User {
   role?: UserRole;
   status?: UserStatus;
   preference?: UserPreference;
+  avatar?: string | null;
 }
 
 export interface LoginResponse {
