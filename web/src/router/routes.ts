@@ -1,7 +1,20 @@
 import type { RouteRecordRaw } from 'vue-router';
 import MainLayout from '../components/layout/MainLayout.vue';
 
+// Dev-only library route: spreads into the routes array only when running under
+// `vite dev` (or `vite build` with mode=development). In production builds the
+// array is empty, so the chunk is dead-code-eliminated and the path won't match.
+const devRoutes: Array<RouteRecordRaw> = import.meta.env.DEV
+  ? [{
+      path: '/__dev/library',
+      name: 'DevLibrary',
+      component: () => import('../pages/__dev/index.ts'),
+      meta: { requiresAuth: false },
+    }]
+  : [];
+
 export const routes: Array<RouteRecordRaw> = [
+  ...devRoutes,
   {
     path: '/login',
     name: 'Login',
