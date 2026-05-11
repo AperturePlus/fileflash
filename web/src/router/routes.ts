@@ -20,7 +20,7 @@ export const routes: Array<RouteRecordRaw> = [
   ...devRoutes,
   {
     path: "/terms",
-    name: "TermsOfUse",
+    name: "TermsOfService",
     component: BareLayout,
     children: [
       { path: "", component: () => import("../pages/terms/index.ts") },
