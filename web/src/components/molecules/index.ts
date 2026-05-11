@@ -7,3 +7,5 @@ export { default as Badge } from './Badge.vue';
 export { default as Tag } from './Tag.vue';
 export { default as StatBlock } from './StatBlock.vue';
 export { default as ProgressBar } from './ProgressBar.vue';
+export { default as BreadcrumbItem } from './BreadcrumbItem.vue';
+export { default as MenuItem } from './MenuItem.vue';
