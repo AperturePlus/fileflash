@@ -34,3 +34,6 @@ docs/design
 app/artifacts/
 
 *design_backup*
+
+.playwright*
+.snow/
