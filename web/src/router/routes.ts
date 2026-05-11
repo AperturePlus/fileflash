@@ -19,6 +19,24 @@ const devRoutes: Array<RouteRecordRaw> = import.meta.env.DEV
 export const routes: Array<RouteRecordRaw> = [
   ...devRoutes,
   {
+    path: "/terms",
+    name: "TermsOfUse",
+    component: BareLayout,
+    children: [
+      { path: "", component: () => import("../pages/terms/index.ts") },
+    ],
+    meta: { requiresAuth: false },
+  },
+  {
+    path: "/privacy",
+    name: "PrivacyPolicy",
+    component: BareLayout,
+    children: [
+      { path: "", component: () => import("../pages/privacy/index.ts") },
+    ],
+    meta: { requiresAuth: false },
+  },
+  {
     path: "/login",
     name: "Login",
     component: AuthLayout,
