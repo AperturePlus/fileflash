@@ -5,3 +5,5 @@ export { default as TextField } from './TextField.vue';
 export { default as SearchField } from './SearchField.vue';
 export { default as Badge } from './Badge.vue';
 export { default as Tag } from './Tag.vue';
+export { default as StatBlock } from './StatBlock.vue';
+export { default as ProgressBar } from './ProgressBar.vue';
