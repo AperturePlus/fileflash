@@ -9,6 +9,7 @@ import { useBatchActions } from '../../composables/useBatchActions';
 import { useUpload } from '../../composables/useUpload';
 import { useFileSorting } from '../../composables/useFileSorting';
 import { useFileDragMove } from '../../composables/useFileDragMove';
+import { useFilePreview } from '../../composables/useFilePreview';
 import { toggleFileStar } from '../../api/file';
 import { toggleFolderStar } from '../../api/folder';
 import { useLocaleStore } from '../../store/locale';
@@ -28,15 +29,18 @@ const { settings } = storeToRefs(useSettingsStore());
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const searchQuery = ref(''); const isSearching = ref(false); const searchResults = ref<ContentItem[]>([]);
-const { selectedItems, isSelected, toggleSelection, selectedCount, clearSelection } = useFileSelection();
+const selection = useFileSelection();
+const { selectedItems, selectedCount, clear: clearSelection } = selection;
 const a = useFileActions(currentFolderId);
 const { handleBatchDownload, handleBatchDelete } = useBatchActions(selectedItems, clearSelection);
 const { uploadTasks, isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, handleFileSelect } = useUpload(currentFolderId);
 const { sortedItems, setSort, sortKey, sortDirection } = useFileSorting(items);
-const drag = useFileDragMove({ isSelected, selectedItems, handleBatchMove: a.handleBatchMove });
+const drag = useFileDragMove({ isSelected: selection.isSelected, selectedItems, handleBatchMove: a.handleBatchMove });
+const { openPreview } = useFilePreview();
 
 const viewMode = ref<'list' | 'grid'>((localStorage.getItem('fileflash-view-mode') as 'list' | 'grid') || 'list');
 watch(viewMode, (v) => localStorage.setItem('fileflash-view-mode', v));
+
 const displayItems = computed(() => isSearching.value
   ? [...searchResults.value].sort((x, y) => x.name.localeCompare(y.name))
   : sortedItems.value);
@@ -51,16 +55,33 @@ const onSearch = async (query: string) => {
 };
 const onSearchEvt = ({ query }: { query: string }) => onSearch(query);
 
-const onItemClick = (item: ContentItem) => {
+const onItemSelect = ({ item, modifiers }: { item: ContentItem; modifiers: { shift: boolean } }) => {
   if (a.renamingItemId.value === item.id) return;
-  if (item.itemType === 'folder') { isSearching.value = false; searchQuery.value = ''; searchResults.value = []; fileStore.navigateToFolder(item.id); return; }
-  fileStore.selectedFile = item;
+  if (modifiers.shift && selection.lastSelectedId.value) {
+    selection.selectRange(item.id, displayItems.value);
+  } else {
+    selection.toggleAdd(item.id);
+  }
 };
+
+const onItemActivate = (item: ContentItem) => {
+  if (a.renamingItemId.value === item.id) return;
+  if (item.itemType === 'folder') {
+    isSearching.value = false; searchQuery.value = ''; searchResults.value = [];
+    fileStore.navigateToFolder(item.id);
+    return;
+  }
+  fileStore.previewFile = item;
+  openPreview(item as FileItem);
+};
+
+const onClearSelection = () => selection.clear();
+
 const onToggleStar = async (item: ContentItem) => {
-  const t = !item.isStarred;
+  const next = !item.isStarred;
   try {
-    if (item.itemType === 'file') await toggleFileStar(item.id, t); else await toggleFolderStar(item.id, t);
-    const f = fileStore.items.find((e) => e.id === item.id); if (f) f.isStarred = t;
+    if (item.itemType === 'file') await toggleFileStar(item.id, next); else await toggleFolderStar(item.id, next);
+    const f = fileStore.items.find((e) => e.id === item.id); if (f) f.isStarred = next;
   } catch (e) { console.error('Failed to update star status', e); }
 };
 const navigateBC = (id: string) => { isSearching.value = false; searchQuery.value = ''; searchResults.value = []; fileStore.navigateToFolder(id); };
@@ -108,7 +129,8 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
         :renaming-id="a.renamingItemId.value" :rename-value="a.renameInputValue.value"
         :sort-key="sortKey" :sort-direction="sortDirection"
         @update:rename-value="a.renameInputValue.value = $event"
-        @toggle-select="toggleSelection" @click="onItemClick" @toggle-star="onToggleStar"
+        @toggle-select="selection.toggleSelection" @select="onItemSelect" @activate="onItemActivate"
+        @clear-selection="onClearSelection" @toggle-star="onToggleStar"
         @download="a.handleDownload" @extract-archive="(f: FileItem) => { fileToExtract = f; isExtractDialogVisible = true; }"
         @start-rename="a.startRename" @cancel-rename="a.cancelRename" @finish-rename="a.finishRename"
         @start-move="a.startMove" @start-share="a.startShare" @delete="a.handleDelete"
