@@ -28,8 +28,8 @@ const localeStore = useLocaleStore();
 const t = localeStore.t;
 
 const viewOptions = computed<SegmentedOption[]>(() => [
-  { value: 'list', label: t('files.toolbar.view.list') },
-  { value: 'grid', label: t('files.toolbar.view.grid') },
+  { value: 'list', label: '', icon: 'list', ariaLabel: t('files.toolbar.aria.list') },
+  { value: 'grid', label: '', icon: 'grid', ariaLabel: t('files.toolbar.aria.grid') },
 ]);
 
 const sortLabelMap = computed<Record<SortKey, string>>(() => ({

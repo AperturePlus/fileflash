@@ -11,10 +11,12 @@ const baseProps = {
 };
 
 describe('FileToolbar', () => {
-  it('emits update:viewMode when switcher toggled', async () => {
+  it('emits update:viewMode when icon segmented toggled', async () => {
     const wrapper = mount(FileToolbar, { props: baseProps });
     const options = wrapper.findAll('.ff-segmented-option');
     expect(options).toHaveLength(2);
+    expect(options[0].attributes('aria-label')).toBeTruthy();
+    expect(options[0].find('svg').exists()).toBe(true);
     await options[1].trigger('click');
     expect(wrapper.emitted('update:viewMode')?.[0]?.[0]).toBe('grid');
   });
