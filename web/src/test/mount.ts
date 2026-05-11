@@ -5,6 +5,7 @@
 
 import { mount as vtuMount, type MountingOptions } from '@vue/test-utils';
 import type { Component } from 'vue';
+import { createPinia } from 'pinia';
 
 export interface ThemeContext {
   theme?: 'dark' | 'light';
@@ -26,8 +27,16 @@ export function mount<TComponent extends Component>(
     if (context.accent) html.dataset.accent = context.accent;
     if (context.motion) html.dataset.motion = context.motion;
   }
+  const existingPlugins = rest.global?.plugins ?? [];
+  const nextOptions = {
+    ...rest,
+    global: {
+      ...rest.global,
+      plugins: [createPinia(), ...existingPlugins],
+    },
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return vtuMount(component as any, rest as any);
+  return vtuMount(component as any, nextOptions as any);
 }
 
 /** Read a CSS variable from the document root after mount. */

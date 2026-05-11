@@ -62,6 +62,7 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime)
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    avatar: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
