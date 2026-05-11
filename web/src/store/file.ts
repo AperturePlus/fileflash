@@ -11,10 +11,12 @@ export const useFileStore = defineStore('file', () => {
   const currentFolderId = ref<string | null>('root');
   const isLoading = ref(false);
   const selectedFile = ref<ContentItem | null>(null);
+  const previewFile = ref<ContentItem | null>(null);
 
   async function fetchFolderContents(folderId: string) {
     isLoading.value = true;
     selectedFile.value = null;
+    previewFile.value = null;
 
     try {
       const contentsPromise = getFolderContents({
@@ -75,6 +77,7 @@ export const useFileStore = defineStore('file', () => {
     currentFolderId,
     isLoading,
     selectedFile,
+    previewFile,
     fetchFolderContents,
     navigateToFolder,
     searchInFolder,
