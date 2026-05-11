@@ -9,3 +9,5 @@ export { default as Icon } from './Icon.vue';
 export type { IconName } from './icons';
 export { default as Spinner } from './Spinner.vue';
 export { default as Surface } from './Surface.vue';
+export { default as Input } from './Input.vue';
+export { default as Checkbox } from './Checkbox.vue';
