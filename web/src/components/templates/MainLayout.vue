@@ -7,16 +7,25 @@ import LeftSidebar from '../organisms/shell/LeftSidebar.vue';
 import RightSidebar from '../organisms/shell/RightSidebar.vue';
 import Footer from '../organisms/shell/Footer.vue';
 import Spinner from '../atoms/Spinner.vue';
+import FilePreviewDialog from '../organisms/files/FilePreviewDialog.vue';
+import type { FileItem } from '../../types/file';
 
 const fileStore = useFileStore();
-const { selectedFile } = storeToRefs(fileStore);
+const { previewFile } = storeToRefs(fileStore);
 
 const leftCollapsed = ref(false);
-const rightHidden = ref(false);
-const rightVisible = computed(() => !!selectedFile.value && !rightHidden.value);
+const rightVisible = ref(false);
+
+const previewForDialog = computed<FileItem | null>(() =>
+  previewFile.value && previewFile.value.itemType === 'file' ? (previewFile.value as FileItem) : null,
+);
 
 function toggleLeft() { leftCollapsed.value = !leftCollapsed.value; }
-function toggleRight() { if (selectedFile.value) rightHidden.value = !rightHidden.value; }
+function toggleRight() { rightVisible.value = !rightVisible.value; }
+function onClosePreview() {
+  fileStore.previewFile = null;
+  document.body.style.overflow = '';
+}
 </script>
 
 <template>
@@ -48,6 +57,7 @@ function toggleRight() { if (selectedFile.value) rightHidden.value = !rightHidde
       </main>
       <RightSidebar :visible="rightVisible" />
     </div>
+    <FilePreviewDialog :file="previewForDialog" @close="onClosePreview" />
   </div>
 </template>
 

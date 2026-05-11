@@ -1,25 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useFileStore } from '../../../store/file';
-import FileDetailPanel from '../files/FileDetailPanel.vue';
-
 defineProps<{ visible: boolean }>();
-
-const fileStore = useFileStore();
-
-const fileForPreview = computed(() => {
-  if (!fileStore.selectedFile || fileStore.selectedFile.itemType !== 'file') return null;
-  return fileStore.selectedFile;
-});
-
-const closeSidebar = () => {
-  fileStore.selectedFile = null;
-};
 </script>
 
 <template>
   <aside :class="['right-sidebar', { visible }]">
-    <FileDetailPanel :file="fileForPreview" @close="closeSidebar" />
+    <p class="right-sidebar__placeholder">Reserved for future use.</p>
   </aside>
 </template>
 
@@ -33,8 +18,12 @@ const closeSidebar = () => {
   flex-direction: column;
   transition: margin-right var(--mo-duration-mid) var(--mo-easing);
 }
-
 .right-sidebar.visible {
   margin-right: 0;
+}
+.right-sidebar__placeholder {
+  padding: var(--sp-md);
+  color: var(--text-dim);
+  font-size: var(--text-small);
 }
 </style>
