@@ -5,3 +5,5 @@ export { default as MonoNumber } from './MonoNumber.vue';
 export { default as Divider } from './Divider.vue';
 export { default as Bar } from './Bar.vue';
 export { default as Dot } from './Dot.vue';
+export { default as Icon } from './Icon.vue';
+export type { IconName } from './icons';
