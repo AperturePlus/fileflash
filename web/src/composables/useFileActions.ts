@@ -3,17 +3,20 @@ import type { Ref } from 'vue';
 import type { ContentItem, FileItem, FolderItem } from '../types/file';
 import { useFileStore } from '../store/file';
 import { useSettingsStore } from '../store/settings';
+import { useLocaleStore } from '../store/locale';
 import { createFolder, deleteFolder, renameFolder } from '../api/folder';
 import { batchFiles, deleteFile, downloadFile, renameFile } from '../api/file';
 import { getShares } from '../api/share';
 import { eventBus } from '../utils/eventBus';
 import { ui } from '../utils/ui';
+import { useNewFolderCancel } from './useNewFolderCancel';
 
 type ShareHandling = 'keep' | 'revoke';
 
 export function useFileActions(currentFolderId: Ref<string | null>) {
   const fileStore = useFileStore();
   const settingsStore = useSettingsStore();
+  const localeStore = useLocaleStore();
   const renamingItemId = ref<string | null>(null);
   const renameInputValue = ref('');
   const renameInput = ref<HTMLInputElement | null>(null);
@@ -28,6 +31,18 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
   const itemToShare = ref<ContentItem | null>(null);
   const isShareDialogVisible = ref(false);
 
+  const newFolderCancel = useNewFolderCancel({
+    renameInputValue,
+    onCancel: () => {
+      const tempId = renamingItemId.value;
+      if (tempId && tempId.startsWith('temp-new-folder')) {
+        fileStore.items = fileStore.items.filter((i) => i.id !== tempId);
+      }
+      cancelRename();
+      ui.toast({ type: 'info', message: localeStore.t('files.toast.newFolderCanceled') });
+    },
+  });
+
   const startRename = async (item: ContentItem) => {
     renamingItemId.value = item.id;
     renameInputValue.value = item.name;
@@ -39,6 +54,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     if (renamingItemId.value && renamingItemId.value.startsWith('temp-new-folder')) {
       fileStore.items = fileStore.items.filter((i) => i.id !== renamingItemId.value);
     }
+    newFolderCancel.uninstall();
     renamingItemId.value = null;
     renameInputValue.value = '';
     isRenaming.value = false;
@@ -248,6 +264,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     };
     fileStore.items.unshift(tempFolder);
     startRename(tempFolder);
+    newFolderCancel.install(tempId);
   };
 
   const startShare = (item: ContentItem) => {
