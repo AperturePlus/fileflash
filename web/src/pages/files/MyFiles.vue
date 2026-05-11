@@ -11,6 +11,7 @@ import { useFileSorting } from '../../composables/useFileSorting';
 import { useFileDragMove } from '../../composables/useFileDragMove';
 import { toggleFileStar } from '../../api/file';
 import { toggleFolderStar } from '../../api/folder';
+import { useLocaleStore } from '../../store/locale';
 import { EmptyState, FileTable, FileToolbar, BulkActionBar, UploadProgressTray } from '../../components/organisms/files';
 import Breadcrumb from '../../components/common/Breadcrumb.vue';
 import MoveItemDialog from '../../components/common/MoveItemDialog.vue';
@@ -20,6 +21,8 @@ import { eventBus } from '../../utils/eventBus';
 import type { ContentItem, FileItem } from '../../types/file';
 
 const fileStore = useFileStore();
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 const { items, path, isLoading, currentFolderId } = storeToRefs(fileStore);
 const { settings } = storeToRefs(useSettingsStore());
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -96,7 +99,7 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
     <UploadProgressTray :tasks="uploadTasks" />
 
     <div class="page__body">
-      <div v-if="isDragging" class="page__drag">Drop files to upload</div>
+      <div v-if="isDragging" class="page__drag">{{ t('files.drag.dropToUpload') }}</div>
       <EmptyState v-if="isLoading" variant="loading" />
       <EmptyState v-else-if="displayItems.length === 0 && isSearching" variant="no-results" :query="searchQuery" />
       <EmptyState v-else-if="displayItems.length === 0" variant="empty" />

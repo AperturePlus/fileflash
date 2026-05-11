@@ -127,7 +127,53 @@ export type LocaleKey =
   | 'settings.actions.title'
   | 'settings.actions.export'
   | 'settings.actions.import'
-  | 'settings.actions.reset';
+  | 'settings.actions.reset'
+  | 'files.toolbar.view.list'
+  | 'files.toolbar.view.grid'
+  | 'files.toolbar.searchTag'
+  | 'files.toolbar.searchPlaceholder'
+  | 'files.toolbar.clear'
+  | 'files.toolbar.sort'
+  | 'files.toolbar.sort.name'
+  | 'files.toolbar.sort.size'
+  | 'files.toolbar.sort.updated'
+  | 'files.toolbar.newFolder'
+  | 'files.toolbar.upload'
+  | 'files.empty.loading'
+  | 'files.empty.folderEmpty'
+  | 'files.empty.emptyHint'
+  | 'files.empty.noMatch'
+  | 'files.drag.dropToUpload'
+  | 'files.upload.queueTitle'
+  | 'files.bulk.selected'
+  | 'files.bulk.move'
+  | 'files.bulk.download'
+  | 'files.bulk.delete'
+  | 'files.bulk.clear'
+  | 'files.table.col.name'
+  | 'files.table.col.size'
+  | 'files.table.col.updated'
+  | 'files.table.aria.star'
+  | 'files.table.aria.unstar'
+  | 'files.table.aria.rowActions'
+  | 'files.table.aria.cardActions'
+  | 'files.action.download'
+  | 'files.action.extract'
+  | 'files.action.rename'
+  | 'files.action.move'
+  | 'files.action.share'
+  | 'files.action.delete'
+  | 'files.action.star'
+  | 'files.action.unstar'
+  | 'files.folder.loading'
+  | 'files.folder.noSubfolders'
+  | 'files.upload.toast.success'
+  | 'files.upload.toast.failed'
+  | 'files.upload.toast.unknownError'
+  | 'files.root.myFiles'
+  | 'files.owner.you'
+  | 'footer.termsOfService'
+  | 'footer.privacyPolicy';
 
 type LocaleMessages = Record<LocaleKey, string>;
 
@@ -262,6 +308,52 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'settings.actions.export': '导出设置',
     'settings.actions.import': '导入设置',
     'settings.actions.reset': '重置所有设置',
+    'files.toolbar.view.list': '列表',
+    'files.toolbar.view.grid': '网格',
+    'files.toolbar.searchTag': '搜索',
+    'files.toolbar.searchPlaceholder': '搜索当前文件夹',
+    'files.toolbar.clear': '清除',
+    'files.toolbar.sort': '排序',
+    'files.toolbar.sort.name': '名称',
+    'files.toolbar.sort.size': '大小',
+    'files.toolbar.sort.updated': '更新时间',
+    'files.toolbar.newFolder': '新建文件夹',
+    'files.toolbar.upload': '上传',
+    'files.empty.loading': '加载中',
+    'files.empty.folderEmpty': '此文件夹为空',
+    'files.empty.emptyHint': '上传文件或创建文件夹。',
+    'files.empty.noMatch': '未找到匹配项',
+    'files.drag.dropToUpload': '松开以上传文件',
+    'files.upload.queueTitle': '上传队列',
+    'files.bulk.selected': '已选',
+    'files.bulk.move': '移动',
+    'files.bulk.download': '下载',
+    'files.bulk.delete': '删除',
+    'files.bulk.clear': '清除',
+    'files.table.col.name': '名称',
+    'files.table.col.size': '大小',
+    'files.table.col.updated': '更新时间',
+    'files.table.aria.star': '标记收藏',
+    'files.table.aria.unstar': '取消收藏',
+    'files.table.aria.rowActions': '行操作',
+    'files.table.aria.cardActions': '卡片操作',
+    'files.action.download': '下载',
+    'files.action.extract': '解压',
+    'files.action.rename': '重命名',
+    'files.action.move': '移动',
+    'files.action.share': '分享',
+    'files.action.delete': '删除',
+    'files.action.star': '收藏',
+    'files.action.unstar': '取消收藏',
+    'files.folder.loading': '加载中...',
+    'files.folder.noSubfolders': '暂无子文件夹',
+    'files.upload.toast.success': '已上传 {fileName}。',
+    'files.upload.toast.failed': '上传 {fileName} 失败：{reason}',
+    'files.upload.toast.unknownError': '未知错误',
+    'files.root.myFiles': '我的文件',
+    'files.owner.you': '你',
+    'footer.termsOfService': '使用条款',
+    'footer.privacyPolicy': '隐私政策',
   },
   'en-US': {
     'common.language.zhCN': 'Simplified Chinese',
@@ -391,5 +483,51 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'settings.actions.export': 'Export Settings',
     'settings.actions.import': 'Import Settings',
     'settings.actions.reset': 'Reset All Settings',
+    'files.toolbar.view.list': 'List',
+    'files.toolbar.view.grid': 'Grid',
+    'files.toolbar.searchTag': 'Search',
+    'files.toolbar.searchPlaceholder': 'Search this folder',
+    'files.toolbar.clear': 'Clear',
+    'files.toolbar.sort': 'Sort',
+    'files.toolbar.sort.name': 'Name',
+    'files.toolbar.sort.size': 'Size',
+    'files.toolbar.sort.updated': 'Updated',
+    'files.toolbar.newFolder': 'New Folder',
+    'files.toolbar.upload': 'Upload',
+    'files.empty.loading': 'Loading',
+    'files.empty.folderEmpty': 'This folder is empty',
+    'files.empty.emptyHint': 'Upload files or create a folder.',
+    'files.empty.noMatch': 'No matches for',
+    'files.drag.dropToUpload': 'Drop files to upload',
+    'files.upload.queueTitle': 'Upload Queue',
+    'files.bulk.selected': 'Selected',
+    'files.bulk.move': 'Move',
+    'files.bulk.download': 'Download',
+    'files.bulk.delete': 'Delete',
+    'files.bulk.clear': 'Clear',
+    'files.table.col.name': 'Name',
+    'files.table.col.size': 'Size',
+    'files.table.col.updated': 'Updated',
+    'files.table.aria.star': 'Star',
+    'files.table.aria.unstar': 'Unstar',
+    'files.table.aria.rowActions': 'Row actions',
+    'files.table.aria.cardActions': 'Card actions',
+    'files.action.download': 'Download',
+    'files.action.extract': 'Extract',
+    'files.action.rename': 'Rename',
+    'files.action.move': 'Move',
+    'files.action.share': 'Share',
+    'files.action.delete': 'Delete',
+    'files.action.star': 'Star',
+    'files.action.unstar': 'Unstar',
+    'files.folder.loading': 'Loading...',
+    'files.folder.noSubfolders': 'No subfolders',
+    'files.upload.toast.success': 'Uploaded {fileName}.',
+    'files.upload.toast.failed': 'Upload of {fileName} failed: {reason}',
+    'files.upload.toast.unknownError': 'Unknown error',
+    'files.root.myFiles': 'My Files',
+    'files.owner.you': 'You',
+    'footer.termsOfService': 'Terms of Service',
+    'footer.privacyPolicy': 'Privacy Policy',
   },
 };
