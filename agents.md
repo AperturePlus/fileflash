@@ -39,7 +39,7 @@
 - Access Token:
   - 响应体返回 `token/tokenType/expiresIn/user`
   - 通过 `Authorization: Bearer <token>` 访问受保护接口
-  - 默认 TTL: 15 分钟
+  - 默认 TTL: 3 天
 - Refresh Token:
   - 仅放 `HttpOnly Cookie`（禁止放前端 localStorage/sessionStorage）
   - 服务端仅存 `refreshToken hash` 到 `user_session`
