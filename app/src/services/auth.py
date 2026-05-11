@@ -23,7 +23,14 @@ from ..models.tables_identity import EmailVerificationToken, PasswordResetToken,
 from ..models.tables_storage import File, Folder
 from ..schemas.auth import ForgotPasswordResponse, RegisterRequest, RegisterResponseData, TokenResponse
 from ..schemas.common import PaginatedData, PaginationMeta
-from ..schemas.user import ActivityItem, BreakdownDetail
+from ..schemas.user import (
+    ActivityItem,
+    BreakdownDetail,
+    UpdateAvatarRequest,
+    UpdateProfileRequest,
+    UpdateUserPreferenceRequest,
+    UserProfile,
+)
 from ..schemas.user import User as UserSchema
 from ..schemas.user import ChangePasswordRequest, GetActivityLogQuery, StorageStats
 from ..schemas.user import UserPreference as UserPreferenceSchema
@@ -463,6 +470,28 @@ class AuthService:
             updated_at=user.updated_at,
             last_login=user.last_login_at,
         )
+
+    async def update_avatar(self, *, user_id: int, payload: UpdateAvatarRequest) -> UserSchema:
+        async def _operation() -> UserSchema:
+            await apply_local_lock_timeout(self.db)
+            user = await self.db.scalar(select(User).where(User.user_id == user_id).with_for_update())
+            if user is None:
+                raise ApiError(status_code=404, code=404, message="User not found")
+
+            if payload.avatar is not None:
+                user.avatar = payload.avatar
+                user.updated_at = datetime.now(UTC)
+                await self.db.commit()
+
+            preference = await self._get_user_preference(user.user_id)
+            return self._to_user_schema(user=user, preference=preference)
+
+        try:
+            return await run_with_transaction_retry(self.db, _operation)
+        except Exception as exc:  # noqa: BLE001
+            if is_retryable_database_error(exc):
+                raise to_retryable_concurrency_error(exc) from exc
+            raise
 
     async def update_profile(
         self,

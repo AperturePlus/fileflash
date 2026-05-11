@@ -6,7 +6,7 @@ from ..core.deps import get_auth_service, get_current_user, get_settings_dep
 from ..core.errors import api_success
 from ..core.settings import Settings
 from ..models.tables_identity import User
-from ..schemas.user import ChangePasswordRequest, GetActivityLogQuery, UpdateProfileRequest, UpdateUserPreferenceRequest
+from ..schemas.user import ChangePasswordRequest, GetActivityLogQuery, UpdateAvatarRequest, UpdateProfileRequest, UpdateUserPreferenceRequest
 from ..services.auth import AuthService
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -34,6 +34,19 @@ async def update_profile(
         user_agent=request.headers.get("user-agent"),
     )
     return api_success(data=profile.model_dump(by_alias=True), message="Profile updated successfully")
+
+
+@router.put("/avatar")
+async def update_avatar(
+    payload: UpdateAvatarRequest,
+    current_user: User = Depends(get_current_user),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    user_schema = await auth_service.update_avatar(
+        user_id=current_user.user_id,
+        payload=payload,
+    )
+    return api_success(data=user_schema.model_dump(by_alias=True), message="Avatar updated successfully")
 
 
 @router.get("/preferences")

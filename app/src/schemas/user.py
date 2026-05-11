@@ -47,6 +47,10 @@ class UpdateProfileRequest(CamelModel):
     email: str | None = None
 
 
+class UpdateAvatarRequest(CamelModel):
+    avatar: str | None = None
+
+
 class UpdateUserPreferenceRequest(CamelModel):
     language: AppLanguage | None = None
 
