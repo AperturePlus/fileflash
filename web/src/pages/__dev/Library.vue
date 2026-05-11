@@ -2,10 +2,12 @@
 import { ref } from 'vue';
 import * as A from '../../components/atoms';
 import * as M from '../../components/molecules';
+import * as F from '../../components/organisms/files';
 
 const sections = [
   'Tokens', 'Atoms · Text', 'Atoms · Numbers', 'Atoms · Visual', 'Atoms · Form',
   'Molecules · Action', 'Molecules · Input', 'Molecules · Display', 'Molecules · Nav',
+  'Organisms · Files',
 ] as const;
 type Section = typeof sections[number];
 
@@ -32,6 +34,41 @@ const checked = ref(false);
 const radio = ref('a');
 const toggled = ref(false);
 const tab = ref(0);
+
+// Files organism demo state
+const filesViewMode = ref<'list' | 'grid'>('list');
+const filesSortKey = ref<'name' | 'size' | 'updatedAt'>('name');
+const filesSortDirection = ref<'asc' | 'desc'>('asc');
+const filesSearch = ref('');
+const filesSelection = ref(new Set<string>(['demo-a']));
+const filesRenamingId = ref<string | null>(null);
+const filesRenameValue = ref('');
+
+const demoItems = [
+  {
+    id: 'demo-a', name: 'README.md', itemType: 'file' as const,
+    size: 4321, mimeType: 'text/markdown', ownerName: 'demo',
+    createdAt: '2026-05-01T00:00:00Z', updatedAt: '2026-05-09T10:11:00Z',
+    folderId: 'root', isStarred: true,
+  },
+  {
+    id: 'demo-b', name: 'projects', itemType: 'folder' as const,
+    size: 0, ownerName: 'demo',
+    createdAt: '2026-05-01T00:00:00Z', updatedAt: '2026-05-08T08:00:00Z',
+    parentFolderId: null, isStarred: false,
+  },
+  {
+    id: 'demo-c', name: 'video.mp4', itemType: 'file' as const,
+    size: 12_500_000, mimeType: 'video/mp4', ownerName: 'demo',
+    createdAt: '2026-04-22T00:00:00Z', updatedAt: '2026-04-22T18:30:00Z',
+    folderId: 'root', isStarred: false,
+  },
+];
+
+const demoUpload = [
+  { id: 'u1', name: 'archive.zip', progress: { percentage: 64 } },
+  { id: 'u2', name: 'snapshot.png', progress: { percentage: 100 } },
+];
 
 const themeOpts = [
   { value: 'dark', label: 'Dark' },
@@ -219,6 +256,54 @@ const swatches = [
             <M.Avatar name="" />
           </div>
         </div>
+      </section>
+      <section v-if="activeSection === 'Organisms · Files'">
+        <A.Text as="h1" variant="h1">Organisms · Files</A.Text>
+
+        <A.Text variant="label">EmptyState · variants</A.Text>
+        <div class="grid">
+          <F.EmptyState variant="loading" />
+          <F.EmptyState variant="empty" />
+          <F.EmptyState variant="no-results" query="missing.pdf" />
+        </div>
+
+        <A.Text variant="label">UploadProgressTray</A.Text>
+        <F.UploadProgressTray :tasks="demoUpload" />
+
+        <A.Text variant="label">BulkActionBar</A.Text>
+        <F.BulkActionBar :count="filesSelection.size" @clear="filesSelection = new Set()" />
+
+        <A.Text variant="label">FileToolbar</A.Text>
+        <F.FileToolbar
+          :view-mode="filesViewMode"
+          :sort-key="filesSortKey"
+          :sort-direction="filesSortDirection"
+          :search-query="filesSearch"
+          :is-searching="filesSearch.length > 0"
+          @update:view-mode="filesViewMode = $event"
+          @update:search-query="filesSearch = $event"
+          @clear-search="filesSearch = ''"
+          @sort="(k) => filesSortKey = k"
+          @create-folder="() => {}"
+          @upload="() => {}"
+        />
+
+        <A.Text variant="label">FileTable · {{ filesViewMode }}</A.Text>
+        <F.FileTable
+          :mode="filesViewMode"
+          :items="demoItems"
+          :selection="filesSelection"
+          :renaming-id="filesRenamingId"
+          :rename-value="filesRenameValue"
+          :sort-key="filesSortKey"
+          :sort-direction="filesSortDirection"
+          @update:rename-value="filesRenameValue = $event"
+          @toggle-select="(id) => { const next = new Set(filesSelection); if (next.has(id)) next.delete(id); else next.add(id); filesSelection = next; }"
+          @start-rename="(item) => { filesRenamingId = item.id; filesRenameValue = item.name; }"
+          @cancel-rename="filesRenamingId = null"
+          @finish-rename="filesRenamingId = null"
+          @sort="(k) => filesSortKey = k"
+        />
       </section>
     </main>
   </div>
