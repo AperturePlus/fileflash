@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Bar, Text } from '../../atoms';
+import { useLocaleStore } from '../../../store/locale';
 
 export interface UploadTaskView {
   id: string | number;
@@ -8,12 +9,15 @@ export interface UploadTaskView {
 }
 
 defineProps<{ tasks: UploadTaskView[] }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 </script>
 
 <template>
   <section v-if="tasks.length > 0" class="tray">
     <header class="tray__head">
-      <Text variant="label">UPLOAD QUEUE — {{ tasks.length }}</Text>
+      <Text variant="label">{{ t('files.upload.queueTitle') }} — {{ tasks.length }}</Text>
     </header>
     <div class="tray__rows">
       <div v-for="task in tasks" :key="task.id" class="tray__row">

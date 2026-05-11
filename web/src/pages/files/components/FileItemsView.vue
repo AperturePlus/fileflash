@@ -40,6 +40,7 @@ const onDragStart = (event: DragEvent, item: ContentItem) => {
 };
 
 const onFolderDrop = (event: DragEvent, folder: FolderItem) => {
+  event.stopPropagation();
   emit('folderDrop', { event, folder });
 };
 
@@ -72,7 +73,7 @@ const isArchiveFile = (file: FileItem) => {
       draggable="true"
       @dragstart="onDragStart($event, item)"
       @click="emit('itemClick', item)"
-      @drop.prevent="item.itemType === 'folder' && onFolderDrop($event, item as FolderItem)"
+      @drop.stop.prevent="item.itemType === 'folder' && onFolderDrop($event, item as FolderItem)"
       @dragover.prevent
     >
       <div class="col checkbox" @click.stop>
@@ -144,7 +145,7 @@ const isArchiveFile = (file: FileItem) => {
       draggable="true"
       @dragstart="onDragStart($event, item)"
       @click="emit('itemClick', item)"
-      @drop.prevent="item.itemType === 'folder' && onFolderDrop($event, item as FolderItem)"
+      @drop.stop.prevent="item.itemType === 'folder' && onFolderDrop($event, item as FolderItem)"
       @dragover.prevent
     >
       <div class="grid-check" @click.stop>

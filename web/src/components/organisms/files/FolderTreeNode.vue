@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import type { FolderItem } from '../../../types/file';
 import { getFolderContents } from '../../../api/folder';
+import { useLocaleStore } from '../../../store/locale';
 
 const props = defineProps<{
   node: FolderItem;
@@ -9,6 +10,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(['select']);
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const isExpanded = ref(false);
 const children = ref<FolderItem[]>([]);
@@ -43,7 +46,7 @@ const toggleExpand = async () => {
       <span class="node-name">{{ node.name }}</span>
     </div>
     <div v-if="isExpanded" class="node-children">
-      <div v-if="isLoading" class="loading-text">Loading…</div>
+      <div v-if="isLoading" class="loading-text">{{ t('files.folder.loading') }}</div>
       <FolderTreeNode
         v-for="child in children"
         :key="child.id"
@@ -52,7 +55,7 @@ const toggleExpand = async () => {
         @select="(id) => emit('select', id)"
       />
       <div v-if="!isLoading && children.length === 0 && isExpanded" class="no-subfolders-text">
-        No subfolders
+        {{ t('files.folder.noSubfolders') }}
       </div>
     </div>
   </div>

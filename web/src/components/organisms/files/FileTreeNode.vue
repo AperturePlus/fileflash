@@ -4,6 +4,7 @@ import type { ContentItem } from '../../../types/file';
 import { getFolderContents } from '../../../api/folder';
 import { getIconForFile } from '../../../utils/fileIcons';
 import folderIcon from '../../../assets/generic/folder.svg';
+import { useLocaleStore } from '../../../store/locale';
 
 const props = defineProps<{
   node: ContentItem;
@@ -11,6 +12,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits(['drop-on-folder', 'navigate']);
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const isExpanded = ref(false);
 const isLoading = ref(false);
@@ -114,7 +117,7 @@ const handleClick = () => {
       <span class="name">{{ node.name }}</span>
     </div>
     <div v-if="isExpanded" class="node-children">
-      <div v-if="isLoading" class="loading-text" :style="{ 'padding-left': `${(level + 1) * 20}px` }">Loading…</div>
+      <div v-if="isLoading" class="loading-text" :style="{ 'padding-left': `${(level + 1) * 20}px` }">{{ t('files.folder.loading') }}</div>
       <FileTreeNode
         v-for="childNode in children"
         :key="childNode.id"

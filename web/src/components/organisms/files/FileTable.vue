@@ -5,6 +5,7 @@ import FileRow from './FileRow.vue';
 import DropdownMenu from '../../common/DropdownMenu.vue';
 import { getIconForFile } from '../../../utils/fileIcons';
 import type { ContentItem, FileItem, FolderItem } from '../../../types/file';
+import { useLocaleStore } from '../../../store/locale';
 
 type SortKey = 'name' | 'size' | 'updatedAt';
 
@@ -17,6 +18,9 @@ const props = defineProps<{
   sortKey: SortKey;
   sortDirection: 'asc' | 'desc';
 }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const emit = defineEmits<{
   (e: 'update:renameValue', v: string): void;
@@ -39,11 +43,11 @@ const emit = defineEmits<{
 const isSelected = (id: string) => props.selection.has(id);
 
 const sortIcon = computed(() => (props.sortDirection === 'asc' ? 'arrowUp' : 'arrowDown'));
-const sortable: Array<{ key: SortKey; label: string }> = [
-  { key: 'name', label: 'NAME' },
-  { key: 'size', label: 'SIZE' },
-  { key: 'updatedAt', label: 'UPDATED' },
-];
+const sortable = computed<Array<{ key: SortKey; label: string }>>(() => [
+  { key: 'name', label: t('files.table.col.name') },
+  { key: 'size', label: t('files.table.col.size') },
+  { key: 'updatedAt', label: t('files.table.col.updated') },
+]);
 
 const isArchiveFile = (f: FileItem) => {
   const n = (f.name || '').toLowerCase();
@@ -113,7 +117,7 @@ const isArchiveFile = (f: FileItem) => {
         class="card__star"
         :class="{ 'card__star--on': item.isStarred }"
         @click.stop="emit('toggleStar', item)"
-        :aria-label="item.isStarred ? 'Unstar' : 'Star'"
+        :aria-label="item.isStarred ? t('files.table.aria.unstar') : t('files.table.aria.star')"
       >
         <Icon name="star" :size="14" />
       </button>
@@ -139,22 +143,22 @@ const isArchiveFile = (f: FileItem) => {
       <div class="card__actions" @click.stop>
         <DropdownMenu>
           <template #trigger>
-            <button class="card__menu" aria-label="Card actions">…</button>
+            <button class="card__menu" :aria-label="t('files.table.aria.cardActions')">…</button>
           </template>
           <template #content>
             <div class="card__menu-list">
-              <button v-if="item.itemType === 'file'" @click="emit('download', item as FileItem)">Download</button>
+              <button v-if="item.itemType === 'file'" @click="emit('download', item as FileItem)">{{ t('files.action.download') }}</button>
               <button
                 v-if="item.itemType === 'file' && isArchiveFile(item as FileItem)"
                 @click="emit('extract-archive', item as FileItem)"
-              >Extract…</button>
-              <button @click="emit('start-rename', item)">Rename</button>
-              <button @click="emit('start-move', item)">Move</button>
-              <button @click="emit('start-share', item)">Share</button>
+              >{{ t('files.action.extract') }}…</button>
+              <button @click="emit('start-rename', item)">{{ t('files.action.rename') }}</button>
+              <button @click="emit('start-move', item)">{{ t('files.action.move') }}</button>
+              <button @click="emit('start-share', item)">{{ t('files.action.share') }}</button>
               <button @click="emit('toggleStar', item)">
-                {{ item.isStarred ? 'Unstar' : 'Star' }}
+                {{ item.isStarred ? t('files.action.unstar') : t('files.action.star') }}
               </button>
-              <button class="card__menu-danger" @click="emit('delete', item)">Delete</button>
+              <button class="card__menu-danger" @click="emit('delete', item)">{{ t('files.action.delete') }}</button>
             </div>
           </template>
         </DropdownMenu>

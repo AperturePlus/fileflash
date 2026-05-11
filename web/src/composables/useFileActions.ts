@@ -164,8 +164,17 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
       await fileStore.fetchFolderContents(currentFolderId.value || 'root');
       eventBus.emit('refresh-file-tree');
 
+      const firstError = result.results.find((item) => !item.success)?.message;
+      if (result.succeeded === 0) {
+        ui.toast({
+          type: 'error',
+          message: `Move failed. ${firstError || 'No items were moved.'}`,
+          duration: 4200,
+        });
+        return;
+      }
+
       if (result.failed > 0) {
-        const firstError = result.results.find((item) => !item.success)?.message;
         ui.toast({
           type: 'warning',
           message: `Moved ${result.succeeded}/${result.processed}. ${firstError || 'Some items failed.'}`,

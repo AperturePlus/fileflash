@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { Button, SearchField, SegmentedControl } from '../../molecules';
 import type { SegmentedOption } from '../../molecules';
+import { useLocaleStore } from '../../../store/locale';
 
 type SortKey = 'name' | 'size' | 'updatedAt';
 const SORT_ORDER: SortKey[] = ['name', 'size', 'updatedAt'];
@@ -23,10 +24,19 @@ const emit = defineEmits<{
   (e: 'upload'): void;
 }>();
 
-const viewOptions: SegmentedOption[] = [
-  { value: 'list', label: 'LIST' },
-  { value: 'grid', label: 'GRID' },
-];
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
+const viewOptions = computed<SegmentedOption[]>(() => [
+  { value: 'list', label: t('files.toolbar.view.list') },
+  { value: 'grid', label: t('files.toolbar.view.grid') },
+]);
+
+const sortLabelMap = computed<Record<SortKey, string>>(() => ({
+  name: t('files.toolbar.sort.name'),
+  size: t('files.toolbar.sort.size'),
+  updatedAt: t('files.toolbar.sort.updated'),
+}));
 
 const nextSortKey = computed<SortKey>(() => {
   const i = SORT_ORDER.indexOf(props.sortKey);
@@ -42,15 +52,15 @@ function onViewChange(v: string | number) { emit('update:viewMode', v as 'list' 
     <div class="toolbar__left">
       <slot name="breadcrumb" />
       <div v-if="isSearching" class="toolbar__search-tag">
-        <span>Search: "{{ searchQuery }}"</span>
-        <button class="toolbar__clear" @click="emit('clear-search')">CLEAR</button>
+        <span>{{ t('files.toolbar.searchTag') }}: "{{ searchQuery }}"</span>
+        <button class="toolbar__clear" @click="emit('clear-search')">{{ t('files.toolbar.clear') }}</button>
       </div>
     </div>
 
     <div class="toolbar__right">
       <SearchField
         :model-value="searchQuery"
-        placeholder="Search this folder"
+        :placeholder="t('files.toolbar.searchPlaceholder')"
         @update:model-value="emit('update:searchQuery', $event)"
       />
 
@@ -65,14 +75,14 @@ function onViewChange(v: string | number) { emit('update:viewMode', v as 'list' 
         class="toolbar__sort"
         @click="onSortClick"
       >
-        SORT · {{ sortKey.toUpperCase() }} {{ sortDirection === 'asc' ? '↑' : '↓' }}
+        {{ t('files.toolbar.sort') }} · {{ sortLabelMap[sortKey] }} {{ sortDirection === 'asc' ? '↑' : '↓' }}
       </button>
 
       <Button data-test="new-folder" icon="folderPlus" variant="ghost" @click="emit('create-folder')">
-        NEW FOLDER
+        {{ t('files.toolbar.newFolder') }}
       </Button>
       <Button data-test="upload" icon="upload" variant="primary" @click="emit('upload')">
-        UPLOAD
+        {{ t('files.toolbar.upload') }}
       </Button>
     </div>
   </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { MonoNumber } from '../../atoms';
 import { Button } from '../../molecules';
+import { useLocaleStore } from '../../../store/locale';
 
 defineProps<{ count: number }>();
 defineEmits<{
@@ -9,19 +10,22 @@ defineEmits<{
   (e: 'delete'): void;
   (e: 'clear'): void;
 }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 </script>
 
 <template>
   <div v-if="count > 0" class="bulk">
     <div class="bulk__count">
       <MonoNumber :value="count" accent />
-      <span class="bulk__label">SELECTED</span>
+      <span class="bulk__label">{{ t('files.bulk.selected') }}</span>
     </div>
     <div class="bulk__actions">
-      <Button data-test="bulk-move" variant="ghost" @click="$emit('move')">MOVE</Button>
-      <Button data-test="bulk-download" variant="ghost" @click="$emit('download')">DOWNLOAD</Button>
-      <Button data-test="bulk-delete" variant="danger" @click="$emit('delete')">DELETE</Button>
-      <Button data-test="bulk-clear" variant="ghost" @click="$emit('clear')">CLEAR</Button>
+      <Button data-test="bulk-move" variant="ghost" @click="$emit('move')">{{ t('files.bulk.move') }}</Button>
+      <Button data-test="bulk-download" variant="ghost" @click="$emit('download')">{{ t('files.bulk.download') }}</Button>
+      <Button data-test="bulk-delete" variant="danger" @click="$emit('delete')">{{ t('files.bulk.delete') }}</Button>
+      <Button data-test="bulk-clear" variant="ghost" @click="$emit('clear')">{{ t('files.bulk.clear') }}</Button>
     </div>
   </div>
 </template>

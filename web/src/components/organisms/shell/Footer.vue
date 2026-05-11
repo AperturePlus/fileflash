@@ -1,9 +1,16 @@
+<script setup lang="ts">
+import { useLocaleStore } from '../../../store/locale';
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+</script>
+
 <template>
   <footer class="app-footer">
     <p>&copy; {{ new Date().getFullYear() }} FileFlash. All rights reserved.</p>
     <div class="footer-links">
-      <a href="#">Terms of Service</a>
-      <a href="#">Privacy Policy</a>
+      <router-link to="/terms">{{ t('footer.termsOfUse') }}</router-link>
+      <router-link to="/privacy">{{ t('footer.privacyPolicy') }}</router-link>
     </div>
   </footer>
 </template>

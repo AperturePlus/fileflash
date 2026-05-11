@@ -1,26 +1,30 @@
 <script setup lang="ts">
 import { Icon, Spinner, Text } from '../../atoms';
+import { useLocaleStore } from '../../../store/locale';
 
 defineProps<{
   variant: 'loading' | 'empty' | 'no-results';
   query?: string;
 }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 </script>
 
 <template>
   <div class="empty-state" :data-variant="variant">
     <template v-if="variant === 'loading'">
       <Spinner />
-      <Text variant="label">LOADING</Text>
+      <Text variant="label">{{ t('files.empty.loading') }}</Text>
     </template>
     <template v-else-if="variant === 'empty'">
       <Icon name="folder" :size="32" />
-      <Text variant="body">This folder is empty</Text>
-      <Text variant="small">Upload files or create a folder.</Text>
+      <Text variant="body">{{ t('files.empty.folderEmpty') }}</Text>
+      <Text variant="small">{{ t('files.empty.emptyHint') }}</Text>
     </template>
     <template v-else>
       <Icon name="search" :size="32" />
-      <Text variant="body">No matches for "{{ query }}"</Text>
+      <Text variant="body">{{ t('files.empty.noMatch') }} "{{ query }}"</Text>
     </template>
   </div>
 </template>

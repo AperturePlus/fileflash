@@ -13,9 +13,9 @@ const baseProps = {
 describe('FileToolbar', () => {
   it('emits update:viewMode when switcher toggled', async () => {
     const wrapper = mount(FileToolbar, { props: baseProps });
-    const gridBtn = wrapper.findAll('.ff-segmented-option').find((b) => b.text() === 'GRID');
-    expect(gridBtn).toBeDefined();
-    await gridBtn!.trigger('click');
+    const options = wrapper.findAll('.ff-segmented-option');
+    expect(options).toHaveLength(2);
+    await options[1].trigger('click');
     expect(wrapper.emitted('update:viewMode')?.[0]?.[0]).toBe('grid');
   });
 

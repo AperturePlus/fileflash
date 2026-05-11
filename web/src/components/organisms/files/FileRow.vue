@@ -4,6 +4,7 @@ import { Icon } from '../../atoms';
 import DropdownMenu from '../../common/DropdownMenu.vue';
 import { getIconForFile } from '../../../utils/fileIcons';
 import type { ContentItem, FileItem, FolderItem } from '../../../types/file';
+import { useLocaleStore } from '../../../store/locale';
 
 const props = defineProps<{
   item: ContentItem;
@@ -11,6 +12,9 @@ const props = defineProps<{
   renaming: boolean;
   renameValue: string;
 }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const emit = defineEmits<{
   (e: 'update:renameValue', v: string): void;
@@ -84,7 +88,7 @@ const formatSize = (b: number) => `${(b / 1024).toFixed(1)} KB`;
       <button
         class="row__star"
         :class="{ 'row__star--on': item.isStarred }"
-        :aria-label="item.isStarred ? 'Unstar' : 'Star'"
+        :aria-label="item.isStarred ? t('files.table.aria.unstar') : t('files.table.aria.star')"
         @click.stop="emit('toggleStar', item)"
       >
         <Icon name="star" :size="14" />
@@ -101,22 +105,22 @@ const formatSize = (b: number) => `${(b / 1024).toFixed(1)} KB`;
     <div class="row__actions" @click.stop>
       <DropdownMenu>
         <template #trigger>
-          <button class="row__menu" aria-label="Row actions">…</button>
+          <button class="row__menu" :aria-label="t('files.table.aria.rowActions')">…</button>
         </template>
         <template #content>
           <div class="row__menu-list">
-            <button v-if="item.itemType === 'file'" @click="emit('download', item as FileItem)">Download</button>
+            <button v-if="item.itemType === 'file'" @click="emit('download', item as FileItem)">{{ t('files.action.download') }}</button>
             <button
               v-if="item.itemType === 'file' && isArchiveFile(item as FileItem)"
               @click="emit('extract-archive', item as FileItem)"
-            >Extract…</button>
-            <button @click="emit('start-rename', item)">Rename</button>
-            <button @click="emit('start-move', item)">Move</button>
-            <button @click="emit('start-share', item)">Share</button>
+            >{{ t('files.action.extract') }}…</button>
+            <button @click="emit('start-rename', item)">{{ t('files.action.rename') }}</button>
+            <button @click="emit('start-move', item)">{{ t('files.action.move') }}</button>
+            <button @click="emit('start-share', item)">{{ t('files.action.share') }}</button>
             <button @click="emit('toggleStar', item)">
-              {{ item.isStarred ? 'Unstar' : 'Star' }}
+              {{ item.isStarred ? t('files.action.unstar') : t('files.action.star') }}
             </button>
-            <button class="row__menu-danger" @click="emit('delete', item)">Delete</button>
+            <button class="row__menu-danger" @click="emit('delete', item)">{{ t('files.action.delete') }}</button>
           </div>
         </template>
       </DropdownMenu>
