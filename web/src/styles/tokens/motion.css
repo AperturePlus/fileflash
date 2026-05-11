@@ -1,0 +1,37 @@
+/* web/src/styles/tokens/motion.css
+ * Three motion presets:
+ *   - spring  (default): playful, slight overshoot, 200-280ms
+ *   - tight:             Linear/Cron style, 120-180ms ease-out
+ *   - reduced:           instant, no transition
+ *
+ * The hydration script in index.html resolves prefers-reduced-motion
+ * automatically and sets [data-motion="reduced"] on <html>.
+ */
+
+:root,
+[data-motion="spring"] {
+  --mo-duration-fast:  200ms;
+  --mo-duration-mid:   240ms;
+  --mo-duration-slow:  280ms;
+  --mo-easing:         cubic-bezier(0.34, 1.56, 0.64, 1);
+  --mo-press-scale:    0.94;
+  --mo-hover-bloom:    0 0 24px rgba(var(--ac-rgb), 0.4);
+}
+
+[data-motion="tight"] {
+  --mo-duration-fast:  120ms;
+  --mo-duration-mid:   140ms;
+  --mo-duration-slow:  180ms;
+  --mo-easing:         cubic-bezier(0.2, 0.8, 0.2, 1);
+  --mo-press-scale:    0.96;
+  --mo-hover-bloom:    none;
+}
+
+[data-motion="reduced"] {
+  --mo-duration-fast:  0ms;
+  --mo-duration-mid:   0ms;
+  --mo-duration-slow:  0ms;
+  --mo-easing:         linear;
+  --mo-press-scale:    1;
+  --mo-hover-bloom:    none;
+}
