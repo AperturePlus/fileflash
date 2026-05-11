@@ -55,4 +55,30 @@ describe('molecules/SegmentedControl', () => {
     expect(buttons[0].attributes('disabled')).toBeDefined();
     expect(buttons[1].attributes('disabled')).toBeDefined();
   });
+
+  it('renders <Icon> when option has icon set', () => {
+    const opts = [
+      { value: 'list', label: '', icon: 'list' as const, ariaLabel: 'List view' },
+      { value: 'grid', label: '', icon: 'grid' as const, ariaLabel: 'Grid view' },
+    ];
+    const w = mount(SegmentedControl, {
+      props: { modelValue: 'list', options: opts },
+    });
+    const buttons = w.findAll('button');
+    expect(buttons[0].find('svg').exists()).toBe(true);
+    expect(buttons[1].find('svg').exists()).toBe(true);
+  });
+
+  it('exposes ariaLabel as aria-label attribute', () => {
+    const opts = [
+      { value: 'list', label: '', icon: 'list' as const, ariaLabel: 'List view' },
+      { value: 'grid', label: '', icon: 'grid' as const, ariaLabel: 'Grid view' },
+    ];
+    const w = mount(SegmentedControl, {
+      props: { modelValue: 'list', options: opts },
+    });
+    const buttons = w.findAll('button');
+    expect(buttons[0].attributes('aria-label')).toBe('List view');
+    expect(buttons[1].attributes('aria-label')).toBe('Grid view');
+  });
 });
