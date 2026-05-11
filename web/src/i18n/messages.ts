@@ -139,6 +139,11 @@ export type LocaleKey =
   | 'files.toolbar.sort.updated'
   | 'files.toolbar.newFolder'
   | 'files.toolbar.upload'
+  | 'files.toolbar.aria.list'
+  | 'files.toolbar.aria.grid'
+  | 'files.toast.newFolderCanceled'
+  | 'files.preview.close'
+  | 'files.preview.title'
   | 'files.empty.loading'
   | 'files.empty.folderEmpty'
   | 'files.empty.emptyHint'
@@ -319,6 +324,11 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.toolbar.sort.updated': '更新时间',
     'files.toolbar.newFolder': '新建文件夹',
     'files.toolbar.upload': '上传',
+    'files.toolbar.aria.list': '列表视图',
+    'files.toolbar.aria.grid': '网格视图',
+    'files.toast.newFolderCanceled': '已取消新建文件夹',
+    'files.preview.close': '关闭预览',
+    'files.preview.title': '文件预览',
     'files.empty.loading': '加载中',
     'files.empty.folderEmpty': '此文件夹为空',
     'files.empty.emptyHint': '上传文件或创建文件夹。',
@@ -494,6 +504,11 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.toolbar.sort.updated': 'Updated',
     'files.toolbar.newFolder': 'New Folder',
     'files.toolbar.upload': 'Upload',
+    'files.toolbar.aria.list': 'List view',
+    'files.toolbar.aria.grid': 'Grid view',
+    'files.toast.newFolderCanceled': 'New folder canceled.',
+    'files.preview.close': 'Close preview',
+    'files.preview.title': 'File preview',
     'files.empty.loading': 'Loading',
     'files.empty.folderEmpty': 'This folder is empty',
     'files.empty.emptyHint': 'Upload files or create a folder.',
