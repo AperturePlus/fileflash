@@ -8,3 +8,4 @@ export { default as FileTreeNode } from './FileTreeNode.vue';
 export { default as FileToolbar } from './FileToolbar.vue';
 export { default as BulkActionBar } from './BulkActionBar.vue';
 export { default as FileDetailPanel } from './FileDetailPanel.vue';
+export { default as FilePreviewDialog } from './FilePreviewDialog.vue';
