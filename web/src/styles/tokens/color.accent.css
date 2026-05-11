@@ -1,0 +1,43 @@
+/* web/src/styles/tokens/color.accent.css
+ * User-switchable accent. --ac is the primary swatch.
+ * --ac-fg is the foreground color used on top of --ac (e.g. button text).
+ * --ac-rgb is the comma-separated RGB triplet for rgba() overlays.
+ */
+
+:root,
+[data-accent="lime"] {
+  --ac:     #B6FF3D;
+  --ac-rgb: 182, 255, 61;
+  --ac-fg:  #0E0E10;
+}
+
+[data-accent="amber"] {
+  --ac:     #FFB400;
+  --ac-rgb: 255, 180, 0;
+  --ac-fg:  #0E0E10;
+}
+
+[data-accent="oxide"] {
+  --ac:     #FF4F2C;
+  --ac-rgb: 255, 79, 44;
+  --ac-fg:  #FFFFFF;
+}
+
+/* Light theme: darker variants for WCAG AA contrast on light surfaces */
+[data-theme="light"][data-accent="lime"] {
+  --ac:     #5C9E00;
+  --ac-rgb: 92, 158, 0;
+  --ac-fg:  #FFFFFF;
+}
+
+[data-theme="light"][data-accent="amber"] {
+  --ac:     #B07700;
+  --ac-rgb: 176, 119, 0;
+  --ac-fg:  #FFFFFF;
+}
+
+[data-theme="light"][data-accent="oxide"] {
+  --ac:     #C43617;
+  --ac-rgb: 196, 54, 23;
+  --ac-fg:  #FFFFFF;
+}
