@@ -7,3 +7,5 @@ export { default as Bar } from './Bar.vue';
 export { default as Dot } from './Dot.vue';
 export { default as Icon } from './Icon.vue';
 export type { IconName } from './icons';
+export { default as Spinner } from './Spinner.vue';
+export { default as Surface } from './Surface.vue';
