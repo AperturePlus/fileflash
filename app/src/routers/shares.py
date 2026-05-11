@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from ..core.deps import get_client_ip, get_share_service, get_user_agent, get_current_user, require_verified_user
 from ..core.errors import api_success
+from ..core.http_headers import build_content_disposition
 from ..models.tables_identity import User
 from ..schemas.share import (
     AccessShareRequest,
@@ -149,7 +150,7 @@ async def download_shared_file(
         ip_address=client_ip,
         user_agent=user_agent,
     )
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    headers = {"Content-Disposition": build_content_disposition(filename, disposition="attachment")}
     return StreamingResponse(stream, media_type=content_type, headers=headers)
 
 
@@ -174,6 +175,6 @@ async def preview_shared_file(
         ip_address=client_ip,
         user_agent=user_agent,
     )
-    headers = {"Content-Disposition": f'inline; filename="{filename}"'}
+    headers = {"Content-Disposition": build_content_disposition(filename, disposition="inline")}
     return StreamingResponse(stream, media_type=content_type, headers=headers)
 

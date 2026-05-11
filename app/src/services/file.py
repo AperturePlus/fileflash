@@ -7,12 +7,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from datetime import timedelta
 from pathlib import Path
-from typing import AsyncIterator
+from typing import AsyncIterator, Literal
 
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
+from ..core.http_headers import build_content_disposition
+from ..core.mime import DEFAULT_MIME_TYPE, resolve_file_mime_type
 from ..db.transaction import (
     apply_local_lock_timeout,
     is_retryable_database_error,
@@ -134,7 +136,11 @@ class FileService:
             id=str(f.file_id),
             name=f.file_name,
             size=f.file_size,
-            mime_type=f.mime_type or "application/octet-stream",
+            mime_type=resolve_file_mime_type(
+                mime_type=f.mime_type,
+                file_ext=f.file_ext,
+                file_name=f.file_name,
+            ),
             owner_name=username,
             updated_at=f.updated_at,
             created_at=f.created_at,
@@ -222,6 +228,35 @@ class FileService:
         file_id: str,
         range_header: str | None,
     ) -> DownloadStreamResult:
+        return await self._get_file_stream(
+            user_id=user_id,
+            file_id=file_id,
+            range_header=range_header,
+            content_disposition="attachment",
+        )
+
+    async def get_preview_stream(
+        self,
+        *,
+        user_id: int,
+        file_id: str,
+        range_header: str | None,
+    ) -> DownloadStreamResult:
+        return await self._get_file_stream(
+            user_id=user_id,
+            file_id=file_id,
+            range_header=range_header,
+            content_disposition="inline",
+        )
+
+    async def _get_file_stream(
+        self,
+        *,
+        user_id: int,
+        file_id: str,
+        range_header: str | None,
+        content_disposition: Literal["attachment", "inline"],
+    ) -> DownloadStreamResult:
         if self.storage is None:
             raise ApiError(status_code=503, code=503, message="Object storage is unavailable")
 
@@ -234,10 +269,18 @@ class FileService:
         if object_size <= 0:
             raise ApiError(status_code=404, code=404, message="File content not found")
 
-        content_type = file_row.mime_type or storage_object.content_type or "application/octet-stream"
+        content_type = resolve_file_mime_type(
+            mime_type=file_row.mime_type or storage_object.content_type,
+            file_ext=file_row.file_ext,
+            file_name=file_row.file_name,
+            default=DEFAULT_MIME_TYPE,
+        )
         headers = {
             "Accept-Ranges": "bytes",
-            "Content-Disposition": self._build_attachment_header(file_row.file_name),
+            "Content-Disposition": self._build_content_disposition_header(
+                file_row.file_name,
+                disposition=content_disposition,
+            ),
         }
 
         byte_range = self._parse_range_header(range_header=range_header, file_size=object_size)
@@ -1565,8 +1608,15 @@ class FileService:
 
     @staticmethod
     def _build_attachment_header(filename: str) -> str:
-        escaped = filename.replace('"', '\\"')
-        return f'attachment; filename="{escaped}"'
+        return FileService._build_content_disposition_header(filename, disposition="attachment")
+
+    @staticmethod
+    def _build_content_disposition_header(
+        filename: str,
+        *,
+        disposition: Literal["attachment", "inline"],
+    ) -> str:
+        return build_content_disposition(filename, disposition=disposition)
 
     @staticmethod
     def _parse_id(raw: str, field_name: str) -> int:
@@ -1640,7 +1690,11 @@ class FileService:
             id=str(f.file_id),
             name=f.file_name,
             size=f.file_size,
-            mime_type=f.mime_type or "application/octet-stream",
+            mime_type=resolve_file_mime_type(
+                mime_type=f.mime_type,
+                file_ext=f.file_ext,
+                file_name=f.file_name,
+            ),
             owner_name=owner_name,
             updated_at=f.updated_at,
             created_at=f.created_at,

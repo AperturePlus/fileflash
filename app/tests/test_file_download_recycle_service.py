@@ -123,6 +123,159 @@ async def test_get_download_stream_rejects_invalid_range(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
+async def test_get_preview_stream_returns_inline_content_disposition(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    storage = DummyStorage()
+    service = FileService(db=session, storage=storage)
+
+    file_row = make_file_row(file_id=7, file_name="preview.bin")
+    file_row.storage_object_id = 99
+    storage_object = StorageObject(
+        object_id=99,
+        bucket_name="fileflash",
+        object_key="objects/u1/preview",
+        object_size=256,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="application/octet-stream",
+    )
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    session.get = AsyncMock(return_value=storage_object)
+
+    result = await service.get_preview_stream(
+        user_id=1,
+        file_id="7",
+        range_header=None,
+    )
+
+    assert result.status_code == 200
+    assert result.headers["Content-Disposition"] == 'inline; filename="preview.bin"; filename*=UTF-8\'\'preview.bin'
+    assert result.headers["Content-Length"] == "256"
+
+
+@pytest.mark.asyncio
+async def test_get_preview_stream_supports_single_range(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    storage = DummyStorage()
+    service = FileService(db=session, storage=storage)
+
+    file_row = make_file_row(file_id=7, file_name="preview.bin")
+    file_row.storage_object_id = 99
+    storage_object = StorageObject(
+        object_id=99,
+        bucket_name="fileflash",
+        object_key="objects/u1/preview",
+        object_size=256,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="application/octet-stream",
+    )
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    session.get = AsyncMock(return_value=storage_object)
+
+    result = await service.get_preview_stream(
+        user_id=1,
+        file_id="7",
+        range_header="bytes=10-19",
+    )
+
+    assert result.status_code == 206
+    assert result.headers["Content-Disposition"] == 'inline; filename="preview.bin"; filename*=UTF-8\'\'preview.bin'
+    assert result.headers["Content-Range"] == "bytes 10-19/256"
+    assert result.headers["Content-Length"] == "10"
+
+
+@pytest.mark.asyncio
+async def test_get_preview_stream_infers_video_content_type_from_extension(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    storage = DummyStorage()
+    service = FileService(db=session, storage=storage)
+
+    file_row = make_file_row(file_id=7, file_name="trailer.mp4")
+    file_row.file_ext = "mp4"
+    file_row.mime_type = "application/octet-stream"
+    file_row.storage_object_id = 99
+    storage_object = StorageObject(
+        object_id=99,
+        bucket_name="fileflash",
+        object_key="objects/u1/trailer",
+        object_size=256,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="application/octet-stream",
+    )
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    session.get = AsyncMock(return_value=storage_object)
+
+    result = await service.get_preview_stream(
+        user_id=1,
+        file_id="7",
+        range_header=None,
+    )
+
+    assert result.status_code == 200
+    assert result.content_type == "video/mp4"
+
+
+@pytest.mark.asyncio
+async def test_get_preview_stream_handles_unicode_filename_in_content_disposition(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    storage = DummyStorage()
+    service = FileService(db=session, storage=storage)
+
+    file_row = make_file_row(file_id=9, file_name="测试文档.pdf")
+    file_row.file_ext = "pdf"
+    file_row.mime_type = "application/pdf"
+    file_row.storage_object_id = 99
+    storage_object = StorageObject(
+        object_id=99,
+        bucket_name="fileflash",
+        object_key="objects/u1/cjk-pdf",
+        object_size=256,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="application/pdf",
+    )
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    session.get = AsyncMock(return_value=storage_object)
+
+    result = await service.get_preview_stream(
+        user_id=1,
+        file_id="9",
+        range_header=None,
+    )
+
+    assert result.status_code == 200
+    assert 'filename*=UTF-8\'\'' in result.headers["Content-Disposition"]
+    result.headers["Content-Disposition"].encode("latin-1")
+
+
+@pytest.mark.asyncio
+async def test_get_preview_stream_rejects_invalid_range(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    storage = DummyStorage()
+    service = FileService(db=session, storage=storage)
+
+    file_row = make_file_row(file_id=7, file_name="preview.bin")
+    file_row.storage_object_id = 99
+    storage_object = StorageObject(
+        object_id=99,
+        bucket_name="fileflash",
+        object_key="objects/u1/preview",
+        object_size=256,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="application/octet-stream",
+    )
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    session.get = AsyncMock(return_value=storage_object)
+
+    with pytest.raises(ApiError) as exc:
+        await service.get_preview_stream(
+            user_id=1,
+            file_id="7",
+            range_header="bytes=400-450",
+        )
+
+    assert exc.value.status_code == 416
+
+
+@pytest.mark.asyncio
 async def test_delete_file_marks_record_deleted(monkeypatch: pytest.MonkeyPatch):
     session = DummySession()
     service = FileService(db=session)
@@ -166,4 +319,3 @@ async def test_batch_files_delete_supports_files_and_folders(monkeypatch: pytest
     assert result.succeeded == 3
     assert result.failed == 0
     session.commit.assert_awaited_once()
-

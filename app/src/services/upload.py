@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
+from ..core.mime import DEFAULT_MIME_TYPE, resolve_file_mime_type
 from ..core.settings import Settings
 from ..db.transaction import (
     apply_local_lock_timeout,
@@ -56,6 +57,12 @@ class UploadService:
             await self._cleanup_expired_tasks(user_id=user_id)
 
             folder_id = await self._resolve_folder_id(user_id=user_id, parent_id=payload.parent_id)
+            resolved_mime_type = resolve_file_mime_type(
+                mime_type=payload.mime_type,
+                file_ext=self._extract_ext(payload.file_name),
+                file_name=payload.file_name,
+                default=DEFAULT_MIME_TYPE,
+            )
 
             storage_object = await self._find_storage_object(
                 object_hash=object_hash,
@@ -67,7 +74,7 @@ class UploadService:
                     user_id=user_id,
                     folder_id=folder_id,
                     file_name=payload.file_name,
-                    mime_type=payload.mime_type,
+                    mime_type=resolved_mime_type,
                     storage_object=storage_object,
                 )
                 await self.db.commit()
@@ -96,7 +103,7 @@ class UploadService:
                 user_id=user_id,
                 folder_id=folder_id,
                 file_name=payload.file_name,
-                mime_type=payload.mime_type,
+                mime_type=resolved_mime_type,
                 bucket_name=self.settings.object_storage_bucket,
                 object_key=self._build_object_key(user_id=user_id),
                 object_hash=object_hash,
@@ -230,6 +237,12 @@ class UploadService:
     ) -> MergeChunksResponse:
         async def _operation() -> MergeChunksResponse:
             object_hash, hash_algorithm = self._normalize_hash(payload.file_hash)
+            resolved_mime_type = resolve_file_mime_type(
+                mime_type=payload.mime_type,
+                file_ext=self._extract_ext(payload.file_name),
+                file_name=payload.file_name,
+                default=DEFAULT_MIME_TYPE,
+            )
             await apply_local_lock_timeout(self.db)
             task = await self._get_task_for_update(user_id=user_id, upload_id=upload_id)
             if task is None:
@@ -247,7 +260,12 @@ class UploadService:
                         file_id=str(completed.file_id),
                         file_name=completed.file_name,
                         file_size=int(completed.file_size),
-                        mime_type=completed.mime_type or "application/octet-stream",
+                        mime_type=resolve_file_mime_type(
+                            mime_type=completed.mime_type,
+                            file_ext=completed.file_ext,
+                            file_name=completed.file_name,
+                            default=DEFAULT_MIME_TYPE,
+                        ),
                         folder_id=str(completed.folder_id),
                         object_hash=task_object_hash,
                         created_at=completed.created_at,
@@ -375,7 +393,7 @@ class UploadService:
                     object_size=task.total_size,
                     etag=object_stat.etag or compose_result.etag,
                     version_id=compose_result.version_id,
-                    content_type=payload.mime_type,
+                    content_type=resolved_mime_type,
                     upload_status=UploadStatus.ACTIVE,
                 )
                 self.db.add(storage_object)
@@ -394,7 +412,7 @@ class UploadService:
                 folder_id=folder_id,
                 file_name=final_file_name,
                 file_ext=self._extract_ext(final_file_name),
-                mime_type=payload.mime_type,
+                mime_type=resolved_mime_type,
                 storage_object_id=storage_object.object_id,
                 file_size=task.total_size,
                 status=FileStatus.ACTIVE,
@@ -403,7 +421,7 @@ class UploadService:
             await self.db.flush()
 
             task.file_name = final_file_name
-            task.mime_type = payload.mime_type
+            task.mime_type = resolved_mime_type
             task.folder_id = folder_id
             task.object_hash = object_hash
             task.status = UploadTaskStatus.COMPLETED
@@ -421,7 +439,12 @@ class UploadService:
                 file_id=str(file_row.file_id),
                 file_name=file_row.file_name,
                 file_size=file_row.file_size,
-                mime_type=file_row.mime_type or "application/octet-stream",
+                mime_type=resolve_file_mime_type(
+                    mime_type=file_row.mime_type,
+                    file_ext=file_row.file_ext,
+                    file_name=file_row.file_name,
+                    default=DEFAULT_MIME_TYPE,
+                ),
                 folder_id=str(file_row.folder_id),
                 object_hash=object_hash,
                 created_at=file_row.created_at,
@@ -541,7 +564,7 @@ class UploadService:
         user_id: int,
         folder_id: int,
         file_name: str,
-        mime_type: str,
+        mime_type: str | None,
         storage_object: StorageObject,
     ) -> File:
         same_name = await self._find_conflict_file(user_id=user_id, folder_id=folder_id, file_name=file_name)
@@ -555,6 +578,12 @@ class UploadService:
                 folder_id=folder_id,
                 original_name=file_name,
             )
+        resolved_mime_type = resolve_file_mime_type(
+            mime_type=mime_type or storage_object.content_type,
+            file_ext=self._extract_ext(final_name),
+            file_name=final_name,
+            default=DEFAULT_MIME_TYPE,
+        )
 
         file_row = File(
             uploader_id=user_id,
@@ -562,7 +591,7 @@ class UploadService:
             folder_id=folder_id,
             file_name=final_name,
             file_ext=self._extract_ext(final_name),
-            mime_type=mime_type or storage_object.content_type,
+            mime_type=resolved_mime_type,
             storage_object_id=storage_object.object_id,
             file_size=storage_object.object_size,
             status=FileStatus.ACTIVE,

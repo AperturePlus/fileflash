@@ -6,6 +6,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
+from ..core.mime import resolve_file_mime_type
 from ..db.transaction import (
     apply_local_lock_timeout,
     is_retryable_database_error,
@@ -490,7 +491,11 @@ class FolderService:
             id=str(f.file_id),
             name=f.file_name,
             size=f.file_size,
-            mime_type=f.mime_type or "application/octet-stream",
+            mime_type=resolve_file_mime_type(
+                mime_type=f.mime_type,
+                file_ext=f.file_ext,
+                file_name=f.file_name,
+            ),
             owner_name=owner_name,
             updated_at=f.updated_at,
             created_at=f.created_at,

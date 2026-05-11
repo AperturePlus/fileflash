@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from src.models.tables_identity import User
 from src.routers.files import router as files_router
 from src.routers.folders import router as folders_router
 from src.schemas.file import FileDetails, FolderItem, RenameFileRequest
+from src.services.file import DownloadStreamResult
 
 
 def _make_file_details(*, name: str, is_starred: bool) -> FileDetails:
@@ -50,6 +52,40 @@ class StubFileService:
 
     async def toggle_file_star(self, *, user_id: int, file_id: str, is_starred: bool) -> FileDetails:  # noqa: ARG002
         return _make_file_details(name="demo.txt", is_starred=is_starred)
+
+    async def get_preview_stream(
+        self,
+        *,
+        user_id: int,  # noqa: ARG002
+        file_id: str,  # noqa: ARG002
+        range_header: str | None,
+    ) -> DownloadStreamResult:
+        async def _stream(content: bytes) -> AsyncIterator[bytes]:
+            yield content
+
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Disposition": 'inline; filename="demo.txt"',
+        }
+        if range_header:
+            headers["Content-Length"] = "4"
+            headers["Content-Range"] = "bytes 0-3/12"
+            return DownloadStreamResult(
+                stream=_stream(b"prev"),
+                filename="demo.txt",
+                content_type="text/plain",
+                status_code=206,
+                headers=headers,
+            )
+
+        headers["Content-Length"] = "12"
+        return DownloadStreamResult(
+            stream=_stream(b"preview-bytes"),
+            filename="demo.txt",
+            content_type="text/plain",
+            status_code=200,
+            headers=headers,
+        )
 
 
 class StubFolderService:
@@ -96,3 +132,13 @@ def test_patch_folder_star_route_returns_success() -> None:
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["isStarred"] is True
+
+
+def test_get_file_preview_route_returns_stream() -> None:
+    with _build_client() as client:
+        response = client.get("/api/v1/files/1/preview", headers={"Range": "bytes=0-3"})
+    assert response.status_code == 206
+    assert response.headers["content-disposition"] == 'inline; filename="demo.txt"'
+    assert response.headers["content-range"] == "bytes 0-3/12"
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.content == b"prev"

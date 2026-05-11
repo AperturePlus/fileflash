@@ -154,6 +154,26 @@ async def download_file(
     )
 
 
+@router.get("/{file_id}/preview")
+async def preview_file(
+    file_id: str,
+    range_header: str | None = Header(default=None, alias="Range"),
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    result = await file_service.get_preview_stream(
+        user_id=current_user.user_id,
+        file_id=file_id,
+        range_header=range_header,
+    )
+    return StreamingResponse(
+        result.stream,
+        media_type=result.content_type,
+        headers=result.headers,
+        status_code=result.status_code,
+    )
+
+
 @router.delete("/{file_id}")
 async def delete_file(
     file_id: str,

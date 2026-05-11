@@ -10,7 +10,7 @@ import pytest
 from src.core.errors import ApiError
 from src.core.settings import Settings
 from src.models.enums import UploadPartStatus, UploadTaskStatus
-from src.models.tables_storage import File, UploadTask, UploadTaskPart
+from src.models.tables_storage import File, StorageObject, UploadTask, UploadTaskPart
 from src.s3.minio_client import ObjectStat, ObjectStorageAuthError, ObjectWriteResult
 from src.schemas.file import MergeChunksRequest, UploadPreflightRequest
 from src.services.upload import UploadService
@@ -393,6 +393,57 @@ async def test_merge_allows_padded_task_hash(monkeypatch: pytest.MonkeyPatch):
 
     assert response.file_name == "report.txt"
     assert response.object_hash == "a" * 32
+
+
+@pytest.mark.asyncio
+async def test_merge_normalizes_generic_video_mime_on_write(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    task = UploadTask(
+        task_id=43,
+        user_id=6,
+        folder_id=1,
+        file_name="clip.mp4",
+        mime_type="application/octet-stream",
+        bucket_name="fileflash",
+        object_key="objects/u6/clip",
+        object_hash="f" * 64,
+        total_size=4,
+        chunk_size=2,
+        upload_id="upload-video-mime",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    parts = [
+        UploadTaskPart(task_id=43, part_number=0, part_size=2, status=UploadPartStatus.UPLOADED),
+        UploadTaskPart(task_id=43, part_number=1, part_size=2, status=UploadPartStatus.UPLOADED),
+    ]
+    session.scalars_queue = [parts]
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=1))
+    monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_find_storage_object", AsyncMock(return_value=None))
+    storage.compute_object_hash = AsyncMock(return_value="f" * 64)
+
+    response = await service.merge_chunks(
+        user_id=6,
+        upload_id="upload-video-mime",
+        payload=MergeChunksRequest(
+            fileHash="f" * 64,
+            fileName="clip.mp4",
+            mimeType="application/octet-stream",
+            parentId="1",
+        ),
+    )
+
+    created_file = next(obj for obj in session.added if isinstance(obj, File))
+    created_storage = next(obj for obj in session.added if isinstance(obj, StorageObject))
+
+    assert created_storage.content_type == "video/mp4"
+    assert created_file.mime_type == "video/mp4"
+    assert task.mime_type == "video/mp4"
+    assert response.mime_type == "video/mp4"
 
 
 @pytest.mark.asyncio
