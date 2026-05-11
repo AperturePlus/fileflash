@@ -19,7 +19,8 @@ const t = localeStore.t;
 const emit = defineEmits<{
   (e: 'update:renameValue', v: string): void;
   (e: 'toggleSelect', id: string): void;
-  (e: 'click', item: ContentItem): void;
+  (e: 'select', payload: { item: ContentItem; modifiers: { shift: boolean } }): void;
+  (e: 'activate', item: ContentItem): void;
   (e: 'toggleStar', item: ContentItem): void;
   (e: 'download', item: FileItem): void;
   (e: 'extract-archive', item: FileItem): void;
@@ -46,14 +47,30 @@ const isArchiveFile = (f: FileItem) => {
 
 const formatTime = (s: string) => new Date(s).toLocaleString();
 const formatSize = (b: number) => `${(b / 1024).toFixed(1)} KB`;
+
+const onRowClick = (ev: MouseEvent) => {
+  if (props.renaming) return;
+  ev.stopPropagation();
+  emit('select', { item: props.item, modifiers: { shift: ev.shiftKey } });
+};
+
+const onRowDblClick = () => {
+  if (props.renaming) return;
+  emit('activate', props.item);
+};
+
+const isTempRow = (item: ContentItem): item is FolderItem =>
+  item.itemType === 'folder' && item.id.startsWith('temp-new-folder');
 </script>
 
 <template>
   <div
     class="row"
     :class="{ 'row--selected': selected }"
+    :data-temp-folder-row="renaming && isTempRow(item) ? item.id : null"
     draggable="true"
-    @click="emit('click', item)"
+    @click="onRowClick"
+    @dblclick="onRowDblClick"
     @dragstart="emit('dragstart', { event: $event, item })"
     @dragover.prevent
     @drop.prevent="item.itemType === 'folder' && emit('drop-on-folder', { event: $event, folder: item as FolderItem })"
