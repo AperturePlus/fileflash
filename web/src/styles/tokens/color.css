@@ -1,0 +1,50 @@
+/* web/src/styles/tokens/color.css
+ * Surface ladders + text scale + border tiers + status colors.
+ * Default state = dark. Light variant overrides via [data-theme="light"].
+ * Legacy `body.dark-theme` selector kept in sync for backward compatibility.
+ */
+
+:root,
+[data-theme="dark"],
+body.dark-theme {
+  /* Surface ladder */
+  --surface-inset:    #0A0A0C;
+  --surface-base:     #0E0E10;
+  --surface-raised:   #15151A;
+
+  /* Border tiers */
+  --border-subtle:    #1F1F23;
+  --border-default:   #2A2A30;
+  --border-strong:    #3A3A42;
+
+  /* Text scale */
+  --text-dim:         #6A6A6A;
+  --text-tertiary:    #8A8A8A;
+  --text-secondary:   #B8B5AC;
+  --text-primary:     #E8E6DF;
+
+  /* Status colors (RGB-form for alpha overlays) */
+  --status-success:       #4ADE80;
+  --status-success-rgb:   74, 222, 128;
+  --status-warning:       #FFB400;
+  --status-warning-rgb:   255, 180, 0;
+  --status-error:         #FF4F2C;
+  --status-error-rgb:     255, 79, 44;
+  --status-info:          #60A5FA;
+  --status-info-rgb:      96, 165, 250;
+}
+
+[data-theme="light"] {
+  --surface-inset:    #F2F0EA;
+  --surface-base:     #FBFAF6;
+  --surface-raised:   #FFFFFF;
+
+  --border-subtle:    #EAE7DE;
+  --border-default:   #DAD6CB;
+  --border-strong:    #BDB8AA;
+
+  --text-dim:         #9D9A91;
+  --text-tertiary:    #7A7770;
+  --text-secondary:   #4F4D47;
+  --text-primary:     #1B1A17;
+}
