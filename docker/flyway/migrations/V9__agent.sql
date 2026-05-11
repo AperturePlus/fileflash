@@ -208,3 +208,209 @@ CREATE TRIGGER trg_agent_work_session_updated_at
 BEFORE UPDATE ON agent_work_session
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
+
+-- =========================
+-- Agent views and functions
+-- =========================
+
+CREATE OR REPLACE FUNCTION agent_refresh_work_session_metrics(p_work_session_id BIGINT)
+RETURNS VOID AS $$
+BEGIN
+    IF p_work_session_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    UPDATE agent_work_session aws
+    SET tool_call_count = COALESCE(agg.tool_call_count, 0),
+        last_tool_started_at = agg.last_tool_started_at,
+        last_tool_finished_at = agg.last_tool_finished_at,
+        last_error_message = agg.last_error_message
+    FROM (
+        SELECT
+            ws.work_session_id,
+            COUNT(al.action_log_id)::INTEGER AS tool_call_count,
+            MAX(al.started_at) AS last_tool_started_at,
+            MAX(al.finished_at) AS last_tool_finished_at,
+            (
+                SELECT sub.error_message
+                FROM agent_action_log sub
+                WHERE sub.job_id = ws.job_id
+                  AND sub.error_message IS NOT NULL
+                ORDER BY COALESCE(sub.finished_at, sub.started_at) DESC, sub.action_log_id DESC
+                LIMIT 1
+            ) AS last_error_message
+        FROM agent_work_session ws
+        LEFT JOIN agent_action_log al ON al.job_id = ws.job_id
+        WHERE ws.work_session_id = p_work_session_id
+        GROUP BY ws.work_session_id, ws.job_id
+    ) agg
+    WHERE aws.work_session_id = agg.work_session_id;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP VIEW IF EXISTS v_agent_job_overview;
+DROP VIEW IF EXISTS v_agent_memory_active;
+DROP VIEW IF EXISTS v_agent_mcp_catalog;
+DROP VIEW IF EXISTS v_agent_skill_catalog;
+
+CREATE VIEW v_agent_skill_catalog AS
+SELECT
+    s.skill_id,
+    s.skill_key,
+    s.name,
+    s.description,
+    s.triggers_text,
+    s.tool_whitelist_json,
+    s.plan_template_json,
+    s.inputs_schema_json,
+    s.outputs_schema_json,
+    s.visibility,
+    s.owner_user_id,
+    s.created_at,
+    s.updated_at,
+    (COALESCE(s.name, '') || ' ' || COALESCE(s.description, '') || ' ' || COALESCE(s.triggers_text, '')) AS search_text
+FROM agent_skill s;
+
+CREATE VIEW v_agent_mcp_catalog AS
+SELECT
+    m.mcp_server_id,
+    m.name,
+    m.description,
+    m.endpoint,
+    m.transport,
+    m.auth_type,
+    m.headers_json,
+    m.tool_namespace,
+    m.enabled,
+    m.metadata_json,
+    m.visibility,
+    m.owner_user_id,
+    m.created_at,
+    m.updated_at
+FROM agent_mcp_server m;
+
+CREATE VIEW v_agent_memory_active AS
+SELECT
+    am.memory_id,
+    am.user_id,
+    am.scope,
+    am.scope_key,
+    am.kind,
+    am.title,
+    am.content,
+    am.source_job_id,
+    am.created_at,
+    am.updated_at,
+    am.expires_at
+FROM agent_memory am
+WHERE am.expires_at IS NULL
+   OR am.expires_at > CURRENT_TIMESTAMP;
+
+CREATE VIEW v_agent_job_overview AS
+SELECT
+    bj.job_id,
+    bj.task_type,
+    bj.status,
+    bj.agent_phase,
+    bj.cancel_requested_at,
+    bj.requested_by AS user_id,
+    bj.priority,
+    bj.trace_id,
+    bj.created_at,
+    bj.updated_at,
+    bj.started_at,
+    bj.finished_at,
+    ap.plan_id,
+    ap.plan_hash,
+    ap.summary AS plan_summary,
+    ap.chosen_skill_id,
+    aws.work_session_id,
+    aws.status AS work_session_status,
+    aws.checkpoint_version,
+    aws.last_checkpoint_at,
+    aws.tool_call_count,
+    aws.last_tool_started_at,
+    aws.last_tool_finished_at,
+    aws.last_error_message,
+    COALESCE(al.action_count, 0) AS action_count
+FROM background_job bj
+LEFT JOIN agent_plan ap ON ap.job_id = bj.job_id
+LEFT JOIN agent_work_session aws ON aws.job_id = bj.job_id
+LEFT JOIN (
+    SELECT job_id, COUNT(*) AS action_count
+    FROM agent_action_log
+    GROUP BY job_id
+) al ON al.job_id = bj.job_id;
+
+-- =========================
+-- Agent comments
+-- =========================
+
+COMMENT ON TABLE agent_user_setting IS 'Agent default settings per user';
+COMMENT ON COLUMN agent_user_setting.setting_id IS 'Primary key';
+COMMENT ON COLUMN agent_user_setting.user_id IS 'Owner user id';
+COMMENT ON COLUMN agent_user_setting.default_execution_policy IS 'Default execution policy';
+COMMENT ON COLUMN agent_user_setting.default_data_policy_json IS 'Default data policy payload';
+COMMENT ON COLUMN agent_user_setting.llm_provider IS 'Default LLM provider';
+COMMENT ON COLUMN agent_user_setting.llm_model IS 'Default LLM model';
+COMMENT ON COLUMN agent_user_setting.default_budget_tokens IS 'Default token budget';
+COMMENT ON COLUMN agent_user_setting.default_max_steps IS 'Default max steps';
+
+COMMENT ON TABLE agent_mcp_server IS 'Visible MCP server configuration for agents';
+COMMENT ON COLUMN agent_mcp_server.mcp_server_id IS 'Primary key';
+COMMENT ON COLUMN agent_mcp_server.owner_user_id IS 'Private MCP owner user id';
+COMMENT ON COLUMN agent_mcp_server.visibility IS 'Visibility level (system/private)';
+COMMENT ON COLUMN agent_mcp_server.endpoint IS 'MCP endpoint';
+COMMENT ON COLUMN agent_mcp_server.transport IS 'MCP transport';
+COMMENT ON COLUMN agent_mcp_server.auth_type IS 'Auth strategy';
+COMMENT ON COLUMN agent_mcp_server.headers_json IS 'Headers payload';
+COMMENT ON COLUMN agent_mcp_server.metadata_json IS 'Additional metadata';
+
+COMMENT ON TABLE agent_skill IS 'Persisted agent skill definitions';
+COMMENT ON COLUMN agent_skill.skill_id IS 'Primary key';
+COMMENT ON COLUMN agent_skill.skill_key IS 'Stable skill key';
+COMMENT ON COLUMN agent_skill.triggers_text IS 'Skill trigger description';
+COMMENT ON COLUMN agent_skill.tool_whitelist_json IS 'Tool whitelist';
+COMMENT ON COLUMN agent_skill.plan_template_json IS 'Plan template payload';
+COMMENT ON COLUMN agent_skill.inputs_schema_json IS 'Input schema payload';
+COMMENT ON COLUMN agent_skill.outputs_schema_json IS 'Output schema payload';
+COMMENT ON COLUMN agent_skill.visibility IS 'Visibility level (global/private)';
+COMMENT ON COLUMN agent_skill.owner_user_id IS 'Private skill owner user id';
+
+COMMENT ON TABLE agent_memory IS 'Agent memory items';
+COMMENT ON COLUMN agent_memory.memory_id IS 'Primary key';
+COMMENT ON COLUMN agent_memory.scope IS 'Memory scope';
+COMMENT ON COLUMN agent_memory.scope_key IS 'Workspace folder id or session job id';
+COMMENT ON COLUMN agent_memory.kind IS 'Memory kind';
+COMMENT ON COLUMN agent_memory.source_job_id IS 'Source job id';
+COMMENT ON COLUMN agent_memory.expires_at IS 'Optional expiration time';
+
+COMMENT ON TABLE agent_plan IS 'Persisted agent plans';
+COMMENT ON COLUMN agent_plan.plan_id IS 'Primary key';
+COMMENT ON COLUMN agent_plan.job_id IS 'Owning background job id';
+COMMENT ON COLUMN agent_plan.context_json IS 'Planning context payload';
+COMMENT ON COLUMN agent_plan.data_policy_json IS 'Planning data policy payload';
+COMMENT ON COLUMN agent_plan.chosen_skill_id IS 'Chosen skill key';
+COMMENT ON COLUMN agent_plan.proposed_actions_json IS 'Plan DSL payload';
+COMMENT ON COLUMN agent_plan.plan_hash IS 'Plan hash';
+COMMENT ON COLUMN agent_plan.cost_estimate_json IS 'Estimated cost payload';
+
+COMMENT ON TABLE agent_action_log IS 'Step-level tool execution log for agent jobs';
+COMMENT ON COLUMN agent_action_log.action_log_id IS 'Primary key';
+COMMENT ON COLUMN agent_action_log.step_no IS 'Plan step number';
+COMMENT ON COLUMN agent_action_log.inputs_json IS 'Tool inputs';
+COMMENT ON COLUMN agent_action_log.outputs_json IS 'Tool outputs';
+COMMENT ON COLUMN agent_action_log.duration_ms IS 'Execution duration in milliseconds';
+
+COMMENT ON TABLE agent_work_session IS 'Current work session snapshot for an agent job';
+COMMENT ON COLUMN agent_work_session.work_session_id IS 'Primary key';
+COMMENT ON COLUMN agent_work_session.job_id IS 'Owning background job id';
+COMMENT ON COLUMN agent_work_session.checkpoint_json IS 'Latest checkpoint snapshot';
+COMMENT ON COLUMN agent_work_session.checkpoint_version IS 'Checkpoint version';
+COMMENT ON COLUMN agent_work_session.tool_call_count IS 'Aggregated tool call count';
+COMMENT ON COLUMN agent_work_session.last_error_message IS 'Latest tool error summary';
+
+COMMENT ON VIEW v_agent_skill_catalog IS 'Visible agent skill catalog';
+COMMENT ON VIEW v_agent_mcp_catalog IS 'Visible MCP catalog';
+COMMENT ON VIEW v_agent_memory_active IS 'Unexpired agent memory';
+COMMENT ON VIEW v_agent_job_overview IS 'Aggregated agent job overview';
