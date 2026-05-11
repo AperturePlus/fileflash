@@ -1,9 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
-import MainLayout from '../components/layout/MainLayout.vue';
+import MainLayout from '../components/templates/MainLayout.vue';
 
-// Dev-only library route: spreads into the routes array only when running under
-// `vite dev` (or `vite build` with mode=development). In production builds the
-// array is empty, so the chunk is dead-code-eliminated and the path won't match.
 const devRoutes: Array<RouteRecordRaw> = import.meta.env.DEV
   ? [{
       path: '/__dev/library',
@@ -19,29 +16,32 @@ export const routes: Array<RouteRecordRaw> = [
     path: '/login',
     name: 'Login',
     component: () => import('../pages/login/index.ts'),
+    meta: { requiresAuth: false },
   },
   {
     path: '/register',
     name: 'Register',
     component: () => import('../pages/register/index.ts'),
+    meta: { requiresAuth: false },
   },
   {
     path: '/forgot-password',
     name: 'ForgotPassword',
     component: () => import('../pages/forgot-password/index.ts'),
+    meta: { requiresAuth: false },
   },
   {
     path: '/verify-email',
     name: 'VerifyEmail',
     component: () => import('../pages/verify-email/index.ts'),
+    meta: { requiresAuth: false },
   },
-
   {
     path: '/share/:shareLink',
     name: 'ShareAccess',
     component: () => import('../pages/share/index.ts'),
+    meta: { requiresAuth: false },
   },
-  
   {
     path: '/',
     name: 'Home',
@@ -112,7 +112,6 @@ export const routes: Array<RouteRecordRaw> = [
       }
     ],
   },
-   // 兜底路由，匹配所有未定义的路径
    {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
