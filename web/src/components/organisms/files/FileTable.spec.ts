@@ -18,38 +18,75 @@ const items = [
   },
 ];
 
+const baseProps = {
+  mode: 'list' as const,
+  items,
+  selection: new Set<string>(),
+  renamingId: null,
+  renameValue: '',
+  sortKey: 'name' as const,
+  sortDirection: 'asc' as const,
+};
+
 describe('FileTable', () => {
   it('renders one FileRow per item in list mode', () => {
-    const wrapper = mount(FileTable, {
-      props: {
-        mode: 'list', items,
-        selection: new Set<string>(), renamingId: null, renameValue: '',
-        sortKey: 'name', sortDirection: 'asc',
-      },
-    });
+    const wrapper = mount(FileTable, { props: baseProps });
     expect(wrapper.findAllComponents(FileRow)).toHaveLength(2);
   });
 
   it('renders cards in grid mode', () => {
-    const wrapper = mount(FileTable, {
-      props: {
-        mode: 'grid', items,
-        selection: new Set<string>(), renamingId: null, renameValue: '',
-        sortKey: 'name', sortDirection: 'asc',
-      },
-    });
+    const wrapper = mount(FileTable, { props: { ...baseProps, mode: 'grid' as const } });
     expect(wrapper.findAll('.card')).toHaveLength(2);
   });
 
   it('emits sort when list header column clicked', async () => {
-    const wrapper = mount(FileTable, {
-      props: {
-        mode: 'list', items,
-        selection: new Set<string>(), renamingId: null, renameValue: '',
-        sortKey: 'name', sortDirection: 'asc',
-      },
-    });
+    const wrapper = mount(FileTable, { props: baseProps });
     await wrapper.find('[data-sort-key="size"]').trigger('click');
     expect(wrapper.emitted('sort')?.[0]?.[0]).toBe('size');
+  });
+
+  it('forwards FileRow select events', async () => {
+    const wrapper = mount(FileTable, { props: baseProps });
+    await wrapper.findAll('.row')[0].trigger('click', { shiftKey: false });
+    const ev = wrapper.emitted('select');
+    expect(ev).toBeTruthy();
+    expect((ev![0][0] as { item: { id: string } }).item.id).toBe('a');
+  });
+
+  it('forwards FileRow activate (dblclick)', async () => {
+    const wrapper = mount(FileTable, { props: baseProps });
+    await wrapper.findAll('.row')[0].trigger('dblclick');
+    expect(wrapper.emitted('activate')?.[0]?.[0]).toStrictEqual(items[0]);
+  });
+
+  it('container click on blank area emits clear-selection', async () => {
+    const wrapper = mount(FileTable, { props: baseProps });
+    await wrapper.find('.table').trigger('click');
+    expect(wrapper.emitted('clear-selection')).toBeTruthy();
+  });
+
+  it('FileRow click does NOT bubble to clear-selection', async () => {
+    const wrapper = mount(FileTable, { props: baseProps });
+    await wrapper.findAll('.row')[0].trigger('click');
+    expect(wrapper.emitted('clear-selection')).toBeUndefined();
+  });
+
+  it('resize handles render in header for name/size/time', () => {
+    const wrapper = mount(FileTable, { props: baseProps });
+    const handles = wrapper.findAll('.resize-handle');
+    expect(handles.length).toBe(3);
+  });
+
+  it('grid mode: dblclick on card emits activate', async () => {
+    const wrapper = mount(FileTable, { props: { ...baseProps, mode: 'grid' as const } });
+    await wrapper.findAll('.card')[0].trigger('dblclick');
+    expect(wrapper.emitted('activate')?.[0]?.[0]).toStrictEqual(items[0]);
+  });
+
+  it('grid mode: single click on card emits select with modifiers', async () => {
+    const wrapper = mount(FileTable, { props: { ...baseProps, mode: 'grid' as const } });
+    await wrapper.findAll('.card')[0].trigger('click', { shiftKey: true });
+    const p = wrapper.emitted('select')![0][0] as { modifiers: { shift: boolean } };
+    expect(p.modifiers.shift).toBe(true);
   });
 });

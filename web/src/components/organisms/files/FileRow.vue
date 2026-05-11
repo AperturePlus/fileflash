@@ -148,7 +148,7 @@ const isTempRow = (item: ContentItem): item is FolderItem =>
 <style scoped>
 .row {
   display: grid;
-  grid-template-columns: 44px 1.6fr 0.8fr 1.1fr 56px;
+  grid-template-columns: var(--col-check, 44px) var(--col-name, 360px) var(--col-size, 120px) var(--col-time, 200px) var(--col-act, 56px);
   align-items: center;
   gap: 12px;
   min-height: 40px;

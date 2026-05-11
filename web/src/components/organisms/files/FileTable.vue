@@ -4,6 +4,7 @@ import { Icon } from '../../atoms';
 import FileRow from './FileRow.vue';
 import DropdownMenu from '../../common/DropdownMenu.vue';
 import { getIconForFile } from '../../../utils/fileIcons';
+import { useColumnResize } from '../../../composables/useColumnResize';
 import type { ContentItem, FileItem, FolderItem } from '../../../types/file';
 import { useLocaleStore } from '../../../store/locale';
 
@@ -25,7 +26,9 @@ const t = localeStore.t;
 const emit = defineEmits<{
   (e: 'update:renameValue', v: string): void;
   (e: 'toggleSelect', id: string): void;
-  (e: 'click', item: ContentItem): void;
+  (e: 'select', payload: { item: ContentItem; modifiers: { shift: boolean } }): void;
+  (e: 'activate', item: ContentItem): void;
+  (e: 'clear-selection'): void;
   (e: 'toggleStar', item: ContentItem): void;
   (e: 'download', item: FileItem): void;
   (e: 'extract-archive', item: FileItem): void;
@@ -49,6 +52,17 @@ const sortable = computed<Array<{ key: SortKey; label: string }>>(() => [
   { key: 'updatedAt', label: t('files.table.col.updated') },
 ]);
 
+const { colWidths, onResizeStart } = useColumnResize();
+const tableStyle = computed<Record<string, string>>(() => ({
+  '--col-check': '44px',
+  '--col-name': `${colWidths.name}px`,
+  '--col-size': `${colWidths.size}px`,
+  '--col-time': `${colWidths.time}px`,
+  '--col-act': '56px',
+}));
+const colKeyFor = (key: SortKey): 'name' | 'size' | 'time' =>
+  key === 'updatedAt' ? 'time' : key;
+
 const isArchiveFile = (f: FileItem) => {
   const n = (f.name || '').toLowerCase();
   return n.endsWith('.zip') || n.endsWith('.7z') || n.endsWith('.tar')
@@ -57,7 +71,7 @@ const isArchiveFile = (f: FileItem) => {
 </script>
 
 <template>
-  <div v-if="mode === 'list'" class="table">
+  <div v-if="mode === 'list'" class="table" :style="tableStyle" @click.self="emit('clear-selection')">
     <div class="table__head">
       <div class="table__check" />
       <button
@@ -70,6 +84,12 @@ const isArchiveFile = (f: FileItem) => {
       >
         {{ col.label }}
         <Icon v-if="sortKey === col.key" :name="sortIcon" :size="12" />
+        <span
+          class="resize-handle"
+          :data-resize-col="colKeyFor(col.key)"
+          @pointerdown.stop.prevent="onResizeStart(colKeyFor(col.key), $event as PointerEvent)"
+          @click.stop
+        />
       </button>
       <div />
     </div>
@@ -83,7 +103,8 @@ const isArchiveFile = (f: FileItem) => {
       :rename-value="renameValue"
       @update:rename-value="emit('update:renameValue', $event)"
       @toggle-select="emit('toggleSelect', $event)"
-      @click="emit('click', $event)"
+      @select="emit('select', $event)"
+      @activate="emit('activate', $event)"
       @toggle-star="emit('toggleStar', $event)"
       @download="emit('download', $event)"
       @extract-archive="emit('extract-archive', $event)"
@@ -98,14 +119,15 @@ const isArchiveFile = (f: FileItem) => {
     />
   </div>
 
-  <div v-else-if="mode === 'grid'" class="grid">
+  <div v-else-if="mode === 'grid'" class="grid" @click.self="emit('clear-selection')">
     <div
       v-for="item in items"
       :key="item.id"
       class="card"
       :class="{ 'card--selected': isSelected(item.id) }"
       draggable="true"
-      @click="emit('click', item)"
+      @click.stop="emit('select', { item, modifiers: { shift: $event.shiftKey } })"
+      @dblclick="renamingId === item.id ? null : emit('activate', item)"
       @dragstart="emit('dragstart', { event: $event, item })"
       @dragover.prevent
       @drop.prevent="item.itemType === 'folder' && emit('drop-on-folder', { event: $event, folder: item as FolderItem })"
@@ -179,7 +201,7 @@ const isArchiveFile = (f: FileItem) => {
 }
 .table__head {
   display: grid;
-  grid-template-columns: 44px 1.6fr 0.8fr 1.1fr 56px;
+  grid-template-columns: var(--col-check) var(--col-name) var(--col-size) var(--col-time) var(--col-act);
   align-items: center;
   gap: 12px;
   padding: 0 12px;
@@ -201,8 +223,21 @@ const isArchiveFile = (f: FileItem) => {
   font-size: inherit;
   letter-spacing: inherit;
   padding: 0;
+  position: relative;
 }
 .table__sort--active { color: var(--text-primary); }
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+}
+.resize-handle:hover {
+  background: linear-gradient(to right, transparent, rgb(var(--ac-rgb) / 0.4), transparent);
+}
 
 .grid {
   display: grid;
