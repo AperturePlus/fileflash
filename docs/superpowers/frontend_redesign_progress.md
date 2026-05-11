@@ -23,9 +23,14 @@ FileFlash 前端重塑分 8 阶段（P0 Foundation → P8 Cleanup）。Spec 在
   - Molecules: Button / IconButton / TextField / SearchField / Badge / Tag / StatBlock / ProgressBar / BreadcrumbItem / MenuItem / Tab / SegmentedControl / Toolbar / Avatar
   - `/__dev/library` 路由（仅 dev 模式可访问）展示所有组件 × theme × accent × motion 组合
   - 172 个单元测试全部通过，类型检查通过，生产构建成功
+- **P2 Shell + Templates**（2026-05-11）— 5 个 templates + 6 个 shell organisms + 路由层级调整：
+  - Templates: MainLayout / AuthLayout / BareLayout / ShareLayout / AgentLayout
+  - Shell organisms: AppHeader / LeftSidebar / RightSidebar / Footer / StorageStatusWidget / UserMenu
+  - App.vue 去掉顶层 transition，修复"切页像刷新"根因
+  - MainLayout 内部 content router-view 包裹 transition，联动 motion token
+  - `bun run test` 172 测试通过，`bun run check` 通过，`bun run build` 通过
 
 **进行中 / 待开始**：
-- **P2** Shell + Templates — MainLayout/AuthLayout/BareLayout/ShareLayout/AgentLayout + 6 个 shell organism + 路由层级调整（这里开始视觉变化）
 - **P3** Core File Path — MyFiles + 9 个 files organism
 - **P4** Other File Surfaces — Shared / Trash / ShareAccess
 - **P5** Public Auth Flow — Login / Register / ForgotPassword / VerifyEmail
