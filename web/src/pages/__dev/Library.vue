@@ -3,6 +3,8 @@ import { ref } from 'vue';
 import * as A from '../../components/atoms';
 import * as M from '../../components/molecules';
 import * as F from '../../components/organisms/files';
+import { useFilePreview } from '../../composables/useFilePreview';
+import type { FileItem } from '../../types/file';
 
 const sections = [
   'Tokens', 'Atoms · Text', 'Atoms · Numbers', 'Atoms · Visual', 'Atoms · Form',
@@ -69,6 +71,36 @@ const demoUpload = [
   { id: 'u1', name: 'archive.zip', progress: { percentage: 64 } },
   { id: 'u2', name: 'snapshot.png', progress: { percentage: 100 } },
 ];
+
+const { previewFile: filesPreviewFile, openPreview: openFilesPreview, closePreview: closeFilesPreview } = useFilePreview();
+const filesLastInteraction = ref('');
+
+function demoOnSelect(payload: { item: { id: string }; modifiers: { shift: boolean } }) {
+  filesLastInteraction.value = `select ${payload.item.id}${payload.modifiers.shift ? ' (shift)' : ''}`;
+  const next = new Set(filesSelection.value);
+  if (next.has(payload.item.id)) next.delete(payload.item.id);
+  else next.add(payload.item.id);
+  filesSelection.value = next;
+}
+
+function demoOnActivate(item: { id: string; itemType: 'file' | 'folder'; name: string }) {
+  if (item.itemType === 'file') {
+    filesLastInteraction.value = `activate file ${item.name}`;
+    openFilesPreview({
+      itemType: 'file',
+      id: item.id,
+      name: item.name,
+      size: 0,
+      mimeType: 'text/plain',
+      ownerName: 'demo',
+      createdAt: '',
+      updatedAt: '',
+      folderId: 'root',
+    } as FileItem);
+  } else {
+    filesLastInteraction.value = `activate folder ${item.name}`;
+  }
+}
 
 const themeOpts = [
   { value: 'dark', label: 'Dark' },
@@ -299,11 +331,16 @@ const swatches = [
           :sort-direction="filesSortDirection"
           @update:rename-value="filesRenameValue = $event"
           @toggle-select="(id) => { const next = new Set(filesSelection); if (next.has(id)) next.delete(id); else next.add(id); filesSelection = next; }"
+          @select="demoOnSelect"
+          @activate="demoOnActivate"
+          @clear-selection="filesSelection = new Set()"
           @start-rename="(item) => { filesRenamingId = item.id; filesRenameValue = item.name; }"
           @cancel-rename="filesRenamingId = null"
           @finish-rename="filesRenamingId = null"
           @sort="(k) => filesSortKey = k"
         />
+        <A.Text variant="data">Last interaction: {{ filesLastInteraction || '—' }}</A.Text>
+        <F.FilePreviewDialog :file="filesPreviewFile" @close="closeFilesPreview" />
       </section>
     </main>
   </div>
