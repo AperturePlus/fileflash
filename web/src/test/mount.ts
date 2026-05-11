@@ -12,6 +12,9 @@ export interface ThemeContext {
   motion?: 'spring' | 'tight' | 'reduced';
 }
 
+// The Vue Test Utils mount() generic types don't compose cleanly when we
+// extract `context` from the options bag. Casting through `unknown` keeps
+// callers' API unchanged while bypassing the structural mismatch.
 export function mount<TComponent extends Component>(
   component: TComponent,
   options: MountingOptions<unknown> & { context?: ThemeContext } = {},
@@ -23,7 +26,8 @@ export function mount<TComponent extends Component>(
     if (context.accent) html.dataset.accent = context.accent;
     if (context.motion) html.dataset.motion = context.motion;
   }
-  return vtuMount(component, rest);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return vtuMount(component as any, rest as any);
 }
 
 /** Read a CSS variable from the document root after mount. */

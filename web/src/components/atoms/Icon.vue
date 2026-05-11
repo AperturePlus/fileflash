@@ -9,10 +9,12 @@ const props = withDefaults(defineProps<{
 }>(), { size: 18 });
 
 const path = computed(() => ICONS[props.name]);
+// Use boolean true for aria-hidden so the SVGAttributes type accepts the spread.
+// Vue serialises true to the string "true" in the DOM.
 const a11y = computed(() =>
   props.label
     ? { role: 'img', 'aria-label': props.label }
-    : { 'aria-hidden': 'true' },
+    : { 'aria-hidden': true },
 );
 </script>
 
