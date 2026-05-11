@@ -24,6 +24,10 @@ export const ICONS = {
   share: 'M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13',
   sun: 'M12 5V2m0 20v-3m7-7h3M2 12h3m11.3 4.3l2.1 2.1M5.6 5.6l2.1 2.1m8.6 0l2.1-2.1m-12.8 12.8l2.1-2.1M12 8a4 4 0 1 0 0 8a4 4 0 0 0 0-8',
   moon: 'M21 13a8 8 0 1 1-10-10a7 7 0 0 0 10 10',
+  star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z',
+  arrowUp: 'M12 19V5M5 12l7-7 7 7',
+  arrowDown: 'M12 5v14M5 12l7 7 7-7',
+  folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zM12 11v6M9 14h6',
 } as const;
 
 export type IconName = keyof typeof ICONS;
