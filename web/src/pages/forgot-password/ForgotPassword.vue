@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { forgotPassword } from '../../api/user';
-import AuthLayout from '../../components/layout/AuthLayout.vue';
+import { ref } from "vue";
+import { forgotPassword } from "../../api/user";
 
-const email = ref('');
+const email = ref("");
 const isSubmitting = ref(false);
-const errorMessage = ref('');
-const successMessage = ref('');
+const errorMessage = ref("");
+const successMessage = ref("");
 
 const handleSubmit = async () => {
   if (isSubmitting.value) return;
 
   isSubmitting.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
+  errorMessage.value = "";
+  successMessage.value = "";
 
   try {
     await forgotPassword(email.value);
-    successMessage.value = '重置邮件已发送，请检查邮箱。';
+    successMessage.value = "重置邮件已发送，请检查邮箱。";
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '发送失败，请稍后再试。';
+    errorMessage.value =
+      error instanceof Error ? error.message : "发送失败，请稍后再试。";
   } finally {
     isSubmitting.value = false;
   }
@@ -27,32 +27,30 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <AuthLayout>
-    <div class="auth-card">
-      <header class="auth-header">
-        <h1>找回密码</h1>
-        <p>输入注册邮箱，我们将发送密码重置链接。</p>
-      </header>
+  <div class="auth-card">
+    <header class="auth-header">
+      <h1>找回密码</h1>
+      <p>输入注册邮箱，我们将发送密码重置链接。</p>
+    </header>
 
-      <form class="auth-form" @submit.prevent="handleSubmit">
-        <label class="field">
-          <span>邮箱地址</span>
-          <input v-model="email" type="email" placeholder="请输入邮箱地址" required />
-        </label>
+    <form class="auth-form" @submit.prevent="handleSubmit">
+      <label class="field">
+        <span>邮箱地址</span>
+        <input v-model="email" type="email" placeholder="请输入邮箱地址" required />
+      </label>
 
-        <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
-        <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
+      <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
+      <p v-if="successMessage" class="success-message">{{ successMessage }}</p>
 
-        <button class="submit-btn" type="submit" :disabled="isSubmitting">
-          {{ isSubmitting ? '发送中...' : '发送重置邮件' }}
-        </button>
-      </form>
+      <button class="submit-btn" type="submit" :disabled="isSubmitting">
+        {{ isSubmitting ? '发送中...' : '发送重置邮件' }}
+      </button>
+    </form>
 
-      <footer class="auth-footer">
-        <router-link to="/login">返回登录</router-link>
-      </footer>
-    </div>
-  </AuthLayout>
+    <footer class="auth-footer">
+      <router-link to="/login">返回登录</router-link>
+    </footer>
+  </div>
 </template>
 
 <style scoped>

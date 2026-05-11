@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { resendVerification, verifyEmail } from '../../api/user';
-import AuthLayout from '../../components/layout/AuthLayout.vue';
 import { useUserStore } from '../../store/user';
 
 const route = useRoute();
@@ -68,45 +67,43 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AuthLayout>
-    <div class="auth-card">
-      <header class="auth-header">
-        <h1>Verify your email</h1>
-        <p>{{ message }}</p>
-      </header>
+  <div class="auth-card">
+    <header class="auth-header">
+      <h1>Verify your email</h1>
+      <p>{{ message }}</p>
+    </header>
 
-      <div class="content">
-        <p v-if="status === 'pending'" class="info-message">Verifying token...</p>
-        <p v-if="status === 'success'" class="success-message">Verification completed.</p>
-        <p v-if="status === 'error'" class="error-message">{{ message }}</p>
+    <div class="content">
+      <p v-if="status === 'pending'" class="info-message">Verifying token...</p>
+      <p v-if="status === 'success'" class="success-message">Verification completed.</p>
+      <p v-if="status === 'error'" class="error-message">{{ message }}</p>
 
-        <button
-          v-if="canResend"
-          class="submit-btn"
-          type="button"
-          :disabled="resendLoading"
-          @click="handleResend"
-        >
-          {{ resendLoading ? 'Resending...' : 'Resend verification email' }}
-        </button>
+      <button
+        v-if="canResend"
+        class="submit-btn"
+        type="button"
+        :disabled="resendLoading"
+        @click="handleResend"
+      >
+        {{ resendLoading ? 'Resending...' : 'Resend verification email' }}
+      </button>
 
-        <p v-if="resendMessage" class="success-message">{{ resendMessage }}</p>
-        <p v-if="resendError" class="error-message">{{ resendError }}</p>
-      </div>
-
-      <footer class="auth-footer">
-        <button class="link-btn" type="button" @click="router.push('/login')">Back to login</button>
-        <button
-          v-if="userStore.isAuthenticated"
-          class="link-btn"
-          type="button"
-          @click="router.push('/files')"
-        >
-          Enter files
-        </button>
-      </footer>
+      <p v-if="resendMessage" class="success-message">{{ resendMessage }}</p>
+      <p v-if="resendError" class="error-message">{{ resendError }}</p>
     </div>
-  </AuthLayout>
+
+    <footer class="auth-footer">
+      <button class="link-btn" type="button" @click="router.push('/login')">Back to login</button>
+      <button
+        v-if="userStore.isAuthenticated"
+        class="link-btn"
+        type="button"
+        @click="router.push('/files')"
+      >
+        Enter files
+      </button>
+    </footer>
+  </div>
 </template>
 
 <style scoped>
@@ -196,4 +193,3 @@ onMounted(async () => {
   cursor: pointer;
 }
 </style>
-
