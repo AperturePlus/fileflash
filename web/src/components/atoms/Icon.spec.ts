@@ -44,4 +44,18 @@ describe('atoms/Icon', () => {
     expect(svg.attributes('role')).toBe('img');
     expect(svg.attributes('aria-label')).toBe('Done');
   });
+
+  it('renders the list icon (three rows with leading dots)', () => {
+    const w = mount(Icon, { props: { name: 'list' } });
+    const d = w.find('svg path').attributes('d') ?? '';
+    expect(d).toContain('M3 6h.01');
+    expect(d).toContain('M8 6h13');
+  });
+
+  it('renders the grid icon (four 7x7 squares)', () => {
+    const w = mount(Icon, { props: { name: 'grid' } });
+    const d = w.find('svg path').attributes('d') ?? '';
+    expect(d).toContain('M4 4h7v7H4z');
+    expect(d).toContain('M13 13h7v7h-7z');
+  });
 });
