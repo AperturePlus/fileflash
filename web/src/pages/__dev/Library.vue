@@ -6,6 +6,8 @@ import * as F from '../../components/organisms/files';
 import * as Sh from '../../components/organisms/sharing';
 import * as Tr from '../../components/organisms/trash';
 import * as Sa from '../../components/organisms/share';
+import { AuthForm } from '../../components/organisms/auth';
+import type { AuthSubmitPayload } from '../../components/organisms/auth';
 import { useFilePreview } from '../../composables/useFilePreview';
 import type { FileItem } from '../../types/file';
 
@@ -13,6 +15,7 @@ const sections = [
   'Tokens', 'Atoms · Text', 'Atoms · Numbers', 'Atoms · Visual', 'Atoms · Form',
   'Molecules · Action', 'Molecules · Input', 'Molecules · Display', 'Molecules · Nav',
   'Organisms · Files', 'Organisms · Sharing', 'Organisms · Trash', 'Organisms · Share',
+  'Organisms · Auth',
 ] as const;
 type Section = typeof sections[number];
 
@@ -64,6 +67,40 @@ const trashDemoItems = [
 ];
 const shareDemo = { shareId: 's', shareLink: 'xyz789', itemType: 'file' as const, itemInfo: { id: 'f', name: 'big-report.pdf', size: 1_245_184, mimeType: 'application/pdf' }, settings: { passwordProtected: true, expireAt: '2026-12-01', allowDownload: true, allowPreview: true }, createdAt: '2026-05-01T00:00:00Z' };
 const sharePassword = ref('');
+
+// Auth organism demo
+const authMode = ref<'login' | 'register' | 'forgot'>('login');
+const authError = ref('');
+const authSuccess = ref('');
+const lastAuthSubmit = ref('');
+const authLabelsByMode = {
+  login: {
+    identifier: 'Username or Email', identifierPlaceholder: 'Enter username or email',
+    password: 'Password', passwordPlaceholder: 'Enter password',
+    rememberMe: 'Remember me',
+  },
+  register: {
+    username: 'Username', usernamePlaceholder: 'Enter username',
+    email: 'Email', emailPlaceholder: 'Enter email',
+    password: 'Password', passwordPlaceholder: 'Enter password',
+    confirmPassword: 'Confirm', confirmPasswordPlaceholder: 'Re-enter password',
+  },
+  forgot: {
+    email: 'Email', emailPlaceholder: 'Enter email',
+  },
+} as const;
+const authTitleByMode = { login: 'Sign in to FileFlash', register: 'Create account', forgot: 'Reset password' } as const;
+const authSubmitLabelByMode = { login: 'SIGN IN', register: 'REGISTER', forgot: 'SEND LINK' } as const;
+const authModeOpts = [
+  { value: 'login', label: 'LOGIN' },
+  { value: 'register', label: 'REGISTER' },
+  { value: 'forgot', label: 'FORGOT' },
+];
+function onAuthSubmit(payload: AuthSubmitPayload) {
+  lastAuthSubmit.value = JSON.stringify(payload, null, 2);
+  authSuccess.value = 'Demo: payload captured';
+  authError.value = '';
+}
 
 const demoItems = [
   {
@@ -420,6 +457,46 @@ const swatches = [
           :is-previewing="false" :is-downloading="false" :is-saving="false"
           @preview="() => {}" @download="() => {}" @save="() => {}" />
       </section>
+
+      <section v-if="activeSection === 'Organisms · Auth'">
+        <A.Text as="h1" variant="h1">Organisms · Auth</A.Text>
+
+        <A.Text variant="label">Mode</A.Text>
+        <M.SegmentedControl
+          :model-value="authMode"
+          :options="authModeOpts"
+          @update:model-value="(v) => (authMode = v as 'login' | 'register' | 'forgot')"
+        />
+
+        <div class="auth-demo">
+          <AuthForm
+            :mode="authMode"
+            :title="authTitleByMode[authMode]"
+            :submit-label="authSubmitLabelByMode[authMode]"
+            :error-message="authError"
+            :success-message="authSuccess"
+            :labels="authLabelsByMode[authMode]"
+            @submit="onAuthSubmit"
+          >
+            <template v-if="authMode === 'login'" #hint>
+              <div class="auth-demo-hint">
+                <strong>Mock</strong>
+                <small>admin / admin123</small>
+              </div>
+            </template>
+            <template v-if="authMode === 'login'" #secondary>
+              <span class="auth-demo-link">Forgot password</span>
+            </template>
+            <template #footer>
+              <span>Demo footer</span>
+            </template>
+          </AuthForm>
+        </div>
+
+        <A.Text variant="label">Last payload</A.Text>
+        <pre v-if="lastAuthSubmit" class="auth-demo-pre">{{ lastAuthSubmit }}</pre>
+        <A.Text v-else variant="small">Submit the form above to see the typed payload.</A.Text>
+      </section>
     </main>
   </div>
 </template>
@@ -437,4 +514,39 @@ const swatches = [
 .sw { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border-subtle); }
 .sw-block { width: 28px; height: 28px; border: 1px solid var(--border-subtle); flex-shrink: 0; }
 code { font-family: var(--font-mono); font-size: var(--text-data); color: var(--ac); }
+.auth-demo {
+  max-width: 420px;
+  padding: var(--sp-xl);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  margin-top: 16px;
+}
+.auth-demo-hint {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-sm) var(--sp-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+  margin-top: var(--sp-sm);
+}
+.auth-demo-hint strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-label);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+}
+.auth-demo-link { color: var(--ac); font-size: var(--text-small); cursor: pointer; }
+.auth-demo-pre {
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-data);
+  color: var(--text-secondary);
+  max-width: 420px;
+  white-space: pre-wrap;
+}
 </style>
