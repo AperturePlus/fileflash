@@ -59,8 +59,8 @@ const linksDemoItems = [
   { shareId: 'l1', shareLink: 'abc123', itemType: 'file' as const, itemInfo: { id: 'f1', name: 'report.pdf', size: 1024, mimeType: 'application/pdf' }, settings: { passwordProtected: false, expireAt: null, allowDownload: true, allowPreview: true }, createdAt: '2026-05-01T00:00:00Z', visitCount: 12, downloadCount: 4 },
 ];
 const trashDemoItems = [
-  { itemType: 'file' as const, id: 't1', name: 'draft.md', originalPath: '/notes', size: 200, deletedAt: '2026-05-09T18:00:00Z', autoDeleteAt: '2026-06-08T18:00:00Z', daysUntilPermanentDelete: 27 },
-  { itemType: 'file' as const, id: 't2', name: 'expired.zip', originalPath: '/archives', size: 1024, deletedAt: '2026-05-05T08:00:00Z', autoDeleteAt: '2026-05-15T08:00:00Z', daysUntilPermanentDelete: 3 },
+  { itemType: 'file' as const, id: 't1', name: 'draft.md', originalPath: '/notes', size: 200, deletedAt: '2026-05-09T18:00:00Z', autoDeleteAt: '2026-06-08T18:00:00Z', daysUntilPermanentDelete: 27, canRestore: true, restoreConflicts: false },
+  { itemType: 'file' as const, id: 't2', name: 'expired.zip', originalPath: '/archives', size: 1024, deletedAt: '2026-05-05T08:00:00Z', autoDeleteAt: '2026-05-15T08:00:00Z', daysUntilPermanentDelete: 3, canRestore: false, restoreConflicts: true },
 ];
 const shareDemo = { shareId: 's', shareLink: 'xyz789', itemType: 'file' as const, itemInfo: { id: 'f', name: 'big-report.pdf', size: 1_245_184, mimeType: 'application/pdf' }, settings: { passwordProtected: true, expireAt: '2026-12-01', allowDownload: true, allowPreview: true }, createdAt: '2026-05-01T00:00:00Z' };
 const sharePassword = ref('');
