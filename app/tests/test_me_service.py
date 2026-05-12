@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.core.security import get_password_hash, hash_token
-from src.core.settings import Settings
-from src.models.enums import UiLanguage, UserRole, UserStatus
-from src.models.tables_audit_security import Log
-from src.models.tables_identity import User, UserPreference, UserSession
-from src.schemas.user import ChangePasswordRequest, GetActivityLogQuery, UpdateProfileRequest
-from src.services.auth import AuthService
+from fileflash.core.security import get_password_hash, hash_token
+from fileflash.core.settings import Settings
+from fileflash.models.enums import UiLanguage, UserRole, UserStatus
+from fileflash.models.tables_audit_security import Log
+from fileflash.models.tables_identity import User, UserPreference, UserSession
+from fileflash.schemas.user import ChangePasswordRequest, GetActivityLogQuery, UpdateProfileRequest
+from fileflash.services.auth import AuthService
 
 
 class DummyResult:

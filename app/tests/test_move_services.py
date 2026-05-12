@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.core.errors import ApiError
-from src.models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
-from src.models.tables_access_share import FavoriteItem
-from src.models.tables_identity import User
-from src.models.tables_storage import File, Folder
-from src.schemas.file import (
+from fileflash.core.errors import ApiError
+from fileflash.models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
+from fileflash.models.tables_access_share import FavoriteItem
+from fileflash.models.tables_identity import User
+from fileflash.models.tables_storage import File, Folder
+from fileflash.schemas.file import (
     BatchFilesRequest,
     CreateFolderRequest,
     FileDetails,
@@ -19,8 +19,8 @@ from src.schemas.file import (
     RenameFileRequest,
     RenameFolderRequest,
 )
-from src.services.file import FileService
-from src.services.folder import FolderService
+from fileflash.services.file import FileService
+from fileflash.services.folder import FolderService
 
 
 class DummySession:
@@ -275,7 +275,7 @@ async def test_folder_service_move_folder_delegates_to_file_service(monkeypatch:
             "moved_at": datetime.now(UTC),
         }
     )
-    monkeypatch.setattr("src.services.file.FileService._move_folder_record", move_mock)
+    monkeypatch.setattr("fileflash.services.file.FileService._move_folder_record", move_mock)
 
     result = await service.move_folder(
         user_id=1,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.tasks.registry import UnknownTaskTypeError, dispatch_task
-from src.workers.repository import get_retry_delay_seconds
+from fileflash.tasks.registry import UnknownTaskTypeError, dispatch_task
+from fileflash.workers.repository import get_retry_delay_seconds
 
 
 def test_dispatch_task_rejects_unknown_type():

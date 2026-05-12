@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.core.errors import ApiError
-from src.models.enums import FileStatus, FolderStatus, FolderType, UploadStatus
-from src.models.tables_storage import File, Folder, StorageObject
-from src.schemas.file import BatchFilesRequest
-from src.services.file import FileService
+from fileflash.core.errors import ApiError
+from fileflash.models.enums import FileStatus, FolderStatus, FolderType, UploadStatus
+from fileflash.models.tables_storage import File, Folder, StorageObject
+from fileflash.schemas.file import BatchFilesRequest
+from fileflash.services.file import FileService
 
 
 class DummyStorage:

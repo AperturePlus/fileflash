@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.core.http_headers import build_content_disposition
+from fileflash.core.http_headers import build_content_disposition
 
 
 def test_build_content_disposition_for_ascii_filename() -> None:

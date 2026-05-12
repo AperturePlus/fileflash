@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.core.security import create_share_access_token, decode_share_access_token
-from src.core.settings import Settings
-from src.models.tables_access_share import Share
-from src.schemas.share import CreateShareRequest, SaveShareRequest, UpdateShareSettingsRequest
-from src.services.share import ShareService
+from fileflash.core.security import create_share_access_token, decode_share_access_token
+from fileflash.core.settings import Settings
+from fileflash.models.tables_access_share import Share
+from fileflash.schemas.share import CreateShareRequest, SaveShareRequest, UpdateShareSettingsRequest
+from fileflash.services.share import ShareService
 
 
 class DummySession:

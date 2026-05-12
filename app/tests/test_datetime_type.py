@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from src.models.types import UTCDateTime
+from fileflash.models.types import UTCDateTime
 
 
 def test_utc_datetime_type_normalizes_bind_and_result_values():

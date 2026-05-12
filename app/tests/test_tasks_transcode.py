@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from src.tasks.transcode import build_ffmpeg_command, run_media_transcode
+from fileflash.tasks.transcode import build_ffmpeg_command, run_media_transcode
 
 
 def test_build_ffmpeg_command_for_video():
@@ -57,7 +57,7 @@ def test_run_media_transcode_with_mocked_subprocess(monkeypatch, tmp_path: Path)
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
         raise AssertionError(f"Unexpected command: {command}")
 
-    monkeypatch.setattr("src.tasks.transcode.subprocess.run", fake_run)
+    monkeypatch.setattr("fileflash.tasks.transcode.subprocess.run", fake_run)
 
     result = run_media_transcode({"inputPath": str(input_path)})
 

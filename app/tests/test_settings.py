@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.core.settings import Settings
+from fileflash.core.settings import Settings
 
 
 def test_async_database_url_conversion():

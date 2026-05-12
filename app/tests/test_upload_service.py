@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.core.errors import ApiError
-from src.core.settings import Settings
-from src.models.enums import UploadPartStatus, UploadTaskStatus
-from src.models.tables_storage import File, StorageObject, UploadTask, UploadTaskPart
-from src.s3.minio_client import ObjectStat, ObjectStorageAuthError, ObjectWriteResult
-from src.schemas.file import MergeChunksRequest, UploadPreflightRequest
-from src.services.upload import UploadService
+from fileflash.core.errors import ApiError
+from fileflash.core.settings import Settings
+from fileflash.models.enums import UploadPartStatus, UploadTaskStatus
+from fileflash.models.tables_storage import File, StorageObject, UploadTask, UploadTaskPart
+from fileflash.s3.minio_client import ObjectStat, ObjectStorageAuthError, ObjectWriteResult
+from fileflash.schemas.file import MergeChunksRequest, UploadPreflightRequest
+from fileflash.services.upload import UploadService
 
 
 class DummySession:
@@ -471,7 +471,7 @@ async def test_merge_logs_warning_for_incomplete_chunks(monkeypatch: pytest.Monk
     monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
     monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=1))
     monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
-    caplog.set_level(logging.WARNING, logger="src.services.upload")
+    caplog.set_level(logging.WARNING, logger="fileflash.services.upload")
 
     with pytest.raises(ApiError) as exc:
         await service.merge_chunks(
@@ -521,7 +521,7 @@ async def test_merge_logs_warning_for_non_continuous_chunks(
     monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
     monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=1))
     monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
-    caplog.set_level(logging.WARNING, logger="src.services.upload")
+    caplog.set_level(logging.WARNING, logger="fileflash.services.upload")
 
     with pytest.raises(ApiError) as exc:
         await service.merge_chunks(

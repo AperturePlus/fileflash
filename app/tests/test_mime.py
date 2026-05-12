@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.core.mime import DEFAULT_MIME_TYPE, resolve_file_mime_type
+from fileflash.core.mime import DEFAULT_MIME_TYPE, resolve_file_mime_type
 
 
 @pytest.mark.parametrize(

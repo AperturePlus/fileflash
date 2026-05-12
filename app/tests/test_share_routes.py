@@ -5,8 +5,8 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.core.deps import get_client_ip, get_share_service, get_user_agent
-from src.routers.shares import router as shares_router
+from fileflash.core.deps import get_client_ip, get_share_service, get_user_agent
+from fileflash.routers.shares import router as shares_router
 
 
 class StubShareService:

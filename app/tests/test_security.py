@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.core.security import (
+from fileflash.core.security import (
     create_access_token,
     create_refresh_token,
     decode_access_token,
@@ -8,7 +8,7 @@ from src.core.security import (
     hash_token,
     verify_password,
 )
-from src.core.settings import Settings
+from fileflash.core.settings import Settings
 
 
 def test_password_hash_and_verify():

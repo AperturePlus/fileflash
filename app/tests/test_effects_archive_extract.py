@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.workers.effects import _apply_archive_extract_effects
+from fileflash.workers.effects import _apply_archive_extract_effects
 
 
 class _StubSession:

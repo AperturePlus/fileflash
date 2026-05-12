@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.tasks.archive import (
+from fileflash.tasks.archive import (
     ArchiveLimits,
     _detect_archive_format,
     _extract_tar,
@@ -226,7 +226,7 @@ def test_preview_7z_reports_entries(tmp_path: Path):
     with py7zr.SevenZipFile(archive_path, "w") as archive:
         archive.writeall(payload_dir, "root")
 
-    from src.tasks.archive import _preview_7z
+    from fileflash.tasks.archive import _preview_7z
 
     entries, summary = _preview_7z(archive_path=archive_path, max_entries=2000)
     assert summary["totalEntries"] >= 1

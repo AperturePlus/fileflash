@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from src.models import BackgroundJob
-from src.services.background_jobs import BackgroundJobService
+from fileflash.models import BackgroundJob
+from fileflash.services.background_jobs import BackgroundJobService
 
 
 class _PgUniqueViolation(Exception):
