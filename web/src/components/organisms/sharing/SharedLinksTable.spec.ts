@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { mount } from '../../../test/mount';
 import SharedLinksTable from './SharedLinksTable.vue';
 import type { Share } from '../../../types/share';
@@ -13,6 +13,10 @@ const items: Share[] = [
 ];
 
 describe('SharedLinksTable', () => {
+  beforeEach(() => {
+    localStorage.setItem('fileflash-locale', 'en-US');
+  });
+
   it('renders rows', () => {
     const w = mount(SharedLinksTable, { props: { items } });
     expect(w.text()).toContain('report.pdf');

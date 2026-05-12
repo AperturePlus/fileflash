@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { mount } from '../../../test/mount';
 import SharedReceivedTable from './SharedReceivedTable.vue';
 import type { SharedItem } from '../../../types/share';
@@ -9,6 +9,10 @@ const items: SharedItem[] = [
 ];
 
 describe('SharedReceivedTable', () => {
+  beforeEach(() => {
+    localStorage.setItem('fileflash-locale', 'en-US');
+  });
+
   it('renders header + rows', () => {
     const w = mount(SharedReceivedTable, { props: { items, selection: new Set() } });
     expect(w.findAll('.shared-table__row')).toHaveLength(2);

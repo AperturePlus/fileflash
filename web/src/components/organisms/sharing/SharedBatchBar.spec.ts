@@ -1,8 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { mount } from '../../../test/mount';
 import SharedBatchBar from './SharedBatchBar.vue';
 
 describe('SharedBatchBar', () => {
+  beforeEach(() => {
+    localStorage.setItem('fileflash-locale', 'en-US');
+  });
+
   it('hidden when count = 0', () => {
     const w = mount(SharedBatchBar, { props: { count: 0 } });
     expect(w.find('.shared-batch').exists()).toBe(false);

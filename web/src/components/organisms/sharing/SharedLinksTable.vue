@@ -2,6 +2,7 @@
 import { Text } from '../../atoms';
 import { Button, Tag } from '../../molecules';
 import type { Share } from '../../../types/share';
+import { useLocaleStore } from '../../../store/locale';
 
 defineProps<{ items: Share[] }>();
 
@@ -10,23 +11,28 @@ defineEmits<{
   (e: 'delete', share: Share): void;
 }>();
 
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
 const formatTime = (s: string) => new Date(s).toLocaleString();
+const formatItemType = (itemType: Share['itemType']) =>
+  t(itemType === 'folder' ? 'sharing.itemType.folder' : 'sharing.itemType.file');
 </script>
 
 <template>
   <div class="links-table" role="table">
     <div class="links-table__head" role="row">
-      <Text variant="label" as="div" class="links-table__cell">Resource</Text>
-      <Text variant="label" as="div" class="links-table__cell">Share Link</Text>
-      <Text variant="label" as="div" class="links-table__cell">Visits / Downloads</Text>
-      <Text variant="label" as="div" class="links-table__cell">Created At</Text>
+      <Text variant="label" as="div" class="links-table__cell">{{ t('sharing.table.links.resource') }}</Text>
+      <Text variant="label" as="div" class="links-table__cell">{{ t('sharing.table.links.shareLink') }}</Text>
+      <Text variant="label" as="div" class="links-table__cell">{{ t('sharing.table.links.visitsDownloads') }}</Text>
+      <Text variant="label" as="div" class="links-table__cell">{{ t('sharing.table.links.createdAt') }}</Text>
       <div class="links-table__cell links-table__cell--action" />
     </div>
 
     <div v-for="share in items" :key="share.shareId" class="links-table__row" role="row">
       <div class="links-table__cell links-table__cell--name">
         <Text variant="body" as="span" class="links-table__name">{{ share.itemInfo.name }}</Text>
-        <Tag>{{ share.itemType }}</Tag>
+        <Tag>{{ formatItemType(share.itemType) }}</Tag>
       </div>
 
       <div class="links-table__cell">
@@ -40,8 +46,8 @@ const formatTime = (s: string) => new Date(s).toLocaleString();
       <div class="links-table__cell links-table__cell--mono">{{ formatTime(share.createdAt) }}</div>
 
       <div class="links-table__cell links-table__cell--action">
-        <Button size="sm" variant="ghost" @click="$emit('copy', share)">Copy</Button>
-        <Button size="sm" variant="danger" @click="$emit('delete', share)">Delete</Button>
+        <Button size="sm" variant="ghost" @click="$emit('copy', share)">{{ t('sharing.table.links.copy') }}</Button>
+        <Button size="sm" variant="danger" @click="$emit('delete', share)">{{ t('sharing.table.links.delete') }}</Button>
       </div>
     </div>
   </div>

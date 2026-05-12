@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { acceptSharedItem, deleteShare, getSharedItems, getShares } from '../api/share';
+import { useLocaleStore } from '../store/locale';
 import { useFileSelection } from './useFileSelection';
 import type { Share, SharedItem } from '../types/share';
 import { ui } from '../utils/ui';
@@ -7,6 +8,8 @@ import { ui } from '../utils/ui';
 export type SharedTab = 'received' | 'links';
 
 export function useSharingCenter() {
+  const localeStore = useLocaleStore();
+  const t = localeStore.t;
   const activeTab = ref<SharedTab>('received');
   const isLoading = ref(false);
   const sharedItems = ref<SharedItem[]>([]);
@@ -46,19 +49,35 @@ export function useSharingCenter() {
   };
 
   const removeShare = async (share: Share) => {
-    const ok = await ui.confirm({ title: 'Delete Share Link', message: `Delete share link ${share.shareLink}?`, confirmText: 'Delete', danger: true });
+    const ok = await ui.confirm({
+      title: t('sharing.confirm.deleteLink.title'),
+      message: t('sharing.confirm.deleteLink.message').replace('{shareLink}', share.shareLink),
+      confirmText: t('sharing.confirm.deleteLink.confirm'),
+      danger: true,
+    });
     if (!ok) return;
     try {
       await deleteShare(share.shareLink);
       myShares.value = myShares.value.filter((e) => e.shareLink !== share.shareLink);
-      ui.toast({ type: 'success', message: 'Share link deleted.' });
-    } catch (e) { console.error('Failed to delete share link', e); ui.toast({ type: 'error', message: 'Failed to delete share link.' }); }
+      ui.toast({ type: 'success', message: t('sharing.toast.linkDeleted') });
+    } catch (e) {
+      console.error('Failed to delete share link', e);
+      ui.toast({ type: 'error', message: t('sharing.toast.linkDeleteFailed') });
+    }
   };
 
   const copyShare = async (share: Share) => {
     const link = `${window.location.origin}/share/${share.shareLink}`;
-    try { await navigator.clipboard.writeText(link); ui.toast({ type: 'success', message: 'Share link copied.' }); }
-    catch { await ui.copyText({ title: 'Copy Share Link', message: 'Clipboard is unavailable. Copy this link manually:', text: link }); }
+    try {
+      await navigator.clipboard.writeText(link);
+      ui.toast({ type: 'success', message: t('sharing.toast.linkCopied') });
+    } catch {
+      await ui.copyText({
+        title: t('sharing.copyDialog.title'),
+        message: t('sharing.copyDialog.message'),
+        text: link,
+      });
+    }
   };
 
   return {

@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { Text } from '../../components/atoms';
 import { SegmentedControl } from '../../components/molecules';
 import { EmptyState } from '../../components/organisms/files';
 import { SharedReceivedTable, SharedLinksTable, SharedBatchBar } from '../../components/organisms/sharing';
 import { useSharingCenter, type SharedTab } from '../../composables/useSharingCenter';
+import { useLocaleStore } from '../../store/locale';
 
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 const s = useSharingCenter();
-const tabOptions = [
-  { value: 'received', label: 'Shared With Me' },
-  { value: 'links', label: 'My Share Links' },
-];
+const tabOptions = computed(() => [
+  { value: 'received', label: t('sharing.tab.sharedWithMe') },
+  { value: 'links', label: t('sharing.tab.myShareLinks') },
+]);
 onMounted(s.loadData);
 </script>
 
@@ -18,8 +21,8 @@ onMounted(s.loadData);
   <section class="page">
     <header class="page__header">
       <div>
-        <Text variant="h1" as="h1">Sharing Center</Text>
-        <Text variant="small" as="p">Manage received files and the links you shared with others.</Text>
+        <Text variant="h1" as="h1">{{ t('sharing.page.title') }}</Text>
+        <Text variant="small" as="p">{{ t('sharing.page.description') }}</Text>
       </div>
       <SegmentedControl :model-value="s.activeTab.value" :options="tabOptions"
         @update:model-value="(v) => s.switchTab(v as SharedTab)" />
@@ -27,12 +30,12 @@ onMounted(s.loadData);
 
     <EmptyState v-if="s.isLoading.value" variant="loading" />
     <template v-else-if="s.activeTab.value === 'received'">
-      <EmptyState v-if="!s.sharedItems.value.length" variant="empty" message="No files shared with you." />
+      <EmptyState v-if="!s.sharedItems.value.length" variant="empty" :message="t('sharing.empty.received')" />
       <SharedReceivedTable v-else :items="s.sharedItems.value" :selection="s.selection.selectedItems.value"
         @toggle="s.selection.toggleSelection" @toggle-all="s.toggleAll" @accept="s.acceptOne" />
     </template>
     <template v-else>
-      <EmptyState v-if="!s.myShares.value.length" variant="empty" message="No share links created yet." />
+      <EmptyState v-if="!s.myShares.value.length" variant="empty" :message="t('sharing.empty.links')" />
       <SharedLinksTable v-else :items="s.myShares.value" @copy="s.copyShare" @delete="s.removeShare" />
     </template>
 

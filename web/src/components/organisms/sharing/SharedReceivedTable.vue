@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { Checkbox, Text } from '../../atoms';
 import { Button, Tag } from '../../molecules';
 import type { SharedItem } from '../../../types/share';
+import { useLocaleStore } from '../../../store/locale';
 
 const props = defineProps<{
   items: SharedItem[];
@@ -18,7 +19,17 @@ const emit = defineEmits<{
 const allSelected = computed(() => props.items.length > 0 && props.items.every((i) => props.selection.has(i.id)));
 const someSelected = computed(() => props.items.some((i) => props.selection.has(i.id)) && !allSelected.value);
 
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
 const formatTime = (s: string) => new Date(s).toLocaleString();
+const formatItemType = (itemType: SharedItem['itemType']) =>
+  t(itemType === 'folder' ? 'sharing.itemType.folder' : 'sharing.itemType.file');
+const formatPermission = (permission: SharedItem['permission']) => {
+  if (permission === 'write') return t('sharing.permission.write');
+  if (permission === 'admin') return t('sharing.permission.admin');
+  return t('sharing.permission.read');
+};
 
 const onHeaderToggle = () => emit('toggle-all', !allSelected.value);
 </script>
@@ -29,10 +40,10 @@ const onHeaderToggle = () => emit('toggle-all', !allSelected.value);
       <div class="shared-table__cell shared-table__cell--check">
         <Checkbox :model-value="allSelected" :data-indeterminate="someSelected" @update:model-value="onHeaderToggle" />
       </div>
-      <Text variant="label" as="div" class="shared-table__cell">Name</Text>
-      <Text variant="label" as="div" class="shared-table__cell">Shared By</Text>
-      <Text variant="label" as="div" class="shared-table__cell">Permission</Text>
-      <Text variant="label" as="div" class="shared-table__cell">Shared At</Text>
+      <Text variant="label" as="div" class="shared-table__cell">{{ t('sharing.table.received.name') }}</Text>
+      <Text variant="label" as="div" class="shared-table__cell">{{ t('sharing.table.received.sharedBy') }}</Text>
+      <Text variant="label" as="div" class="shared-table__cell">{{ t('sharing.table.received.permission') }}</Text>
+      <Text variant="label" as="div" class="shared-table__cell">{{ t('sharing.table.received.sharedAt') }}</Text>
       <div class="shared-table__cell shared-table__cell--action" />
     </div>
 
@@ -50,7 +61,7 @@ const onHeaderToggle = () => emit('toggle-all', !allSelected.value);
 
       <div class="shared-table__cell shared-table__cell--name">
         <Text variant="body" as="span" class="shared-table__name">{{ item.name }}</Text>
-        <Tag>{{ item.itemType }}</Tag>
+        <Tag>{{ formatItemType(item.itemType) }}</Tag>
       </div>
 
       <div class="shared-table__cell">
@@ -58,13 +69,13 @@ const onHeaderToggle = () => emit('toggle-all', !allSelected.value);
       </div>
 
       <div class="shared-table__cell">
-        <Tag>{{ item.permission }}</Tag>
+        <Tag>{{ formatPermission(item.permission) }}</Tag>
       </div>
 
       <div class="shared-table__cell shared-table__cell--mono">{{ formatTime(item.sharedAt) }}</div>
 
       <div class="shared-table__cell shared-table__cell--action" @click.stop>
-        <Button size="sm" variant="primary" @click="emit('accept', item)">Accept</Button>
+        <Button size="sm" variant="primary" @click="emit('accept', item)">{{ t('sharing.table.received.accept') }}</Button>
       </div>
     </div>
   </div>

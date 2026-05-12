@@ -1,23 +1,27 @@
 <script setup lang="ts">
 import { MonoNumber } from '../../atoms';
 import { Button } from '../../molecules';
+import { useLocaleStore } from '../../../store/locale';
 
 defineProps<{ count: number }>();
 defineEmits<{
   (e: 'accept'): void;
   (e: 'clear'): void;
 }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 </script>
 
 <template>
   <div v-if="count > 0" class="shared-batch">
     <div class="shared-batch__count">
       <MonoNumber :value="count" accent />
-      <span class="shared-batch__label">SELECTED</span>
+      <span class="shared-batch__label">{{ t('sharing.batch.selected') }}</span>
     </div>
     <div class="shared-batch__actions">
-      <Button variant="primary" @click="$emit('accept')">Accept Selected</Button>
-      <Button variant="ghost" @click="$emit('clear')">Clear</Button>
+      <Button variant="primary" @click="$emit('accept')">{{ t('sharing.batch.acceptSelected') }}</Button>
+      <Button variant="ghost" @click="$emit('clear')">{{ t('sharing.batch.clear') }}</Button>
     </div>
   </div>
 </template>
