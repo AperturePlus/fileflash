@@ -2,8 +2,8 @@
   <footer class="app-footer">
     <p>&copy; {{ new Date().getFullYear() }} fileflash. All rights reserved.</p>
     <div class="footer-links">
-      <router-link to="/terms">Terms of Use</router-link>
-      <router-link to="/privacy">Privacy Policy</router-link>
+      <a href="#">Terms of Service</a>
+      <a href="#">Privacy Policy</a>
     </div>
   </footer>
 </template>
