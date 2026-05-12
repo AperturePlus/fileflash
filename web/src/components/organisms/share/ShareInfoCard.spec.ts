@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { mount } from '../../../test/mount';
 import ShareInfoCard from './ShareInfoCard.vue';
 import type { Share } from '../../../types/share';
@@ -11,9 +11,13 @@ const share: Share = {
 };
 
 describe('ShareInfoCard', () => {
+  beforeEach(() => {
+    localStorage.setItem('fileflash-locale', 'en-US');
+  });
+
   it('renders all metadata rows', () => {
     const w = mount(ShareInfoCard, { props: { share } });
-    expect(w.text()).toContain('file');
+    expect(w.text()).toContain('File');
     expect(w.text()).toContain('doc.pdf');
     expect(w.text()).toContain('Required');
     expect(w.text()).toContain('2026-12-01');

@@ -6,18 +6,21 @@ import { Text } from '../../components/atoms';
 import { EmptyState } from '../../components/organisms/files';
 import { ShareInfoCard, ShareAccessPanel, ShareActionsPanel } from '../../components/organisms/share';
 import { useShareAccess } from '../../composables/useShareAccess';
+import { useLocaleStore } from '../../store/locale';
 import { useUserStore } from '../../store/user';
 
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 const shareLink = computed(() => String(route.params.shareLink || ''));
 
 const s = useShareAccess(shareLink);
 const isSelectFolderVisible = ref(false);
 
 const openSaveDialog = () => {
-  if (!s.accessData.value) { s.statusMessage.value = 'Please access the share first.'; return; }
+  if (!s.accessData.value) { s.statusMessage.value = t('share.page.needAccessFirst'); return; }
   if (!userStore.isAuthenticated) { router.push({ name: 'Login', query: { redirect: route.fullPath } }); return; }
   isSelectFolderVisible.value = true;
 };
@@ -33,8 +36,8 @@ onMounted(s.loadShare);
 <template>
   <section class="page">
     <header class="page__header">
-      <Text variant="h1" as="h1">Shared Link</Text>
-      <Text variant="small" as="p">Link code: <code>{{ shareLink }}</code></Text>
+      <Text variant="h1" as="h1">{{ t('share.page.title') }}</Text>
+      <Text variant="small" as="p">{{ t('share.page.linkCode') }} <code>{{ shareLink }}</code></Text>
     </header>
 
     <EmptyState v-if="s.isLoading.value" variant="loading" />
@@ -60,8 +63,8 @@ onMounted(s.loadShare);
 
       <SelectFolderDialog
         :is-visible="isSelectFolderVisible"
-        title="Save to My Space"
-        confirm-text="Save Here"
+        :title="t('share.page.saveDialogTitle')"
+        :confirm-text="t('share.page.saveDialogConfirm')"
         @close="isSelectFolderVisible = false"
         @confirm="handleSaveConfirm"
       />

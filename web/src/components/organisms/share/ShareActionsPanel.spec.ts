@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { mount } from '../../../test/mount';
 import ShareActionsPanel from './ShareActionsPanel.vue';
 
@@ -9,6 +9,10 @@ const baseProps = {
 };
 
 describe('ShareActionsPanel', () => {
+  beforeEach(() => {
+    localStorage.setItem('fileflash-locale', 'en-US');
+  });
+
   it('renders preview + download for file mode', () => {
     const w = mount(ShareActionsPanel, { props: baseProps });
     expect(w.text()).toContain('Preview');

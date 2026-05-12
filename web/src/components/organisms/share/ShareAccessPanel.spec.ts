@@ -1,8 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { mount } from '../../../test/mount';
 import ShareAccessPanel from './ShareAccessPanel.vue';
 
 describe('ShareAccessPanel', () => {
+  beforeEach(() => {
+    localStorage.setItem('fileflash-locale', 'en-US');
+  });
+
   it('shows password form when protected', () => {
     const w = mount(ShareAccessPanel, {
       props: { passwordProtected: true, password: '', isAccessing: false },

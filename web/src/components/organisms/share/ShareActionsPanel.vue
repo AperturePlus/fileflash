@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Text } from '../../atoms';
 import { Button } from '../../molecules';
+import { useLocaleStore } from '../../../store/locale';
 
 defineProps<{
   isFile: boolean;
@@ -17,11 +18,14 @@ defineEmits<{
   (e: 'download'): void;
   (e: 'save'): void;
 }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 </script>
 
 <template>
   <div class="share-actions">
-    <Text variant="h2" as="h3" class="share-actions__title">Actions</Text>
+    <Text variant="h2" as="h3" class="share-actions__title">{{ t('share.actions.title') }}</Text>
     <div class="share-actions__row">
       <Button
         v-if="isFile"
@@ -30,7 +34,7 @@ defineEmits<{
         :loading="isPreviewing"
         @click="$emit('preview')"
       >
-        {{ isPreviewing ? 'Loading...' : 'Preview' }}
+        {{ isPreviewing ? t('share.actions.loading') : t('share.actions.preview') }}
       </Button>
       <Button
         v-if="isFile"
@@ -39,10 +43,10 @@ defineEmits<{
         :loading="isDownloading"
         @click="$emit('download')"
       >
-        {{ isDownloading ? 'Downloading...' : 'Download' }}
+        {{ isDownloading ? t('share.actions.downloading') : t('share.actions.download') }}
       </Button>
       <Button variant="primary" :disabled="isSaving" :loading="isSaving" @click="$emit('save')">
-        {{ isSaving ? 'Saving...' : isFolder ? 'Save Folder to My Space' : 'Save to My Space' }}
+        {{ isSaving ? t('share.actions.saving') : isFolder ? t('share.actions.saveFolder') : t('share.actions.save') }}
       </Button>
     </div>
   </div>

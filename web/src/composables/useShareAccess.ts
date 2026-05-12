@@ -1,8 +1,12 @@
 import { computed, ref, type Ref } from 'vue';
 import { accessShare, downloadSharedFile, getShareDetails, previewSharedFile, saveShare } from '../api/share';
+import { useLocaleStore } from '../store/locale';
 import type { AccessShareResponseData, Share } from '../types/share';
 
 export function useShareAccess(shareLink: Ref<string>) {
+  const localeStore = useLocaleStore();
+  const t = localeStore.t;
+
   const share = ref<Share | null>(null);
   const accessData = ref<AccessShareResponseData | null>(null);
   const password = ref('');
@@ -26,7 +30,10 @@ export function useShareAccess(shareLink: Ref<string>) {
     try {
       share.value = await getShareDetails(shareLink.value);
       if (!share.value.settings.passwordProtected) await requestAccess();
-    } catch (e) { console.error('Failed to load share', e); error.value = 'Unable to load share. The link may be invalid or expired.'; }
+    } catch (e) {
+      console.error('Failed to load share', e);
+      error.value = t('share.status.loadFailed');
+    }
     finally { isLoading.value = false; }
   };
 
@@ -35,8 +42,11 @@ export function useShareAccess(shareLink: Ref<string>) {
     isAccessing.value = true; error.value = ''; statusMessage.value = '';
     try {
       accessData.value = await accessShare(shareLink.value, password.value.trim() ? { password: password.value.trim() } : {});
-      statusMessage.value = 'Access granted.';
-    } catch (e) { console.error('Failed to access share', e); error.value = passwordProtected.value ? 'Invalid password or share expired.' : 'Share expired or unavailable.'; }
+      statusMessage.value = t('share.status.accessGranted');
+    } catch (e) {
+      console.error('Failed to access share', e);
+      error.value = passwordProtected.value ? t('share.status.invalidPasswordOrExpired') : t('share.status.expiredOrUnavailable');
+    }
     finally { isAccessing.value = false; }
   };
 
@@ -50,7 +60,10 @@ export function useShareAccess(shareLink: Ref<string>) {
       a.href = url; a.download = share.value?.itemInfo.name || 'download';
       document.body.appendChild(a); a.click(); a.remove();
       window.URL.revokeObjectURL(url);
-    } catch (e) { console.error('Failed to download shared file', e); error.value = 'Download failed.'; }
+    } catch (e) {
+      console.error('Failed to download shared file', e);
+      error.value = t('share.status.downloadFailed');
+    }
     finally { isDownloading.value = false; }
   };
 
@@ -62,7 +75,10 @@ export function useShareAccess(shareLink: Ref<string>) {
       const url = window.URL.createObjectURL(blob);
       window.open(url, '_blank', 'noopener,noreferrer');
       setTimeout(() => window.URL.revokeObjectURL(url), 30_000);
-    } catch (e) { console.error('Failed to preview shared file', e); error.value = 'Preview failed.'; }
+    } catch (e) {
+      console.error('Failed to preview shared file', e);
+      error.value = t('share.status.previewFailed');
+    }
     finally { isPreviewing.value = false; }
   };
 
@@ -71,8 +87,12 @@ export function useShareAccess(shareLink: Ref<string>) {
     isSaving.value = true; error.value = ''; statusMessage.value = '';
     try {
       const resp = await saveShare(shareLink.value, { targetFolderId, shareAccessToken: accessData.value.accessToken });
-      statusMessage.value = `Saved successfully (${resp.itemType}).`;
-    } catch (e) { console.error('Failed to save share', e); error.value = 'Save failed. Please make sure you are logged in and verified.'; }
+      const itemTypeLabel = resp.itemType === 'folder' ? t('share.itemType.folder') : t('share.itemType.file');
+      statusMessage.value = t('share.status.savedSuccess').replace('{itemType}', itemTypeLabel);
+    } catch (e) {
+      console.error('Failed to save share', e);
+      error.value = t('share.status.saveFailed');
+    }
     finally { isSaving.value = false; }
   };
 

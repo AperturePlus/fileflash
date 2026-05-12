@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Text } from '../../atoms';
 import { Button, TextField } from '../../molecules';
+import { useLocaleStore } from '../../../store/locale';
 
 const props = defineProps<{
   passwordProtected: boolean;
@@ -14,29 +15,32 @@ const emit = defineEmits<{
   (e: 'request-access'): void;
 }>();
 
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
 void props;
 </script>
 
 <template>
   <div class="share-access">
-    <Text variant="h2" as="h3" class="share-access__title">Access</Text>
+    <Text variant="h2" as="h3" class="share-access__title">{{ t('share.access.title') }}</Text>
 
     <div v-if="passwordProtected" class="share-access__form">
       <TextField
         :model-value="password"
-        label="Password"
+        :label="t('share.access.passwordLabel')"
         type="password"
-        placeholder="Enter password"
+        :placeholder="t('share.access.passwordPlaceholder')"
         @update:model-value="emit('update:password', $event)"
       />
       <Button :disabled="isAccessing" :loading="isAccessing" @click="emit('request-access')">
-        {{ isAccessing ? 'Checking...' : 'Unlock' }}
+        {{ isAccessing ? t('share.access.checking') : t('share.access.unlock') }}
       </Button>
     </div>
 
     <div v-else class="share-access__actions">
       <Button :disabled="isAccessing" :loading="isAccessing" @click="emit('request-access')">
-        {{ isAccessing ? 'Accessing...' : 'Get Access' }}
+        {{ isAccessing ? t('share.access.accessing') : t('share.access.getAccess') }}
       </Button>
     </div>
 
