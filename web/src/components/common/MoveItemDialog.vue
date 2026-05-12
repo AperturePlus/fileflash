@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import type { ContentItem, FolderItem } from '../../types/file';
 import { getFolderContents } from '../../api/folder';
 import FolderTreeNode from './FolderTreeNode.vue';
+import FileTreeNode from './FileTreeNode.vue';
 import { useLocaleStore } from '../../store/locale';
 import { ui } from '../../utils/ui';
 
@@ -17,6 +18,7 @@ interface Props {
   prompt?: string;
   confirmText?: string;
   rootLabel?: string;
+  treeVariant?: 'legacy' | 'modern';
 }
 const props = defineProps<Props>();
 const localeStore = useLocaleStore();
@@ -46,6 +48,7 @@ const promptText = computed(() => props.prompt || t('move.dialog.prompt'));
 const confirmButtonText = computed(() => props.confirmText || t('move.dialog.confirm'));
 const rootText = computed(() => props.rootLabel || t('move.dialog.root'));
 const showShareHandling = computed(() => props.enableShareHandling !== false && Boolean(props.hasActiveShare));
+const treeVariant = computed(() => props.treeVariant || 'legacy');
 
 const fetchRootFolders = async () => {
   if (rootFolders.value.length > 0) return; // Don't re-fetch if already loaded
@@ -96,6 +99,17 @@ const handleConfirm = () => {
   });
 };
 
+const handleModernTreeNavigate = (itemId: string) => {
+  const folder = rootFolders.value.find((entry) => entry.id === itemId);
+  if (folder) {
+    handleSelectFolder(folder.id);
+  }
+};
+
+const handleModernTreeSelectFolder = (folderId: string) => {
+  handleSelectFolder(folderId);
+};
+
 </script>
 
 <template>
@@ -130,13 +144,27 @@ const handleConfirm = () => {
               >
                 {{ rootText }}
               </div>
-              <FolderTreeNode
-                v-for="folder in rootFolders"
-                :key="folder.id"
-                :node="folder"
-                :selected-folder-id="selectedFolderId"
-                @select="handleSelectFolder"
-              />
+              <template v-if="treeVariant === 'legacy'">
+                <FolderTreeNode
+                  v-for="folder in rootFolders"
+                  :key="folder.id"
+                  :node="folder"
+                  :selected-folder-id="selectedFolderId"
+                  @select="handleSelectFolder"
+                />
+              </template>
+              <template v-else>
+                <FileTreeNode
+                  v-for="folder in rootFolders"
+                  :key="`modern-${folder.id}`"
+                  :node="folder"
+                  :level="0"
+                  :select-folders="true"
+                  :selected-node-id="selectedFolderId"
+                  @navigate="handleModernTreeNavigate"
+                  @select-folder="handleModernTreeSelectFolder"
+                />
+              </template>
             </div>
           </div>
         </div>

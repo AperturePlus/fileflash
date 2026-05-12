@@ -301,6 +301,7 @@ onUnmounted(() => {
         :is-visible="isFolderPickerVisible"
         :item-to-move="file"
         :enable-share-handling="false"
+        tree-variant="modern"
         title="Select destination folder"
         prompt="Choose a folder to extract into:"
         confirm-text="Select"
