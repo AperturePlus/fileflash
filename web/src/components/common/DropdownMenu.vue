@@ -64,7 +64,7 @@ onUnmounted(() => {
       <slot name="trigger"></slot>
     </div>
     <transition name="fade">
-      <div v-if="isVisible" ref="menu" class="dropdown-menu" :style="menuStyle">
+      <div v-if="isVisible" ref="menu" data-dropdown-menu class="dropdown-menu" :style="menuStyle">
         <slot name="content"></slot>
       </div>
     </transition>

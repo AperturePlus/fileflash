@@ -1,6 +1,8 @@
 import { ref } from 'vue';
 import type { Ref } from 'vue';
 import { useFileStore } from '../store/file';
+import { useSettingsStore } from '../store/settings';
+import { useLocaleStore } from '../store/locale';
 import { uploadFile, type UploadProgressData } from '../utils/uploader';
 import { eventBus } from '../utils/eventBus';
 import { ui } from '../utils/ui';
@@ -13,9 +15,20 @@ interface UploadTask {
 
 export function useUpload(currentFolderId: Ref<string | null>) {
   const fileStore = useFileStore();
+  const settingsStore = useSettingsStore();
+  const localeStore = useLocaleStore();
+  const t = localeStore.t;
   const uploadTasks = ref<UploadTask[]>([]);
   const isDragging = ref(false);
   let dragCounter = 0;
+
+  const formatMessage = (key: 'files.upload.toast.success' | 'files.upload.toast.failed', vars: Record<string, string>) => {
+    let message = t(key);
+    Object.entries(vars).forEach(([varName, value]) => {
+      message = message.replace(`{${varName}}`, value);
+    });
+    return message;
+  };
 
   const handleDragEnter = (e: DragEvent) => {
     e.preventDefault();
@@ -60,8 +73,13 @@ export function useUpload(currentFolderId: Ref<string | null>) {
       const newFile = await uploadFile({
         file,
         parentId: currentFolderId.value || 'root',
+        chunkSize: Math.max(1, settingsStore.settings.chunkSize) * 1024 * 1024,
+        concurrency: Math.max(1, settingsStore.settings.maxConcurrentUploads),
+        maxRetries: settingsStore.settings.autoRetryFailedUploads
+          ? Math.max(1, settingsStore.settings.retryAttempts)
+          : 1,
         onUploadProgress: (progressData) => {
-          const task = uploadTasks.value.find(t => t.id === taskId);
+          const task = uploadTasks.value.find((uploadTask) => uploadTask.id === taskId);
           if (task) task.progress = progressData;
         },
       });
@@ -75,7 +93,7 @@ export function useUpload(currentFolderId: Ref<string | null>) {
           name: newFile.fileName,
           size: newFile.fileSize,
           mimeType: newFile.mimeType,
-          ownerName: 'You', // Placeholder
+          ownerName: t('files.owner.you'), // Placeholder
           updatedAt: newFile.createdAt,
           createdAt: newFile.createdAt,
           folderId: newFile.folderId,
@@ -84,21 +102,35 @@ export function useUpload(currentFolderId: Ref<string | null>) {
         fileStore.items.unshift(fileItem);
         
         // 显示成功提示
-        console.log(`文件 "${file.name}" 上传成功！`);
+        if (settingsStore.settings.uploadCompleteNotification) {
+          ui.toast({
+            type: 'success',
+            message: formatMessage('files.upload.toast.success', { fileName: `"${file.name}"` }),
+          });
+        }
       } else {
         // If upload completes but no file data is returned (e.g. second upload),
         // refresh the folder to ensure consistency.
         await fileStore.fetchFolderContents(currentFolderId.value || 'root');
-        console.log(`文件 "${file.name}" 上传完成！`);
+        if (settingsStore.settings.uploadCompleteNotification) {
+          ui.toast({
+            type: 'success',
+            message: formatMessage('files.upload.toast.success', { fileName: `"${file.name}"` }),
+          });
+        }
       }
 
       eventBus.emit('refresh-file-tree');
     } catch (error) {
       console.error('Upload failed:', error);
-      ui.toast({ type: 'error', message: `Upload of ${file.name} failed.` });
+      const reason = error instanceof Error && error.message ? error.message : t('files.upload.toast.unknownError');
+      ui.toast({
+        type: 'error',
+        message: formatMessage('files.upload.toast.failed', { fileName: file.name, reason }),
+      });
     } finally {
       setTimeout(() => {
-        uploadTasks.value = uploadTasks.value.filter(t => t.id !== taskId);
+        uploadTasks.value = uploadTasks.value.filter((uploadTask) => uploadTask.id !== taskId);
       }, 5000);
     }
   };
@@ -111,7 +143,19 @@ export function useUpload(currentFolderId: Ref<string | null>) {
     // Check for internal item drop (move)
     const sourceItemIdsJSON = e.dataTransfer?.getData('application/fileflash-item-ids');
     if (sourceItemIdsJSON) {
-      const sourceItemIds = JSON.parse(sourceItemIdsJSON);
+      // Ignore bubbled drops from child nodes; folder-level handlers should own them.
+      if (e.target !== e.currentTarget) return;
+
+      let sourceItemIds: string[] = [];
+      try {
+        const parsed = JSON.parse(sourceItemIdsJSON);
+        sourceItemIds = Array.isArray(parsed) ? parsed.map((id) => String(id)) : [];
+      } catch (error) {
+        console.warn('Invalid internal drag payload:', error);
+        return;
+      }
+      if (!sourceItemIds.length) return;
+
       const targetFolderId = currentFolderId.value || 'root';
 
       // Prevent dropping into the same folder
@@ -125,7 +169,7 @@ export function useUpload(currentFolderId: Ref<string | null>) {
       
       if (sourceItemIds.includes(targetFolderId) || isDroppingInSameFolder) return;
 
-      const targetFolderName = fileStore.path[fileStore.path.length - 1]?.name || 'My Files';
+      const targetFolderName = fileStore.path[fileStore.path.length - 1]?.name || t('files.root.myFiles');
       
       eventBus.emit('move-items', {
         sourceItemIds,

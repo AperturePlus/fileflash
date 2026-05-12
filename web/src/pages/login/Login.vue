@@ -1,24 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { useUserStore } from '../../store/user';
-import AuthLayout from '../../components/layout/AuthLayout.vue';
+import { ref } from "vue";
+import { useRouter } from "vue-router";
+import { useUserStore } from "../../store/user";
 
 const router = useRouter();
 const userStore = useUserStore();
 
-const username = ref('admin');
-const password = ref('admin123');
+const username = ref("admin");
+const password = ref("admin123");
 const rememberMe = ref(false);
 const isLoading = ref(false);
-const errorMessage = ref('');
+const errorMessage = ref("");
 const showPassword = ref(false);
 
 const handleLogin = async () => {
   if (isLoading.value) return;
 
   isLoading.value = true;
-  errorMessage.value = '';
+  errorMessage.value = "";
 
   try {
     const loginResponse = await userStore.login({
@@ -27,30 +26,33 @@ const handleLogin = async () => {
     });
 
     if (rememberMe.value) {
-      localStorage.setItem('rememberMe', 'true');
-      localStorage.setItem('savedUsername', username.value);
+      localStorage.setItem("rememberMe", "true");
+      localStorage.setItem("savedUsername", username.value);
     } else {
-      localStorage.removeItem('rememberMe');
-      localStorage.removeItem('savedUsername');
+      localStorage.removeItem("rememberMe");
+      localStorage.removeItem("savedUsername");
     }
 
     if (loginResponse.user.emailVerified) {
-      router.push('/files');
+      router.push("/files");
     } else {
-      router.push('/verify-email');
+      router.push("/verify-email");
     }
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Login failed. Please check your credentials.';
+    errorMessage.value =
+      error instanceof Error
+        ? error.message
+        : "Login failed. Please check your credentials.";
   } finally {
     isLoading.value = false;
   }
 };
 
 const loadSavedCredentials = () => {
-  const savedRememberMe = localStorage.getItem('rememberMe');
-  const savedUsername = localStorage.getItem('savedUsername');
+  const savedRememberMe = localStorage.getItem("rememberMe");
+  const savedUsername = localStorage.getItem("savedUsername");
 
-  if (savedRememberMe === 'true' && savedUsername) {
+  if (savedRememberMe === "true" && savedUsername) {
     rememberMe.value = true;
     username.value = savedUsername;
   }
@@ -60,56 +62,54 @@ loadSavedCredentials();
 </script>
 
 <template>
-  <AuthLayout>
-    <div class="auth-card">
-      <header class="auth-header">
-        <h1>Sign in to FileFlash</h1>
-        <p>Manage cloud files, team sharing, recycle restore, and admin operations.</p>
+  <div class="auth-card">
+    <header class="auth-header">
+      <h1>Sign in to FileFlash</h1>
+      <p>Manage cloud files, team sharing, recycle restore, and admin operations.</p>
 
-        <div class="test-account">
-          <strong>Mock Test Accounts</strong>
-          <small>admin / admin123 (administrator)</small>
-          <small>demo / demo123 (regular user)</small>
+      <div class="test-account">
+        <strong>Mock Test Accounts</strong>
+        <small>admin / admin123 (administrator)</small>
+        <small>demo / demo123 (regular user)</small>
+      </div>
+    </header>
+
+    <form class="auth-form" @submit.prevent="handleLogin">
+      <label class="field">
+        <span>Username or Email</span>
+        <input v-model="username" type="text" placeholder="Enter username or email" required />
+      </label>
+
+      <label class="field">
+        <span>Password</span>
+        <div class="password-wrap">
+          <input v-model="password" :type="showPassword ? 'text' : 'password'" placeholder="Enter password" required />
+          <button type="button" class="password-toggle" @click="showPassword = !showPassword">
+            {{ showPassword ? 'Hide' : 'Show' }}
+          </button>
         </div>
-      </header>
+      </label>
 
-      <form class="auth-form" @submit.prevent="handleLogin">
-        <label class="field">
-          <span>Username or Email</span>
-          <input v-model="username" type="text" placeholder="Enter username or email" required />
+      <div class="extra-row">
+        <label class="remember">
+          <input v-model="rememberMe" type="checkbox" />
+          <span>Remember me</span>
         </label>
+        <router-link to="/forgot-password">Forgot password</router-link>
+      </div>
 
-        <label class="field">
-          <span>Password</span>
-          <div class="password-wrap">
-            <input v-model="password" :type="showPassword ? 'text' : 'password'" placeholder="Enter password" required />
-            <button type="button" class="password-toggle" @click="showPassword = !showPassword">
-              {{ showPassword ? 'Hide' : 'Show' }}
-            </button>
-          </div>
-        </label>
+      <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
-        <div class="extra-row">
-          <label class="remember">
-            <input v-model="rememberMe" type="checkbox" />
-            <span>Remember me</span>
-          </label>
-          <router-link to="/forgot-password">Forgot password</router-link>
-        </div>
+      <button class="submit-btn" type="submit" :disabled="isLoading">
+        {{ isLoading ? 'Signing in...' : 'Sign in' }}
+      </button>
+    </form>
 
-        <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
-
-        <button class="submit-btn" type="submit" :disabled="isLoading">
-          {{ isLoading ? 'Signing in...' : 'Sign in' }}
-        </button>
-      </form>
-
-      <footer class="auth-footer">
-        <span>Need an account?</span>
-        <router-link to="/register">Create one</router-link>
-      </footer>
-    </div>
-  </AuthLayout>
+    <footer class="auth-footer">
+      <span>Need an account?</span>
+      <router-link to="/register">Create one</router-link>
+    </footer>
+  </div>
 </template>
 
 <style scoped>

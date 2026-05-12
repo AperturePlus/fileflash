@@ -1,0 +1,28 @@
+/* web/src/styles/tokens/space.css
+ * 4px base scale. Component-specific tokens (--row-h, --form-gap) are
+ * derived from this scale for consistency. Density is "comfort" by default.
+ */
+
+:root {
+  /* Base scale */
+  --sp-xs:   4px;
+  --sp-sm:   8px;
+  --sp-md:   12px;
+  --sp-lg:   16px;
+  --sp-xl:   24px;
+  --sp-2xl:  32px;
+  --sp-3xl:  48px;
+  --sp-4xl:  64px;
+
+  /* Component-specific */
+  --row-h:        32px;
+  --form-gap:     16px;
+  --section-gap:  32px;
+
+  /* Layout (preserved from legacy) */
+  --layout-header-height:        56px;
+  --layout-footer-height:        36px;
+  --sidebar-left-width:          260px;
+  --sidebar-left-collapsed-width: 64px;
+  --sidebar-right-width:         340px;
+}

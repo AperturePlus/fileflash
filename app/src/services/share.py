@@ -19,6 +19,12 @@ from ..core.security import (
     verify_password,
 )
 from ..core.settings import Settings
+from ..db.transaction import (
+    apply_local_lock_timeout,
+    is_retryable_database_error,
+    run_with_transaction_retry,
+    to_retryable_concurrency_error,
+)
 from ..models.enums import FileStatus, FolderStatus, FolderType, ShareStatus
 from ..models.tables_access_share import Share, ShareAccessLog
 from ..models.tables_storage import File, Folder, StorageObject
@@ -51,73 +57,83 @@ class ShareService:
 
     async def create_share(self, *, user_id: int, payload: CreateShareRequest) -> ShareSchema:
         resource_id = self._parse_int(payload.resource_id, field_name="resourceId")
-        now = datetime.now(UTC)
 
-        if payload.resource_type == "file":
-            file_row = await self._get_active_file(file_id=resource_id, owner_id=user_id)
-            existing = await self._find_existing_active_share(
-                user_id=user_id,
-                now=now,
-                file_id=file_row.file_id,
-                folder_id=None,
-            )
-            if existing is not None:
-                return await self._build_share_schema(existing)
+        async def _operation() -> ShareSchema:
+            now = datetime.now(UTC)
+            await apply_local_lock_timeout(self.db)
 
-            share_code = await self._generate_share_code()
-            share_row = Share(
-                user_id=user_id,
-                resource_type="file",
-                file_id=file_row.file_id,
-                folder_id=None,
-                share_link=share_code,
-                share_code=share_code,
-                status=ShareStatus.ACTIVE,
-                share_type="public",
-                permission_role="viewer",
-                allow_preview=True,
-                allow_download=True,
-                allow_save=True,
-                allow_reshare=False,
-                require_login=False,
-            )
-            self.db.add(share_row)
-            await self.db.commit()
-            return await self._build_share_schema(share_row)
+            if payload.resource_type == "file":
+                file_row = await self._get_active_file(file_id=resource_id, owner_id=user_id, for_update=True)
+                existing = await self._find_existing_active_share(
+                    user_id=user_id,
+                    now=now,
+                    file_id=file_row.file_id,
+                    folder_id=None,
+                )
+                if existing is not None:
+                    return await self._build_share_schema(existing)
 
-        if payload.resource_type == "folder":
-            folder_row = await self._get_active_folder(folder_id=resource_id, owner_id=user_id)
-            existing = await self._find_existing_active_share(
-                user_id=user_id,
-                now=now,
-                file_id=None,
-                folder_id=folder_row.folder_id,
-            )
-            if existing is not None:
-                return await self._build_share_schema(existing)
+                share_code = await self._generate_share_code()
+                share_row = Share(
+                    user_id=user_id,
+                    resource_type="file",
+                    file_id=file_row.file_id,
+                    folder_id=None,
+                    share_link=share_code,
+                    share_code=share_code,
+                    status=ShareStatus.ACTIVE,
+                    share_type="public",
+                    permission_role="viewer",
+                    allow_preview=True,
+                    allow_download=True,
+                    allow_save=True,
+                    allow_reshare=False,
+                    require_login=False,
+                )
+                self.db.add(share_row)
+                await self.db.commit()
+                return await self._build_share_schema(share_row)
 
-            share_code = await self._generate_share_code()
-            share_row = Share(
-                user_id=user_id,
-                resource_type="folder",
-                file_id=None,
-                folder_id=folder_row.folder_id,
-                share_link=share_code,
-                share_code=share_code,
-                status=ShareStatus.ACTIVE,
-                share_type="public",
-                permission_role="viewer",
-                allow_preview=False,
-                allow_download=False,
-                allow_save=True,
-                allow_reshare=False,
-                require_login=False,
-            )
-            self.db.add(share_row)
-            await self.db.commit()
-            return await self._build_share_schema(share_row)
+            if payload.resource_type == "folder":
+                folder_row = await self._get_active_folder(folder_id=resource_id, owner_id=user_id, for_update=True)
+                existing = await self._find_existing_active_share(
+                    user_id=user_id,
+                    now=now,
+                    file_id=None,
+                    folder_id=folder_row.folder_id,
+                )
+                if existing is not None:
+                    return await self._build_share_schema(existing)
 
-        raise ApiError(status_code=400, code=400, message="resourceType must be file or folder")
+                share_code = await self._generate_share_code()
+                share_row = Share(
+                    user_id=user_id,
+                    resource_type="folder",
+                    file_id=None,
+                    folder_id=folder_row.folder_id,
+                    share_link=share_code,
+                    share_code=share_code,
+                    status=ShareStatus.ACTIVE,
+                    share_type="public",
+                    permission_role="viewer",
+                    allow_preview=False,
+                    allow_download=False,
+                    allow_save=True,
+                    allow_reshare=False,
+                    require_login=False,
+                )
+                self.db.add(share_row)
+                await self.db.commit()
+                return await self._build_share_schema(share_row)
+
+            raise ApiError(status_code=400, code=400, message="resourceType must be file or folder")
+
+        try:
+            return await run_with_transaction_retry(self.db, _operation)
+        except Exception as exc:  # noqa: BLE001
+            if is_retryable_database_error(exc):
+                raise to_retryable_concurrency_error(exc) from exc
+            raise
 
     async def list_shares(self, *, user_id: int, query: GetSharesQuery) -> PaginatedData[ShareSchema]:
         page = max(1, query.page)
@@ -181,70 +197,85 @@ class ShareService:
         ip_address: str,
         user_agent: str | None,
     ) -> AccessShareResponseData:
-        share_row = await self._get_share_by_link(share_link=share_link)
-        if share_row is None or share_row.status == ShareStatus.DELETED:
-            raise ApiError(status_code=404, code=404, message="Share not found")
+        async def _operation() -> AccessShareResponseData:
+            await apply_local_lock_timeout(self.db)
+            share_row = await self._get_share_by_link(share_link=share_link, for_update=True)
+            if share_row is None or share_row.status == ShareStatus.DELETED:
+                raise ApiError(status_code=404, code=404, message="Share not found")
 
-        now = datetime.now(UTC)
-        if share_row.expire_time and share_row.expire_time <= now:
-            raise ApiError(status_code=410, code=410, message="Share link expired")
-        if share_row.status != ShareStatus.ACTIVE:
-            raise ApiError(status_code=404, code=404, message="Share not found")
+            now = datetime.now(UTC)
+            if share_row.expire_time and share_row.expire_time <= now:
+                raise ApiError(status_code=410, code=410, message="Share link expired")
+            if share_row.status != ShareStatus.ACTIVE:
+                raise ApiError(status_code=404, code=404, message="Share not found")
 
-        if share_row.password_hash:
-            if not password:
-                await self._log_share_event(
-                    share_id=share_row.share_id,
-                    user_id=None,
-                    event_type="access",
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                    result="failed",
+            if share_row.password_hash:
+                if not password:
+                    await self._log_share_event(
+                        share_id=share_row.share_id,
+                        user_id=None,
+                        event_type="access",
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                        result="failed",
+                    )
+                    await self.db.commit()
+                    raise ApiError(status_code=403, code=403, message="Share password required")
+                if not verify_password(password, share_row.password_hash):
+                    await self._log_share_event(
+                        share_id=share_row.share_id,
+                        user_id=None,
+                        event_type="access",
+                        ip_address=ip_address,
+                        user_agent=user_agent,
+                        result="failed",
+                    )
+                    await self.db.commit()
+                    raise ApiError(status_code=403, code=403, message="Invalid share password")
+
+            await self.db.execute(
+                update(Share)
+                .where(Share.share_id == share_row.share_id)
+                .values(
+                    visit_count=Share.visit_count + 1,
+                    last_accessed_at=now,
                 )
-                await self.db.commit()
-                raise ApiError(status_code=403, code=403, message="Share password required")
-            if not verify_password(password, share_row.password_hash):
-                await self._log_share_event(
-                    share_id=share_row.share_id,
-                    user_id=None,
-                    event_type="access",
-                    ip_address=ip_address,
-                    user_agent=user_agent,
-                    result="failed",
-                )
-                await self.db.commit()
-                raise ApiError(status_code=403, code=403, message="Invalid share password")
+            )
+            await self._log_share_event(
+                share_id=share_row.share_id,
+                user_id=None,
+                event_type="access",
+                ip_address=ip_address,
+                user_agent=user_agent,
+                result="success",
+            )
 
-        share_row.visit_count = int(share_row.visit_count or 0) + 1
-        share_row.last_accessed_at = now
-        await self._log_share_event(
-            share_id=share_row.share_id,
-            user_id=None,
-            event_type="access",
-            ip_address=ip_address,
-            user_agent=user_agent,
-            result="success",
-        )
+            access_token = create_share_access_token(
+                share_id=int(share_row.share_id),
+                settings=self.settings,
+                ttl_seconds=self.SHARE_ACCESS_TOKEN_TTL_SECONDS,
+            )
+            await self.db.commit()
 
-        access_token = create_share_access_token(
-            share_id=int(share_row.share_id),
-            settings=self.settings,
-            ttl_seconds=self.SHARE_ACCESS_TOKEN_TTL_SECONDS,
-        )
-        await self.db.commit()
+            item_type, item_info = await self._load_share_item_info(share_row)
+            access_urls = AccessUrls(
+                download=self._share_download_url(share_row) if (item_type == "file" and share_row.allow_download) else "",
+                preview=self._share_preview_url(share_row) if (item_type == "file" and share_row.allow_preview) else "",
+            )
+            return AccessShareResponseData(
+                access_token=access_token,
+                expires_in=self.SHARE_ACCESS_TOKEN_TTL_SECONDS,
+                item_type=item_type,
+                item_info=item_info,
+                access_urls=access_urls,
+            )
 
-        item_type, item_info = await self._load_share_item_info(share_row)
-        access_urls = AccessUrls(
-            download=self._share_download_url(share_row) if (item_type == "file" and share_row.allow_download) else "",
-            preview=self._share_preview_url(share_row) if (item_type == "file" and share_row.allow_preview) else "",
-        )
-        return AccessShareResponseData(
-            access_token=access_token,
-            expires_in=self.SHARE_ACCESS_TOKEN_TTL_SECONDS,
-            item_type=item_type,
-            item_info=item_info,
-            access_urls=access_urls,
-        )
+        try:
+            return await run_with_transaction_retry(self.db, _operation)
+        except Exception as exc:  # noqa: BLE001
+            if is_retryable_database_error(exc):
+                raise to_retryable_concurrency_error(exc) from exc
+            raise
 
     async def update_settings(
         self,
@@ -371,47 +402,70 @@ class ShareService:
         ip_address: str,
         user_agent: str | None,
     ) -> tuple[AsyncIterator[bytes], str, str]:
-        share_row = await self._resolve_share_for_access_token(
-            share_link=share_link,
-            share_access_token=share_access_token,
-        )
-        if share_row.resource_type != "file" or not share_row.file_id:
-            raise ApiError(status_code=400, code=400, message="Only file shares support download/preview")
+        async def _operation() -> tuple[AsyncIterator[bytes], str, str]:
+            await apply_local_lock_timeout(self.db)
+            share_row = await self._resolve_share_for_access_token(
+                share_link=share_link,
+                share_access_token=share_access_token,
+                for_update=True,
+            )
+            if share_row.resource_type != "file" or not share_row.file_id:
+                raise ApiError(status_code=400, code=400, message="Only file shares support download/preview")
 
-        if action == "download" and not share_row.allow_download:
-            raise ApiError(status_code=403, code=403, message="Download is not allowed for this share")
-        if action == "preview" and not share_row.allow_preview:
-            raise ApiError(status_code=403, code=403, message="Preview is not allowed for this share")
+            if action == "download" and not share_row.allow_download:
+                raise ApiError(status_code=403, code=403, message="Download is not allowed for this share")
+            if action == "preview" and not share_row.allow_preview:
+                raise ApiError(status_code=403, code=403, message="Preview is not allowed for this share")
 
-        file_row = await self._get_active_file(file_id=int(share_row.file_id), owner_id=share_row.user_id)
-        storage_object = await self.db.get(StorageObject, int(file_row.storage_object_id))
-        if storage_object is None:
-            raise ApiError(status_code=404, code=404, message="Shared file content not found")
+            file_row = await self._get_active_file(file_id=int(share_row.file_id), owner_id=share_row.user_id)
+            storage_object = await self.db.get(StorageObject, int(file_row.storage_object_id))
+            if storage_object is None:
+                raise ApiError(status_code=404, code=404, message="Shared file content not found")
 
-        if action == "download":
-            share_row.download_count = int(share_row.download_count or 0) + 1
+            if action == "download":
+                await self.db.execute(
+                    update(Share)
+                    .where(Share.share_id == share_row.share_id)
+                    .values(download_count=Share.download_count + 1)
+                )
 
-        await self._log_share_event(
-            share_id=share_row.share_id,
-            user_id=None,
-            event_type=action,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            result="success",
-        )
-        await self.db.commit()
+            await self._log_share_event(
+                share_id=share_row.share_id,
+                user_id=None,
+                event_type=action,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                result="success",
+            )
+            await self.db.commit()
 
-        content_type = file_row.mime_type or storage_object.content_type or "application/octet-stream"
-        return self.storage.iter_object(object_key=storage_object.object_key), file_row.file_name, content_type
+            content_type = file_row.mime_type or storage_object.content_type or "application/octet-stream"
+            return self.storage.iter_object(object_key=storage_object.object_key), file_row.file_name, content_type
 
-    async def _resolve_share_for_access_token(self, *, share_link: str, share_access_token: str) -> Share:
+        try:
+            return await run_with_transaction_retry(self.db, _operation)
+        except Exception as exc:  # noqa: BLE001
+            if is_retryable_database_error(exc):
+                raise to_retryable_concurrency_error(exc) from exc
+            raise
+
+    async def _resolve_share_for_access_token(
+        self,
+        *,
+        share_link: str,
+        share_access_token: str,
+        for_update: bool = False,
+    ) -> Share:
         try:
             payload = decode_share_access_token(share_access_token, self.settings)
             share_id = int(payload["sub"])
         except Exception as exc:  # noqa: BLE001
             raise ApiError(status_code=401, code=401, message="Invalid share access token") from exc
 
-        share_row = await self.db.get(Share, share_id)
+        statement = select(Share).where(Share.share_id == share_id)
+        if for_update:
+            statement = statement.with_for_update()
+        share_row = await self.db.scalar(statement)
         if share_row is None or share_row.status == ShareStatus.DELETED:
             raise ApiError(status_code=401, code=401, message="Invalid share access token")
 
@@ -445,10 +499,11 @@ class ShareService:
         )
         return await self.db.scalar(stmt.limit(1))
 
-    async def _get_share_by_link(self, *, share_link: str) -> Share | None:
-        return await self.db.scalar(
-            select(Share).where(or_(Share.share_link == share_link, Share.share_code == share_link)).limit(1)
-        )
+    async def _get_share_by_link(self, *, share_link: str, for_update: bool = False) -> Share | None:
+        statement = select(Share).where(or_(Share.share_link == share_link, Share.share_code == share_link)).limit(1)
+        if for_update:
+            statement = statement.with_for_update()
+        return await self.db.scalar(statement)
 
     async def _get_share_for_update(self, *, user_id: int, share_link: str) -> Share | None:
         return await self.db.scalar(
@@ -534,30 +589,32 @@ class ShareService:
             ),
         )
 
-    async def _get_active_file(self, *, file_id: int, owner_id: int) -> File:
-        file_row = await self.db.scalar(
-            select(File).where(
-                and_(
-                    File.file_id == file_id,
-                    File.owner_id == owner_id,
-                    File.status == FileStatus.ACTIVE,
-                )
+    async def _get_active_file(self, *, file_id: int, owner_id: int, for_update: bool = False) -> File:
+        statement = select(File).where(
+            and_(
+                File.file_id == file_id,
+                File.owner_id == owner_id,
+                File.status == FileStatus.ACTIVE,
             )
         )
+        if for_update:
+            statement = statement.with_for_update()
+        file_row = await self.db.scalar(statement)
         if file_row is None:
             raise ApiError(status_code=404, code=404, message="File not found")
         return file_row
 
-    async def _get_active_folder(self, *, folder_id: int, owner_id: int) -> Folder:
-        folder_row = await self.db.scalar(
-            select(Folder).where(
-                and_(
-                    Folder.folder_id == folder_id,
-                    Folder.owner_id == owner_id,
-                    Folder.status == FolderStatus.ACTIVE,
-                )
+    async def _get_active_folder(self, *, folder_id: int, owner_id: int, for_update: bool = False) -> Folder:
+        statement = select(Folder).where(
+            and_(
+                Folder.folder_id == folder_id,
+                Folder.owner_id == owner_id,
+                Folder.status == FolderStatus.ACTIVE,
             )
         )
+        if for_update:
+            statement = statement.with_for_update()
+        folder_row = await self.db.scalar(statement)
         if folder_row is None:
             raise ApiError(status_code=404, code=404, message="Folder not found")
         return folder_row

@@ -1,5 +1,5 @@
 [project]
-name = "ffvenv"
+name = "fileflash"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -20,6 +20,8 @@ dependencies = [
     "uvicorn>=0.42.0",
     "python-multipart>=0.0.24",
 ]
+[project.scripts]
+fileflash = "main:main"
 
 [dependency-groups]
 dev = [

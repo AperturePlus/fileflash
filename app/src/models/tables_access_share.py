@@ -6,7 +6,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
-    DateTime,
     ForeignKey,
     Identity,
     Index,
@@ -26,6 +25,7 @@ from .enums import (
     ViewMode,
 )
 from .pg import pg_enum
+from .types import UTCDateTime as DateTime
 
 
 class Acl(Base):

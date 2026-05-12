@@ -10,7 +10,14 @@ from ..core.deps import get_archive_service, get_current_user, get_file_service
 from ..core.errors import ApiError, api_success
 from ..models.tables_identity import User
 from ..schemas.archive import ArchiveExtractRequest
-from ..schemas.file import BatchDownloadRequest, BatchFilesRequest, GetFilesQuery, MoveFileRequest
+from ..schemas.file import (
+    BatchDownloadRequest,
+    BatchFilesRequest,
+    GetFilesQuery,
+    MoveFileRequest,
+    RenameFileRequest,
+    ToggleFileStarRequest,
+)
 from ..schemas.job import to_background_job_response
 from ..services.archive import ArchiveService
 from ..services.file import FileService
@@ -45,6 +52,32 @@ async def list_starred(
 ):
     result = await file_service.list_starred(user_id=current_user.user_id)
     return api_success(data=result.model_dump(by_alias=True))
+
+
+@router.patch("/{file_id}")
+async def rename_file(
+    file_id: str,
+    payload: RenameFileRequest,
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    result = await file_service.rename_file(user_id=current_user.user_id, file_id=file_id, payload=payload)
+    return api_success(data=result.model_dump(by_alias=True), message="File renamed successfully")
+
+
+@router.patch("/{file_id}/star")
+async def toggle_file_star(
+    file_id: str,
+    payload: ToggleFileStarRequest,
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    result = await file_service.toggle_file_star(
+        user_id=current_user.user_id,
+        file_id=file_id,
+        is_starred=payload.is_starred,
+    )
+    return api_success(data=result.model_dump(by_alias=True), message="File star updated successfully")
 
 
 @router.patch("/{file_id}/move")
@@ -109,6 +142,26 @@ async def download_file(
     file_service: FileService = Depends(get_file_service),
 ):
     result = await file_service.get_download_stream(
+        user_id=current_user.user_id,
+        file_id=file_id,
+        range_header=range_header,
+    )
+    return StreamingResponse(
+        result.stream,
+        media_type=result.content_type,
+        headers=result.headers,
+        status_code=result.status_code,
+    )
+
+
+@router.get("/{file_id}/preview")
+async def preview_file(
+    file_id: str,
+    range_header: str | None = Header(default=None, alias="Range"),
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+):
+    result = await file_service.get_preview_stream(
         user_id=current_user.user_id,
         file_id=file_id,
         range_header=range_header,

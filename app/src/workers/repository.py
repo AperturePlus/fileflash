@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..db.transaction import apply_local_lock_timeout
 from ..models import BackgroundJob
 from .contracts import WorkerJobMessage
 
@@ -105,5 +106,6 @@ def get_retry_delay_seconds(retry_backoff_seconds: Sequence[int], *, attempt: in
 
 
 async def _load_job_for_update(db: AsyncSession, *, job_id: int) -> BackgroundJob | None:
+    await apply_local_lock_timeout(db)
     query = select(BackgroundJob).where(BackgroundJob.job_id == job_id).with_for_update()
     return await db.scalar(query)

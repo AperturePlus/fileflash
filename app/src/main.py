@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 
 import uvicorn
 from fastapi import FastAPI
@@ -9,16 +10,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .core import api_error_handler, get_settings, http_exception_handler, validation_exception_handler
-from .core.deps import get_rate_limiter
+from .core.deps import get_object_storage, get_rate_limiter
 from .core.errors import ApiError, api_success
 from .core.middleware import EmailVerificationGateMiddleware
+from .db.engine import verify_database_connection
 from .routers import api_router
+from .s3 import ObjectStorageError
+from .services.dev_seed import initialize_dev_accounts
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    await verify_database_connection()
+    try:
+        await get_object_storage().ensure_bucket()
+    except ObjectStorageError:
+        logger.exception("Object storage startup check failed")
+        raise
+    await initialize_dev_accounts(settings=settings, reset_password=False, auto_run=True)
     yield
     await get_rate_limiter().close()
 
@@ -46,7 +58,7 @@ async def health():
 
 
 def main() -> None:
-    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8080, reload=False)
 
 
 if __name__ == "__main__":

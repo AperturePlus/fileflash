@@ -1,3 +1,17 @@
-from .minio_client import MinioObjectStorageClient, ObjectStat, ObjectWriteResult
+from .minio_client import (
+    MinioObjectStorageClient,
+    ObjectStat,
+    ObjectStorageAuthError,
+    ObjectStorageError,
+    ObjectStorageUnavailableError,
+    ObjectWriteResult,
+)
 
-__all__ = ["MinioObjectStorageClient", "ObjectStat", "ObjectWriteResult"]
+__all__ = [
+    "MinioObjectStorageClient",
+    "ObjectStat",
+    "ObjectStorageAuthError",
+    "ObjectStorageError",
+    "ObjectStorageUnavailableError",
+    "ObjectWriteResult",
+]

@@ -5,9 +5,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
+from ..db.transaction import is_unique_violation_error
 from ..models import BackgroundJob
 from ..workers.contracts import WorkerJobMessage
 from .job_queue import JobQueuePublisher
@@ -28,16 +30,6 @@ class BackgroundJobService:
         max_attempts: int = 5,
         priority: int = 100,
     ) -> BackgroundJob:
-        if idempotency_key:
-            existing = await db.scalar(
-                select(BackgroundJob).where(
-                    BackgroundJob.idempotency_key == idempotency_key,
-                    BackgroundJob.status.in_(("pending", "running", "retrying")),
-                )
-            )
-            if existing is not None:
-                return existing
-
         now = datetime.now(UTC)
         job = BackgroundJob(
             task_type=task_type,
@@ -54,8 +46,18 @@ class BackgroundJobService:
             priority=priority,
         )
         db.add(job)
-        await db.flush()
-        await db.commit()
+        try:
+            await db.flush()
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            if idempotency_key and is_unique_violation_error(exc):
+                existing = await db.scalar(
+                    select(BackgroundJob).where(BackgroundJob.idempotency_key == idempotency_key)
+                )
+                if existing is not None:
+                    return existing
+            raise
 
         if self._queue_publisher is None:
             job.status = "failed"

@@ -5,7 +5,6 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
-    DateTime,
     ForeignKey,
     Identity,
     Index,
@@ -19,6 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
+from .types import UTCDateTime as DateTime
 
 
 class BackgroundJob(Base):

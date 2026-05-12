@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
+from ..core.mime import resolve_file_mime_type
+from ..db.transaction import (
+    apply_local_lock_timeout,
+    is_retryable_database_error,
+    is_unique_violation_error,
+    run_with_transaction_retry,
+    to_retryable_concurrency_error,
+)
 from ..models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
 from ..models.tables_access_share import FavoriteItem
 from ..models.tables_identity import User
@@ -11,6 +21,7 @@ from ..models.tables_storage import File, Folder
 from ..schemas.common import PaginatedData, PaginationMeta
 from ..schemas.file import (
     ContentItem,
+    CreateFolderRequest,
     DeleteFolderResponse,
     FileItem,
     FolderItem,
@@ -20,6 +31,7 @@ from ..schemas.file import (
     MoveFolderRequest,
     MoveFolderResponse,
     PathItem,
+    RenameFolderRequest,
 )
 from .file import FileService
 
@@ -47,6 +59,10 @@ class FolderService:
         root = await self._get_root_folder(user_id)
         query.folder_id = str(root.folder_id)
         return await self.get_folder_contents(user_id=user_id, query=query)
+
+    async def get_root_folder_id(self, *, user_id: int) -> int:
+        root = await self._get_root_folder(user_id)
+        return int(root.folder_id)
 
     async def get_folder_contents(
         self, *, user_id: int, query: GetFolderContentsQuery,
@@ -134,6 +150,135 @@ class FolderService:
         items = [self._to_folder_item(folder, uname, folder.folder_id in starred) for folder, uname in rows]
         return self._paginate(items, total, page, per_page)
 
+    async def create_folder(self, *, user_id: int, payload: CreateFolderRequest) -> FolderItem:
+        folder_name = payload.folder_name.strip()
+        if not folder_name:
+            raise ApiError(status_code=400, code=400, message="folderName cannot be empty")
+
+        parent_folder_id = await self._resolve_parent_folder_id(user_id=user_id, parent_id=payload.parent_folder_id)
+        owner = await self.db.get(User, user_id)
+        if owner is None:
+            raise ApiError(status_code=404, code=404, message="User not found")
+
+        final_name = await self._next_available_folder_name(
+            user_id=user_id,
+            parent_folder_id=parent_folder_id,
+            original_name=folder_name,
+        )
+        now = datetime.now(UTC)
+        folder = Folder(
+            owner_id=user_id,
+            parent_folder_id=parent_folder_id,
+            folder_name=final_name,
+            cached_size=0,
+            status=FolderStatus.ACTIVE,
+            folder_type=FolderType.NORMAL,
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.add(folder)
+        await self.db.commit()
+        await self.db.refresh(folder)
+        return self._to_folder_item(folder, owner.username, False)
+
+    async def rename_folder(
+        self,
+        *,
+        user_id: int,
+        folder_id: str,
+        payload: RenameFolderRequest,
+    ) -> FolderItem:
+        try:
+            fid = int(folder_id)
+        except ValueError as exc:
+            raise ApiError(status_code=400, code=400, message="Invalid folderId") from exc
+
+        folder = await self.db.scalar(
+            select(Folder)
+            .where(
+                and_(
+                    Folder.folder_id == fid,
+                    Folder.owner_id == user_id,
+                    Folder.status == FolderStatus.ACTIVE,
+                )
+            )
+            .with_for_update()
+        )
+        if folder is None:
+            raise ApiError(status_code=404, code=404, message="Folder not found")
+        if folder.folder_type == FolderType.ROOT:
+            raise ApiError(status_code=400, code=400, message="Root folder cannot be renamed")
+
+        requested_name = payload.folder_name.strip()
+        if not requested_name:
+            raise ApiError(status_code=400, code=400, message="folderName cannot be empty")
+
+        parent_folder_id = int(folder.parent_folder_id or 0)
+        final_name = await self._next_available_folder_name(
+            user_id=user_id,
+            parent_folder_id=parent_folder_id,
+            original_name=requested_name,
+            exclude_folder_id=fid,
+        )
+        folder.folder_name = final_name
+        folder.updated_at = datetime.now(UTC)
+        await self.db.commit()
+        await self.db.refresh(folder)
+
+        owner = await self.db.get(User, user_id)
+        owner_name = owner.username if owner else "owner"
+        is_starred = bool(await self._starred_folder_ids(user_id, [fid]))
+        return self._to_folder_item(folder, owner_name, is_starred)
+
+    async def toggle_folder_star(
+        self,
+        *,
+        user_id: int,
+        folder_id: str,
+        is_starred: bool,
+    ) -> FolderItem:
+        fid = self._parse_id(folder_id, "folderId")
+        folder = await self.db.scalar(
+            select(Folder)
+            .where(
+                and_(
+                    Folder.folder_id == fid,
+                    Folder.owner_id == user_id,
+                    Folder.status == FolderStatus.ACTIVE,
+                )
+            )
+            .with_for_update()
+        )
+        if folder is None:
+            raise ApiError(status_code=404, code=404, message="Folder not found")
+
+        favorite = await self.db.scalar(
+            select(FavoriteItem).where(
+                and_(
+                    FavoriteItem.user_id == user_id,
+                    FavoriteItem.item_type == FavoriteItemType.FOLDER,
+                    FavoriteItem.folder_id == fid,
+                )
+            )
+        )
+
+        if is_starred and favorite is None:
+            self.db.add(
+                FavoriteItem(
+                    user_id=user_id,
+                    item_type=FavoriteItemType.FOLDER,
+                    file_id=None,
+                    folder_id=fid,
+                )
+            )
+        elif not is_starred and favorite is not None:
+            await self.db.delete(favorite)
+
+        await self.db.commit()
+        owner = await self.db.get(User, user_id)
+        owner_name = owner.username if owner else "owner"
+        return self._to_folder_item(folder, owner_name, is_starred)
+
     async def get_folder_path(self, *, user_id: int, folder_id: int) -> FolderPathResponse:
         path_items: list[PathItem] = []
         current_id: int | None = folder_id
@@ -146,7 +291,8 @@ class FolderService:
             )
             if folder is None:
                 raise ApiError(status_code=404, code=404, message="Folder not found")
-            path_items.append(PathItem(folder_id=str(folder.folder_id), name=folder.folder_name))
+            path_item_id = "root" if folder.parent_folder_id is None else str(folder.folder_id)
+            path_items.append(PathItem(folder_id=path_item_id, name=folder.folder_name))
             current_id = folder.parent_folder_id
 
         path_items.reverse()
@@ -193,22 +339,35 @@ class FolderService:
     async def move_folder(
         self, *, user_id: int, folder_id: str, payload: MoveFolderRequest,
     ) -> MoveFolderResponse:
-        mover = FileService(db=self.db)
-        moved = await mover._move_folder_record(
-            user_id=user_id,
-            folder_id=folder_id,
-            target_parent_id=payload.target_parent_id,
-            share_handling=payload.share_handling,
-        )
-        await self.db.commit()
-        return MoveFolderResponse(
-            folder_id=str(moved["folder_id"]),
-            target_parent_id=str(moved["target_parent_id"]),
-            final_name=str(moved["final_name"]),
-            share_handling=str(moved["share_handling"]),
-            revoked_share_count=int(moved["revoked_share_count"]),
-            moved_at=moved["moved_at"],
-        )
+        async def _operation() -> MoveFolderResponse:
+            await apply_local_lock_timeout(self.db)
+            mover = FileService(db=self.db)
+            moved = await mover._move_folder_record(
+                user_id=user_id,
+                folder_id=folder_id,
+                target_parent_id=payload.target_parent_id,
+                share_handling=payload.share_handling,
+            )
+            await self.db.commit()
+            return MoveFolderResponse(
+                folder_id=str(moved["folder_id"]),
+                target_parent_id=str(moved["target_parent_id"]),
+                final_name=str(moved["final_name"]),
+                share_handling=str(moved["share_handling"]),
+                revoked_share_count=int(moved["revoked_share_count"]),
+                moved_at=moved["moved_at"],
+            )
+
+        try:
+            return await run_with_transaction_retry(
+                self.db,
+                _operation,
+                retry_on_unique_violation=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            if is_retryable_database_error(exc) or is_unique_violation_error(exc):
+                raise to_retryable_concurrency_error(exc) from exc
+            raise
 
     async def delete_folder(self, *, user_id: int, folder_id: str) -> DeleteFolderResponse:
         deleter = FileService(db=self.db)
@@ -217,6 +376,53 @@ class FolderService:
     # ------------------------------------------------------------------
     # helpers
     # ------------------------------------------------------------------
+
+    async def _resolve_parent_folder_id(self, *, user_id: int, parent_id: str | None) -> int:
+        if parent_id is None or parent_id == "root":
+            root = await self._get_root_folder(user_id)
+            return int(root.folder_id)
+
+        try:
+            parent_folder_id = int(parent_id)
+        except ValueError as exc:
+            raise ApiError(status_code=400, code=400, message="Invalid parentFolderId") from exc
+
+        await self._ensure_folder_access(user_id, parent_folder_id)
+        return parent_folder_id
+
+    async def _next_available_folder_name(
+        self,
+        *,
+        user_id: int,
+        parent_folder_id: int,
+        original_name: str,
+        exclude_folder_id: int | None = None,
+    ) -> str:
+        normalized = original_name.strip() or "Folder"
+        candidate = normalized
+
+        def _exists_query(name: str):
+            clauses = [
+                Folder.owner_id == user_id,
+                Folder.parent_folder_id == parent_folder_id,
+                Folder.folder_name == name,
+                Folder.status == FolderStatus.ACTIVE,
+            ]
+            if exclude_folder_id is not None:
+                clauses.append(Folder.folder_id != exclude_folder_id)
+            return select(Folder.folder_id).where(and_(*clauses)).limit(1)
+
+        exists = await self.db.scalar(_exists_query(candidate))
+        if exists is None:
+            return candidate
+
+        index = 1
+        while True:
+            candidate = f"{normalized} ({index})"
+            exists = await self.db.scalar(_exists_query(candidate))
+            if exists is None:
+                return candidate
+            index += 1
 
     async def _get_root_folder(self, user_id: int) -> Folder:
         folder = await self.db.scalar(
@@ -285,7 +491,11 @@ class FolderService:
             id=str(f.file_id),
             name=f.file_name,
             size=f.file_size,
-            mime_type=f.mime_type or "application/octet-stream",
+            mime_type=resolve_file_mime_type(
+                mime_type=f.mime_type,
+                file_ext=f.file_ext,
+                file_name=f.file_name,
+            ),
             owner_name=owner_name,
             updated_at=f.updated_at,
             created_at=f.created_at,
