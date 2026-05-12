@@ -13,7 +13,7 @@ from .core import api_error_handler, get_settings, http_exception_handler, valid
 from .core.deps import get_object_storage, get_rate_limiter
 from .core.errors import ApiError, api_success
 from .core.middleware import EmailVerificationGateMiddleware
-from .db.engine import verify_database_connection
+from .db.engine import verify_database_connection, verify_schema_compatibility
 from .routers import api_router
 from .s3 import ObjectStorageError
 from .services.dev_seed import initialize_dev_accounts
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await verify_database_connection()
+    await verify_schema_compatibility()
     try:
         await get_object_storage().ensure_bucket()
     except ObjectStorageError:
@@ -58,7 +59,7 @@ async def health():
 
 
 def main() -> None:
-    uvicorn.run("src.main:app", host="0.0.0.0", port=8080, reload=False)
+    uvicorn.run("fileflash.main:app", host="0.0.0.0", port=8080, reload=False)
 
 
 if __name__ == "__main__":

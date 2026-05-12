@@ -127,8 +127,8 @@
 ## 13. 启动与部署建议
 
 - 同仓库、分进程部署：
-  - API 进程：`uv run python -m src.main`
-  - Worker 进程：`uv run python -m src.workers.consumer`
+  - API 进程：`uv run python -m fileflash.main`
+  - Worker 进程：`uv run python -m fileflash.workers.consumer`
 - 多 worker 副本按队列水平扩容。
 - 当前阶段属于分布式单体，不是严格微服务。
 

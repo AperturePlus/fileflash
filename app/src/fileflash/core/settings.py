@@ -15,7 +15,7 @@ def _default_worker_concurrency() -> int:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).resolve().parents[1] / ".env"),
+        env_file=str(Path(__file__).resolve().parents[3] / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
