@@ -2,6 +2,7 @@
 import { Text } from '../../atoms';
 import { Button } from '../../molecules';
 import { getIconForFile } from '../../../utils/fileIcons';
+import { useLocaleStore } from '../../../store/locale';
 import type { RecycleBinItem } from '../../../types/file';
 
 defineProps<{ items: RecycleBinItem[] }>();
@@ -12,15 +13,18 @@ defineEmits<{
 }>();
 
 const formatTime = (s: string) => new Date(s).toLocaleString();
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+const formatDays = (days: number) => t('trash.table.days').replace('{days}', String(days));
 </script>
 
 <template>
   <div class="trash-table" role="table">
     <div class="trash-table__head" role="row">
-      <Text variant="label" as="div" class="trash-table__cell">Name</Text>
-      <Text variant="label" as="div" class="trash-table__cell">Original Location</Text>
-      <Text variant="label" as="div" class="trash-table__cell">Deleted At</Text>
-      <Text variant="label" as="div" class="trash-table__cell">Expires In</Text>
+      <Text variant="label" as="div" class="trash-table__cell">{{ t('trash.table.name') }}</Text>
+      <Text variant="label" as="div" class="trash-table__cell">{{ t('trash.table.originalLocation') }}</Text>
+      <Text variant="label" as="div" class="trash-table__cell">{{ t('trash.table.deletedAt') }}</Text>
+      <Text variant="label" as="div" class="trash-table__cell">{{ t('trash.table.expiresIn') }}</Text>
       <div class="trash-table__cell trash-table__cell--action" />
     </div>
 
@@ -36,12 +40,12 @@ const formatTime = (s: string) => new Date(s).toLocaleString();
         class="trash-table__cell trash-table__cell--mono"
         :class="{ 'trash-table__cell--warning': item.daysUntilPermanentDelete <= 7 }"
       >
-        {{ item.daysUntilPermanentDelete }} days
+        {{ formatDays(item.daysUntilPermanentDelete) }}
       </div>
 
       <div class="trash-table__cell trash-table__cell--action">
-        <Button size="sm" variant="ghost" @click="$emit('restore', item)">Restore</Button>
-        <Button size="sm" variant="danger" @click="$emit('permanent-delete', item)">Delete</Button>
+        <Button size="sm" variant="ghost" @click="$emit('restore', item)">{{ t('trash.table.restore') }}</Button>
+        <Button size="sm" variant="danger" @click="$emit('permanent-delete', item)">{{ t('trash.table.delete') }}</Button>
       </div>
     </div>
   </div>

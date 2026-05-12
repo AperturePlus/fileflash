@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { mount } from '../../../test/mount';
 import TrashTable from './TrashTable.vue';
 import type { RecycleBinItem } from '../../../types/file';
@@ -9,6 +9,10 @@ const items: RecycleBinItem[] = [
 ];
 
 describe('TrashTable', () => {
+  beforeEach(() => {
+    localStorage.setItem('fileflash-locale', 'en-US');
+  });
+
   it('renders rows', () => {
     const w = mount(TrashTable, { props: { items } });
     expect(w.text()).toContain('a.txt');

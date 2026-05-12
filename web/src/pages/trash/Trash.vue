@@ -5,10 +5,13 @@ import { Text } from '../../components/atoms';
 import { Button } from '../../components/molecules';
 import { EmptyState } from '../../components/organisms/files';
 import { TrashTable } from '../../components/organisms/trash';
+import { useLocaleStore } from '../../store/locale';
 import type { RecycleBinItem } from '../../types/file';
 import { eventBus } from '../../utils/eventBus';
 import { ui } from '../../utils/ui';
 
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 const items = ref<RecycleBinItem[]>([]);
 const isLoading = ref(false);
 
@@ -20,32 +23,58 @@ const fetchItems = async () => {
 };
 
 const handleRestore = async (item: RecycleBinItem) => {
-  const ok = await ui.confirm({ title: 'Restore Item', message: `Restore "${item.name}"?`, confirmText: 'Restore' });
+  const ok = await ui.confirm({
+    title: t('trash.confirm.restore.title'),
+    message: t('trash.confirm.restore.message').replace('{itemName}', item.name),
+    confirmText: t('trash.confirm.restore.confirm'),
+  });
   if (!ok) return;
   try {
     await restoreItem(item.id, { itemType: item.itemType });
     items.value = items.value.filter((e) => e.id !== item.id);
     eventBus.emit('refresh-file-tree');
-    ui.toast({ type: 'success', message: `Restored "${item.name}".` });
-  } catch (e) { console.error('Restore failed', e); ui.toast({ type: 'error', message: 'Restore failed.' }); }
+    ui.toast({ type: 'success', message: t('trash.toast.restored').replace('{itemName}', item.name) });
+  } catch (e) {
+    console.error('Restore failed', e);
+    ui.toast({ type: 'error', message: t('trash.toast.restoreFailed') });
+  }
 };
 
 const handlePermanentDelete = async (item: RecycleBinItem) => {
-  const ok = await ui.confirm({ title: 'Permanent Delete', message: `Permanently delete "${item.name}"? This cannot be undone.`, confirmText: 'Delete', danger: true });
+  const ok = await ui.confirm({
+    title: t('trash.confirm.delete.title'),
+    message: t('trash.confirm.delete.message').replace('{itemName}', item.name),
+    confirmText: t('trash.confirm.delete.confirm'),
+    danger: true,
+  });
   if (!ok) return;
   try {
     await permanentDelete(item.id, item.itemType);
     items.value = items.value.filter((e) => e.id !== item.id);
-    ui.toast({ type: 'success', message: `Deleted "${item.name}".` });
-  } catch (e) { console.error('Permanent delete failed', e); ui.toast({ type: 'error', message: 'Permanent delete failed.' }); }
+    ui.toast({ type: 'success', message: t('trash.toast.deleted').replace('{itemName}', item.name) });
+  } catch (e) {
+    console.error('Permanent delete failed', e);
+    ui.toast({ type: 'error', message: t('trash.toast.deleteFailed') });
+  }
 };
 
 const handleClearAll = async () => {
   if (!items.value.length) return;
-  const ok = await ui.confirm({ title: 'Clear Recycle Bin', message: 'Clear entire recycle bin? This cannot be undone.', confirmText: 'Clear', danger: true });
+  const ok = await ui.confirm({
+    title: t('trash.confirm.clear.title'),
+    message: t('trash.confirm.clear.message'),
+    confirmText: t('trash.confirm.clear.confirm'),
+    danger: true,
+  });
   if (!ok) return;
-  try { await clearRecycleBin(); items.value = []; ui.toast({ type: 'success', message: 'Recycle bin cleared.' }); }
-  catch (e) { console.error('Clear recycle bin failed', e); ui.toast({ type: 'error', message: 'Clear recycle bin failed.' }); }
+  try {
+    await clearRecycleBin();
+    items.value = [];
+    ui.toast({ type: 'success', message: t('trash.toast.cleared') });
+  } catch (e) {
+    console.error('Clear recycle bin failed', e);
+    ui.toast({ type: 'error', message: t('trash.toast.clearFailed') });
+  }
 };
 
 onMounted(fetchItems);
@@ -55,14 +84,14 @@ onMounted(fetchItems);
   <section class="page">
     <header class="page__header">
       <div>
-        <Text variant="h1" as="h1">Recycle Bin</Text>
-        <Text variant="small" as="p">Items are kept for up to 30 days before automatic cleanup.</Text>
+        <Text variant="h1" as="h1">{{ t('trash.page.title') }}</Text>
+        <Text variant="small" as="p">{{ t('trash.page.description') }}</Text>
       </div>
-      <Button variant="danger" :disabled="!items.length" @click="handleClearAll">Clear Bin</Button>
+      <Button variant="danger" :disabled="!items.length" @click="handleClearAll">{{ t('trash.page.clearBin') }}</Button>
     </header>
 
     <EmptyState v-if="isLoading" variant="loading" />
-    <EmptyState v-else-if="!items.length" variant="empty" message="Recycle bin is empty." />
+    <EmptyState v-else-if="!items.length" variant="empty" :message="t('trash.page.empty')" />
     <TrashTable v-else :items="items" @restore="handleRestore" @permanent-delete="handlePermanentDelete" />
   </section>
 </template>
