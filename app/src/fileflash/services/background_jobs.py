@@ -134,7 +134,8 @@ class BackgroundJobService:
 
 def _build_queue_message(job: BackgroundJob) -> WorkerJobMessage:
     payload = dict(job.payload or {})
-    payload.setdefault("jobId", job.job_id)
+    if payload.get("jobId") in (None, ""):
+        payload["jobId"] = job.job_id
     if job.requested_by is not None:
         payload.setdefault("requestedBy", job.requested_by)
     return WorkerJobMessage(
