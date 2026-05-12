@@ -3,13 +3,16 @@ import { ref } from 'vue';
 import * as A from '../../components/atoms';
 import * as M from '../../components/molecules';
 import * as F from '../../components/organisms/files';
+import * as Sh from '../../components/organisms/sharing';
+import * as Tr from '../../components/organisms/trash';
+import * as Sa from '../../components/organisms/share';
 import { useFilePreview } from '../../composables/useFilePreview';
 import type { FileItem } from '../../types/file';
 
 const sections = [
   'Tokens', 'Atoms · Text', 'Atoms · Numbers', 'Atoms · Visual', 'Atoms · Form',
   'Molecules · Action', 'Molecules · Input', 'Molecules · Display', 'Molecules · Nav',
-  'Organisms · Files',
+  'Organisms · Files', 'Organisms · Sharing', 'Organisms · Trash', 'Organisms · Share',
 ] as const;
 type Section = typeof sections[number];
 
@@ -45,6 +48,22 @@ const filesSearch = ref('');
 const filesSelection = ref(new Set<string>(['demo-a']));
 const filesRenamingId = ref<string | null>(null);
 const filesRenameValue = ref('');
+
+// Sharing / Trash / Share demo state
+const sharedSelection = ref(new Set<string>());
+const sharedDemoItems = [
+  { itemType: 'file' as const, id: 's1', name: 'plan.docx', size: 4096, sharedBy: 'alice', permission: 'read' as const, sharedAt: '2026-05-09T10:00:00Z' },
+  { itemType: 'folder' as const, id: 's2', name: 'designs', size: 0, sharedBy: 'bob', permission: 'write' as const, sharedAt: '2026-05-08T12:30:00Z' },
+];
+const linksDemoItems = [
+  { shareId: 'l1', shareLink: 'abc123', itemType: 'file' as const, itemInfo: { id: 'f1', name: 'report.pdf', size: 1024, mimeType: 'application/pdf' }, settings: { passwordProtected: false, expireAt: null, allowDownload: true, allowPreview: true }, createdAt: '2026-05-01T00:00:00Z', visitCount: 12, downloadCount: 4 },
+];
+const trashDemoItems = [
+  { itemType: 'file' as const, id: 't1', name: 'draft.md', originalPath: '/notes', size: 200, deletedAt: '2026-05-09T18:00:00Z', autoDeleteAt: '2026-06-08T18:00:00Z', daysUntilPermanentDelete: 27 },
+  { itemType: 'file' as const, id: 't2', name: 'expired.zip', originalPath: '/archives', size: 1024, deletedAt: '2026-05-05T08:00:00Z', autoDeleteAt: '2026-05-15T08:00:00Z', daysUntilPermanentDelete: 3 },
+];
+const shareDemo = { shareId: 's', shareLink: 'xyz789', itemType: 'file' as const, itemInfo: { id: 'f', name: 'big-report.pdf', size: 1_245_184, mimeType: 'application/pdf' }, settings: { passwordProtected: true, expireAt: '2026-12-01', allowDownload: true, allowPreview: true }, createdAt: '2026-05-01T00:00:00Z' };
+const sharePassword = ref('');
 
 const demoItems = [
   {
@@ -341,6 +360,65 @@ const swatches = [
         />
         <A.Text variant="data">Last interaction: {{ filesLastInteraction || '—' }}</A.Text>
         <F.FilePreviewDialog :file="filesPreviewFile" @close="closeFilesPreview" />
+      </section>
+
+      <section v-if="activeSection === 'Organisms · Sharing'">
+        <A.Text as="h1" variant="h1">Organisms · Sharing</A.Text>
+
+        <A.Text variant="label">SharedReceivedTable</A.Text>
+        <Sh.SharedReceivedTable :items="sharedDemoItems" :selection="sharedSelection"
+          @toggle="(id) => { const next = new Set(sharedSelection); next.has(id) ? next.delete(id) : next.add(id); sharedSelection = next; }"
+          @toggle-all="(n) => sharedSelection = n ? new Set(sharedDemoItems.map((i) => i.id)) : new Set()"
+          @accept="() => {}" />
+
+        <A.Text variant="label">SharedReceivedTable · empty</A.Text>
+        <F.EmptyState variant="empty" message="No files shared with you." />
+
+        <A.Text variant="label">SharedLinksTable</A.Text>
+        <Sh.SharedLinksTable :items="linksDemoItems" @copy="() => {}" @delete="() => {}" />
+
+        <A.Text variant="label">SharedBatchBar · count = 2</A.Text>
+        <Sh.SharedBatchBar :count="2" @accept="() => {}" @clear="() => {}" />
+      </section>
+
+      <section v-if="activeSection === 'Organisms · Trash'">
+        <A.Text as="h1" variant="h1">Organisms · Trash</A.Text>
+
+        <A.Text variant="label">TrashTable</A.Text>
+        <Tr.TrashTable :items="trashDemoItems" @restore="() => {}" @permanent-delete="() => {}" />
+
+        <A.Text variant="label">TrashTable · empty</A.Text>
+        <F.EmptyState variant="empty" message="Recycle bin is empty." />
+      </section>
+
+      <section v-if="activeSection === 'Organisms · Share'">
+        <A.Text as="h1" variant="h1">Organisms · Share</A.Text>
+
+        <A.Text variant="label">ShareInfoCard</A.Text>
+        <Sa.ShareInfoCard :share="shareDemo" />
+
+        <A.Text variant="label">ShareAccessPanel · password mode</A.Text>
+        <Sa.ShareAccessPanel
+          :password-protected="true" :password="sharePassword" :is-accessing="false"
+          status-message="Awaiting password."
+          @update:password="sharePassword = $event" @request-access="() => {}" />
+
+        <A.Text variant="label">ShareAccessPanel · open mode</A.Text>
+        <Sa.ShareAccessPanel
+          :password-protected="false" password="" :is-accessing="false"
+          @update:password="() => {}" @request-access="() => {}" />
+
+        <A.Text variant="label">ShareActionsPanel · file</A.Text>
+        <Sa.ShareActionsPanel
+          :is-file="true" :is-folder="false" :can-preview="true" :can-download="true"
+          :is-previewing="false" :is-downloading="false" :is-saving="false"
+          @preview="() => {}" @download="() => {}" @save="() => {}" />
+
+        <A.Text variant="label">ShareActionsPanel · folder</A.Text>
+        <Sa.ShareActionsPanel
+          :is-file="false" :is-folder="true" :can-preview="false" :can-download="false"
+          :is-previewing="false" :is-downloading="false" :is-saving="false"
+          @preview="() => {}" @download="() => {}" @save="() => {}" />
       </section>
     </main>
   </div>

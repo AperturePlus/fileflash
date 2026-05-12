@@ -3,8 +3,9 @@ import { Icon, Spinner, Text } from '../../atoms';
 import { useLocaleStore } from '../../../store/locale';
 
 defineProps<{
-  variant: 'loading' | 'empty' | 'no-results';
+  variant: 'loading' | 'empty' | 'no-results' | 'error';
   query?: string;
+  message?: string;
 }>();
 
 const localeStore = useLocaleStore();
@@ -15,16 +16,20 @@ const t = localeStore.t;
   <div class="empty-state" :data-variant="variant">
     <template v-if="variant === 'loading'">
       <Spinner />
-      <Text variant="label">{{ t('files.empty.loading') }}</Text>
+      <Text variant="label">{{ message || t('files.empty.loading') }}</Text>
     </template>
     <template v-else-if="variant === 'empty'">
       <Icon name="folder" :size="32" />
-      <Text variant="body">{{ t('files.empty.folderEmpty') }}</Text>
-      <Text variant="small">{{ t('files.empty.emptyHint') }}</Text>
+      <Text variant="body">{{ message || t('files.empty.folderEmpty') }}</Text>
+      <Text v-if="!message" variant="small">{{ t('files.empty.emptyHint') }}</Text>
     </template>
-    <template v-else>
+    <template v-else-if="variant === 'no-results'">
       <Icon name="search" :size="32" />
       <Text variant="body">{{ t('files.empty.noMatch') }} "{{ query }}"</Text>
+    </template>
+    <template v-else>
+      <Icon name="close" :size="32" />
+      <Text variant="body">{{ message || 'Something went wrong.' }}</Text>
     </template>
   </div>
 </template>
@@ -38,5 +43,8 @@ const t = localeStore.t;
   justify-content: center;
   gap: 12px;
   color: var(--text-dim);
+}
+.empty-state[data-variant="error"] {
+  color: var(--status-error);
 }
 </style>
