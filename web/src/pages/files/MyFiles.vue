@@ -20,6 +20,7 @@ import ShareDialog from '../../components/common/ShareDialog.vue';
 import ExtractArchiveDialog from './components/ExtractArchiveDialog.vue';
 import { eventBus } from '../../utils/eventBus';
 import type { ContentItem, FileItem } from '../../types/file';
+import { isArchiveFileName } from '../../utils/archive';
 
 const fileStore = useFileStore();
 const localeStore = useLocaleStore();
@@ -71,8 +72,13 @@ const onItemActivate = (item: ContentItem) => {
     fileStore.navigateToFolder(item.id);
     return;
   }
+  if (isArchiveFileName(item.name)) {
+    fileToExtract.value = item;
+    isExtractDialogVisible.value = true;
+    return;
+  }
   fileStore.previewFile = item;
-  openPreview(item as FileItem);
+  openPreview(item);
 };
 
 const onClearSelection = () => selection.clear();
