@@ -9,7 +9,7 @@ const t = localeStore.t;
   <footer class="app-footer">
     <p>&copy; {{ new Date().getFullYear() }} FileFlash. All rights reserved.</p>
     <div class="footer-links">
-      <router-link to="/terms">{{ t('footer.termsOfUse') }}</router-link>
+      <router-link to="/terms">{{ t('footer.termsOfService') }}</router-link>
       <router-link to="/privacy">{{ t('footer.privacyPolicy') }}</router-link>
     </div>
   </footer>
