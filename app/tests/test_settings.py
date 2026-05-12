@@ -13,6 +13,7 @@ def test_upload_related_settings_defaults():
     assert settings.object_storage_bucket == "fileflash"
     assert settings.upload_chunk_size_default == 5 * 1024 * 1024
     assert settings.upload_session_ttl_seconds == 24 * 3600
+    assert settings.worker_process_count == 1
 
 
 def test_agent_related_settings_defaults():
@@ -31,4 +32,12 @@ def test_app_env_detection():
     prod = Settings(FF_DB_URI="postgresql://root:pwd@localhost:5432/fileflash", APP_ENV="prod")
     assert prod.is_development_env is False
     assert prod.is_production_env is True
+
+
+def test_worker_process_count_from_env():
+    settings = Settings(
+        FF_DB_URI="postgresql://root:pwd@localhost:5432/fileflash",
+        WORKER_PROCESS_COUNT="3",
+    )
+    assert settings.worker_process_count == 3
 

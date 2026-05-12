@@ -5,8 +5,13 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+
+from redis import Redis
+
+from ..core.settings import get_settings
 
 
 @dataclass(slots=True)
@@ -17,6 +22,8 @@ class ManagedProcess:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    settings = get_settings()
+    default_worker_count = max(1, settings.worker_process_count)
     parser = argparse.ArgumentParser(
         description="Run FileFlash backend API with worker processes.",
     )
@@ -30,8 +37,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--worker-count",
         type=int,
-        default=1,
-        help="Number of file worker consumer processes (default: 1).",
+        default=default_worker_count,
+        help=(
+            "Number of file worker consumer processes "
+            f"(default from WORKER_PROCESS_COUNT: {default_worker_count})."
+        ),
     )
     parser.add_argument(
         "--no-worker",
@@ -79,6 +89,38 @@ def _stop_process(managed: ManagedProcess, *, timeout_sec: float = 8.0) -> None:
         pass
 
 
+def _validate_redis_for_workers(env: Mapping[str, str] | None = None) -> tuple[bool, str]:
+    redis_url = (env or {}).get("REDIS_URL", "").strip()
+    if not redis_url:
+        settings = get_settings()
+        redis_url = (settings.redis_url or "").strip()
+    if not redis_url.strip():
+        return (
+            False,
+            "[run-with-workers] worker startup preflight failed: REDIS_URL is not set.",
+        )
+
+    client: Redis | None = None
+    try:
+        client = Redis.from_url(redis_url, socket_connect_timeout=2.0, socket_timeout=2.0)
+        client.ping()
+    except Exception as exc:
+        return (
+            False,
+            (
+                "[run-with-workers] worker startup preflight failed: "
+                f"cannot connect to Redis at {redis_url}. error={type(exc).__name__}: {exc}"
+            ),
+        )
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+
+    return True, ""
+
+
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
@@ -91,6 +133,12 @@ def main() -> int:
 
     processes: list[ManagedProcess] = []
     try:
+        if not args.no_worker:
+            ok, error_message = _validate_redis_for_workers()
+            if not ok:
+                print(error_message, file=sys.stderr)
+                return 2
+
         api_cmd = [
             python,
             "-m",

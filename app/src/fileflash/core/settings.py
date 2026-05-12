@@ -82,6 +82,7 @@ class Settings(BaseSettings):
         default_factory=_default_worker_concurrency,
         alias="WORKER_CONCURRENCY",
     )
+    worker_process_count: int = Field(default=1, alias="WORKER_PROCESS_COUNT")
     worker_task_timeout_seconds: int = Field(default=900, alias="WORKER_TASK_TIMEOUT_SECONDS")
     worker_default_max_attempts: int = Field(default=5, alias="WORKER_DEFAULT_MAX_ATTEMPTS")
     worker_retry_backoff_seconds: str = Field(
