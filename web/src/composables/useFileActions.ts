@@ -74,7 +74,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     if (item.id.startsWith('temp-new-folder')) {
       try {
         await createFolder({ folderName: newName, parentFolderId: currentFolderId.value || 'root' });
-        await fileStore.fetchFolderContents(currentFolderId.value || 'root');
+        await fileStore.fetchFolderContents(currentFolderId.value || 'root', { silent: true });
         ui.toast({ type: 'success', message: `Created folder "${newName}".` });
       } catch (error) {
         console.error(`Failed to create folder "${newName}":`, error);
@@ -121,7 +121,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
       } else {
         await deleteFile(item.id);
       }
-      await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root');
+      await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root', { silent: true });
       eventBus.emit('refresh-file-tree');
       ui.toast({ type: 'success', message: `"${item.name}" moved to trash.` });
     } catch (error) {
@@ -177,7 +177,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
         shareHandling,
       });
 
-      await fileStore.fetchFolderContents(currentFolderId.value || 'root');
+      await fileStore.fetchFolderContents(currentFolderId.value || 'root', { silent: true });
       eventBus.emit('refresh-file-tree');
 
       const firstError = result.results.find((item) => !item.success)?.message;

@@ -90,7 +90,7 @@ let timer: number | null = null;
 watch(() => [settings.value.autoRefreshInterval, currentFolderId.value], () => {
   if (timer !== null) { window.clearInterval(timer); timer = null; }
   const s = Number(settings.value.autoRefreshInterval || 0); if (s <= 0) return;
-  timer = window.setInterval(() => fileStore.fetchFolderContents(currentFolderId.value || 'root'), s * 1000);
+  timer = window.setInterval(() => fileStore.fetchFolderContents(currentFolderId.value || 'root', { silent: true }), s * 1000);
 }, { immediate: true });
 
 onMounted(() => { fileStore.fetchFolderContents('root'); eventBus.on('move-items', drag.onSidebarMove); eventBus.on('search-files', onSearchEvt); });
@@ -117,10 +117,7 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
 
     <div class="page__body">
       <div v-if="isDragging" class="page__drag">{{ t('files.drag.dropToUpload') }}</div>
-      <EmptyState v-if="isLoading" variant="loading" />
-      <EmptyState v-else-if="displayItems.length === 0 && isSearching" variant="no-results" :query="searchQuery" />
-      <EmptyState v-else-if="displayItems.length === 0" variant="empty" />
-      <FileTable v-else
+      <FileTable v-if="displayItems.length > 0"
         :mode="viewMode" :items="displayItems" :selection="selectedItems"
         :renaming-id="a.renamingItemId.value" :rename-value="a.renameInputValue.value"
         :sort-key="sortKey" :sort-direction="sortDirection"
@@ -132,6 +129,9 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
         @start-move="a.startMove" @start-share="a.startShare" @delete="a.handleDelete"
         @dragstart="drag.onDragItemStart" @drop-on-folder="drag.onFolderDrop" @sort="setSort"
       />
+      <EmptyState v-else-if="isLoading" variant="loading" />
+      <EmptyState v-else-if="isSearching" variant="no-results" :query="searchQuery" />
+      <EmptyState v-else variant="empty" />
     </div>
 
     <MoveItemDialog :is-visible="a.isMoveDialogVisible.value" :item-to-move="a.itemToMove.value"

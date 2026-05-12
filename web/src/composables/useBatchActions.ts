@@ -71,7 +71,7 @@ export function useBatchActions(
       const result = await batchFiles({ action: 'delete', fileIds, folderIds });
       if (!result) throw new Error('Delete failed');
       clearSelection();
-      await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root');
+      await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root', { silent: true });
       ui.toast({ type: 'success', message: `Moved ${idsToDelete.length} item(s) to trash.` });
     } catch (error) {
       console.error('Batch delete failed:', error);

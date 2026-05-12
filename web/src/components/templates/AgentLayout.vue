@@ -1,18 +1,15 @@
 <template>
   <div class="agent-layout">
-    <main class="agent-main">
-      <router-view v-slot="{ Component, route }">
-        <transition name="page-fade" mode="out-in">
-          <component :is="Component" :key="route.path" />
-        </transition>
-      </router-view>
-    </main>
+    <router-view v-slot="{ Component, route }">
+      <transition name="page-fade" mode="out-in">
+        <component :is="Component" :key="route.path" />
+      </transition>
+    </router-view>
   </div>
 </template>
 
 <style scoped>
-.agent-layout { display: flex; flex-direction: column; width: 100vw; height: 100vh; background: var(--surface-base); }
-.agent-main { flex: 1; overflow: auto; padding: var(--sp-lg); }
+.agent-layout { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .page-fade-enter-active, .page-fade-leave-active {
   transition: opacity var(--mo-duration-mid) var(--mo-easing);
 }
