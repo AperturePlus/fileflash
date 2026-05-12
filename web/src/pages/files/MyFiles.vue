@@ -113,10 +113,6 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
       </template>
     </FileToolbar>
 
-    <BulkActionBar :count="selectedCount"
-      @move="a.startMoveForSelection(Array.from(selectedItems))"
-      @download="handleBatchDownload" @delete="handleBatchDelete" @clear="clearSelection" />
-
     <UploadProgressTray :tasks="uploadTasks" />
 
     <div class="page__body">
@@ -145,11 +141,19 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
       @close="a.isShareDialogVisible.value = false" />
     <ExtractArchiveDialog :is-visible="isExtractDialogVisible" :file="fileToExtract" :current-folder-id="currentFolderId"
       @close="isExtractDialogVisible = false" />
+
+    <Transition name="bulk-bar">
+      <div v-if="selectedCount > 0" class="page__bulk-bar-wrap">
+        <BulkActionBar :count="selectedCount"
+          @move="a.startMoveForSelection(Array.from(selectedItems))"
+          @download="handleBatchDownload" @delete="handleBatchDelete" @clear="clearSelection" />
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
+.page { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; position: relative; }
 .page__body { flex: 1; min-height: 0; overflow: auto; position: relative; }
 .page__drag {
   position: absolute; inset: 0;
@@ -158,5 +162,29 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
   border: 1px dashed var(--ac); color: var(--ac);
   font-family: var(--font-mono); letter-spacing: 0.18em;
   pointer-events: none; z-index: 5;
+}
+.page__bulk-bar-wrap {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 16px;
+  display: flex;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: none;
+}
+.page__bulk-bar-wrap > :deep(.bulk) {
+  pointer-events: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.bulk-bar-enter-active,
+.bulk-bar-leave-active {
+  transition:
+    transform var(--mo-duration-mid) var(--mo-easing),
+    opacity var(--mo-duration-mid) var(--mo-easing);
+}
+.bulk-bar-enter-from,
+.bulk-bar-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
 }
 </style>
