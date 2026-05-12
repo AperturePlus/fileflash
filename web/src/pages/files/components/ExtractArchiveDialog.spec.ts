@@ -21,6 +21,7 @@ vi.mock('../../../api/file', () => ({
 }));
 
 vi.mock('../../../api/folder', () => ({
+  getFolderContents: vi.fn(async () => ({ items: [] })),
   getFolderPath: vi.fn(async () => ({ pathItems: [{ folderId: 'root', name: 'My Files' }] })),
 }));
 
