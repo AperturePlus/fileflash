@@ -14,7 +14,7 @@ from ..db.session import SessionLocal
 from ..services.job_queue import RedisStreamJobQueue
 from .bootstrap import WorkerRuntimeConfig, build_worker_runtime_config, create_process_pool
 from .contracts import WorkerJobMessage
-from .dispatcher import execute_task
+from .dispatcher import PicklableRemoteTaskError, execute_task
 from .effects import apply_task_effects
 from .repository import (
     get_retry_delay_seconds,
@@ -77,6 +77,8 @@ class WorkerConsumer:
 
     async def _process_message(self, *, slot: int, message: WorkerJobMessage) -> None:
         payload = dict(message.payload)
+        if payload.get("jobId") in (None, ""):
+            payload["jobId"] = message.job_id
         if message.task_type in ("task.transcode", "media.transcode"):
             payload.setdefault("ffmpegBinary", self._config.ffmpeg_binary)
             payload.setdefault("ffprobeBinary", self._config.ffprobe_binary)
@@ -184,6 +186,14 @@ class WorkerConsumer:
 
 
 def _is_retryable_error(error: Exception) -> bool:
+    if isinstance(error, PicklableRemoteTaskError) and error.retryable_hint is not None:
+        return bool(error.retryable_hint)
+
+    if isinstance(error, PicklableRemoteTaskError):
+        non_retryable_original_types = {"FileNotFoundError", "PermissionError", "ValueError"}
+        if error.original_type in non_retryable_original_types:
+            return False
+
     non_retryable_types = (FileNotFoundError, PermissionError, ValueError)
     return not isinstance(error, non_retryable_types)
 
