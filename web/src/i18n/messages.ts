@@ -175,8 +175,183 @@ export type LocaleKey =
   | 'files.upload.toast.success'
   | 'files.upload.toast.failed'
   | 'files.upload.toast.unknownError'
+  | 'files.rename.toast.createdFolder'
+  | 'files.rename.toast.createFailed'
+  | 'files.rename.toast.renamed'
+  | 'files.rename.toast.renameFailed'
+  | 'files.delete.confirm.title'
+  | 'files.delete.confirm.message'
+  | 'files.delete.confirm.confirmText'
+  | 'files.delete.toast.success'
+  | 'files.delete.toast.failed'
+  | 'files.move.toast.noMovable'
+  | 'files.move.toast.failedNoneMoved'
+  | 'files.move.toast.partial'
+  | 'files.move.toast.success'
+  | 'files.move.toast.failed'
+  | 'files.move.reason.noneMoved'
+  | 'files.move.reason.someFailed'
+  | 'files.move.toast.selectAtLeastOne'
+  | 'files.download.toast.failed'
+  | 'files.batch.download.toast.success'
+  | 'files.batch.download.toast.failed'
+  | 'files.batch.delete.confirm.title'
+  | 'files.batch.delete.confirm.message'
+  | 'files.batch.delete.confirm.confirmText'
+  | 'files.batch.delete.toast.success'
+  | 'files.batch.delete.toast.failed'
   | 'files.root.myFiles'
   | 'files.owner.you'
+  | 'sharing.page.title'
+  | 'sharing.page.description'
+  | 'sharing.tab.sharedWithMe'
+  | 'sharing.tab.myShareLinks'
+  | 'sharing.empty.received'
+  | 'sharing.empty.links'
+  | 'sharing.itemType.file'
+  | 'sharing.itemType.folder'
+  | 'sharing.permission.read'
+  | 'sharing.permission.write'
+  | 'sharing.permission.admin'
+  | 'sharing.table.received.name'
+  | 'sharing.table.received.sharedBy'
+  | 'sharing.table.received.permission'
+  | 'sharing.table.received.sharedAt'
+  | 'sharing.table.received.accept'
+  | 'sharing.table.links.resource'
+  | 'sharing.table.links.shareLink'
+  | 'sharing.table.links.visitsDownloads'
+  | 'sharing.table.links.createdAt'
+  | 'sharing.table.links.copy'
+  | 'sharing.table.links.delete'
+  | 'sharing.batch.selected'
+  | 'sharing.batch.acceptSelected'
+  | 'sharing.batch.clear'
+  | 'sharing.confirm.deleteLink.title'
+  | 'sharing.confirm.deleteLink.message'
+  | 'sharing.confirm.deleteLink.confirm'
+  | 'sharing.toast.linkDeleted'
+  | 'sharing.toast.linkDeleteFailed'
+  | 'sharing.toast.linkCopied'
+  | 'sharing.copyDialog.title'
+  | 'sharing.copyDialog.message'
+  | 'trash.page.title'
+  | 'trash.page.description'
+  | 'trash.page.clearBin'
+  | 'trash.page.empty'
+  | 'trash.confirm.restore.title'
+  | 'trash.confirm.restore.message'
+  | 'trash.confirm.restore.confirm'
+  | 'trash.confirm.delete.title'
+  | 'trash.confirm.delete.message'
+  | 'trash.confirm.delete.confirm'
+  | 'trash.confirm.clear.title'
+  | 'trash.confirm.clear.message'
+  | 'trash.confirm.clear.confirm'
+  | 'trash.toast.restored'
+  | 'trash.toast.restoreFailed'
+  | 'trash.toast.deleted'
+  | 'trash.toast.deleteFailed'
+  | 'trash.toast.cleared'
+  | 'trash.toast.clearFailed'
+  | 'trash.table.name'
+  | 'trash.table.originalLocation'
+  | 'trash.table.deletedAt'
+  | 'trash.table.expiresIn'
+  | 'trash.table.days'
+  | 'trash.table.restore'
+  | 'trash.table.delete'
+  | 'share.page.title'
+  | 'share.page.linkCode'
+  | 'share.page.saveDialogTitle'
+  | 'share.page.saveDialogConfirm'
+  | 'share.page.needAccessFirst'
+  | 'share.itemType.file'
+  | 'share.itemType.folder'
+  | 'share.info.type'
+  | 'share.info.name'
+  | 'share.info.size'
+  | 'share.info.expires'
+  | 'share.info.password'
+  | 'share.info.never'
+  | 'share.info.passwordRequired'
+  | 'share.info.passwordNotRequired'
+  | 'share.access.title'
+  | 'share.access.passwordLabel'
+  | 'share.access.passwordPlaceholder'
+  | 'share.access.checking'
+  | 'share.access.unlock'
+  | 'share.access.accessing'
+  | 'share.access.getAccess'
+  | 'share.actions.title'
+  | 'share.actions.loading'
+  | 'share.actions.preview'
+  | 'share.actions.downloading'
+  | 'share.actions.download'
+  | 'share.actions.saving'
+  | 'share.actions.saveFolder'
+  | 'share.actions.save'
+  | 'share.status.loadFailed'
+  | 'share.status.accessGranted'
+  | 'share.status.invalidPasswordOrExpired'
+  | 'share.status.expiredOrUnavailable'
+  | 'share.status.downloadFailed'
+  | 'share.status.previewFailed'
+  | 'share.status.savedSuccess'
+  | 'share.status.saveFailed'
+  | 'share.dialog.title'
+  | 'share.dialog.subtitle'
+  | 'share.dialog.close'
+  | 'share.dialog.section.collaborators'
+  | 'share.dialog.searchPlaceholder'
+  | 'share.dialog.searching'
+  | 'share.dialog.result.userGroup'
+  | 'share.dialog.emptyCollaborators'
+  | 'share.dialog.collaborator.user'
+  | 'share.dialog.collaborator.group'
+  | 'share.dialog.permission.read'
+  | 'share.dialog.permission.write'
+  | 'share.dialog.permission.admin'
+  | 'share.dialog.remove'
+  | 'share.dialog.section.publicLink'
+  | 'share.dialog.publicDescription'
+  | 'share.dialog.generatingLink'
+  | 'share.dialog.copy'
+  | 'share.dialog.passwordProtected'
+  | 'share.dialog.passwordPlaceholder'
+  | 'share.dialog.regenerate'
+  | 'share.dialog.allowDownload'
+  | 'share.dialog.allowPreview'
+  | 'share.dialog.expireDate'
+  | 'share.dialog.clear'
+  | 'share.dialog.saving'
+  | 'share.dialog.saveSettings'
+  | 'share.dialog.settings.passwordUpdated'
+  | 'share.dialog.settings.saved'
+  | 'share.dialog.settings.saveFailed'
+  | 'share.dialog.settings.regenerated'
+  | 'share.dialog.settings.regenerateFailed'
+  | 'share.dialog.settings.passwordCopied'
+  | 'share.dialog.settings.linkCopied'
+  | 'share.dialog.copyPassword.title'
+  | 'share.dialog.copyPassword.message'
+  | 'share.dialog.copyLink.title'
+  | 'share.dialog.copyLink.message'
+  | 'share.dialog.publicHiddenNotice'
+  | 'share.dialog.done'
+  | 'move.dialog.title.single'
+  | 'move.dialog.title.multiple'
+  | 'move.dialog.title.default'
+  | 'move.dialog.prompt'
+  | 'move.dialog.confirm'
+  | 'move.dialog.root'
+  | 'move.dialog.selectDestinationWarning'
+  | 'move.dialog.shareHandling.title'
+  | 'move.dialog.shareHandling.keep'
+  | 'move.dialog.shareHandling.revoke'
+  | 'move.dialog.loading'
+  | 'move.dialog.empty'
+  | 'move.dialog.cancel'
   | 'footer.termsOfService'
   | 'footer.privacyPolicy';
 
@@ -360,8 +535,183 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.upload.toast.success': '已上传 {fileName}。',
     'files.upload.toast.failed': '上传 {fileName} 失败：{reason}',
     'files.upload.toast.unknownError': '未知错误',
+    'files.rename.toast.createdFolder': '已创建文件夹“{folderName}”。',
+    'files.rename.toast.createFailed': '创建文件夹失败。',
+    'files.rename.toast.renamed': '已重命名为“{newName}”。',
+    'files.rename.toast.renameFailed': '重命名失败。',
+    'files.delete.confirm.title': '移动到回收站',
+    'files.delete.confirm.message': '将“{itemName}”移动到回收站？',
+    'files.delete.confirm.confirmText': '移动',
+    'files.delete.toast.success': '“{itemName}”已移动到回收站。',
+    'files.delete.toast.failed': '移动到回收站失败。',
+    'files.move.toast.noMovable': '没有可移动的项目。',
+    'files.move.toast.failedNoneMoved': '移动失败。{reason}',
+    'files.move.toast.partial': '已移动 {succeeded}/{processed}。{reason}',
+    'files.move.toast.success': '已移动 {count} 个项目。',
+    'files.move.toast.failed': '批量移动失败。',
+    'files.move.reason.noneMoved': '没有项目被移动。',
+    'files.move.reason.someFailed': '部分项目移动失败。',
+    'files.move.toast.selectAtLeastOne': '请至少选择一个项目。',
+    'files.download.toast.failed': '下载失败。',
+    'files.batch.download.toast.success': '已下载 {count} 个项目。',
+    'files.batch.download.toast.failed': '下载所选文件失败。',
+    'files.batch.delete.confirm.title': '移动到回收站',
+    'files.batch.delete.confirm.message': '将所选的 {count} 个项目移动到回收站？',
+    'files.batch.delete.confirm.confirmText': '移动',
+    'files.batch.delete.toast.success': '已将 {count} 个项目移动到回收站。',
+    'files.batch.delete.toast.failed': '移动所选项目到回收站失败。',
     'files.root.myFiles': '我的文件',
     'files.owner.you': '你',
+    'sharing.page.title': '共享中心',
+    'sharing.page.description': '管理收到的共享内容和你创建的共享链接。',
+    'sharing.tab.sharedWithMe': '共享给我',
+    'sharing.tab.myShareLinks': '我的共享链接',
+    'sharing.empty.received': '还没有收到共享文件。',
+    'sharing.empty.links': '还没有创建共享链接。',
+    'sharing.itemType.file': '文件',
+    'sharing.itemType.folder': '文件夹',
+    'sharing.permission.read': '只读',
+    'sharing.permission.write': '可编辑',
+    'sharing.permission.admin': '管理员',
+    'sharing.table.received.name': '名称',
+    'sharing.table.received.sharedBy': '共享人',
+    'sharing.table.received.permission': '权限',
+    'sharing.table.received.sharedAt': '共享时间',
+    'sharing.table.received.accept': '接收',
+    'sharing.table.links.resource': '资源',
+    'sharing.table.links.shareLink': '共享链接',
+    'sharing.table.links.visitsDownloads': '访问 / 下载',
+    'sharing.table.links.createdAt': '创建时间',
+    'sharing.table.links.copy': '复制',
+    'sharing.table.links.delete': '删除',
+    'sharing.batch.selected': '已选',
+    'sharing.batch.acceptSelected': '接收所选',
+    'sharing.batch.clear': '清除',
+    'sharing.confirm.deleteLink.title': '删除共享链接',
+    'sharing.confirm.deleteLink.message': '确定删除共享链接 {shareLink} 吗？',
+    'sharing.confirm.deleteLink.confirm': '删除',
+    'sharing.toast.linkDeleted': '共享链接已删除。',
+    'sharing.toast.linkDeleteFailed': '删除共享链接失败。',
+    'sharing.toast.linkCopied': '共享链接已复制。',
+    'sharing.copyDialog.title': '复制共享链接',
+    'sharing.copyDialog.message': '剪贴板不可用，请手动复制此链接：',
+    'trash.page.title': '回收站',
+    'trash.page.description': '项目会保留最多 30 天，之后系统会自动清理。',
+    'trash.page.clearBin': '清空回收站',
+    'trash.page.empty': '回收站为空。',
+    'trash.confirm.restore.title': '恢复项目',
+    'trash.confirm.restore.message': '确定恢复“{itemName}”吗？',
+    'trash.confirm.restore.confirm': '恢复',
+    'trash.confirm.delete.title': '永久删除',
+    'trash.confirm.delete.message': '确定永久删除“{itemName}”吗？此操作无法撤销。',
+    'trash.confirm.delete.confirm': '删除',
+    'trash.confirm.clear.title': '清空回收站',
+    'trash.confirm.clear.message': '确定清空整个回收站吗？此操作无法撤销。',
+    'trash.confirm.clear.confirm': '清空',
+    'trash.toast.restored': '已恢复“{itemName}”。',
+    'trash.toast.restoreFailed': '恢复失败。',
+    'trash.toast.deleted': '已删除“{itemName}”。',
+    'trash.toast.deleteFailed': '永久删除失败。',
+    'trash.toast.cleared': '回收站已清空。',
+    'trash.toast.clearFailed': '清空回收站失败。',
+    'trash.table.name': '名称',
+    'trash.table.originalLocation': '原始位置',
+    'trash.table.deletedAt': '删除时间',
+    'trash.table.expiresIn': '剩余时间',
+    'trash.table.days': '{days} 天',
+    'trash.table.restore': '恢复',
+    'trash.table.delete': '删除',
+    'share.page.title': '共享链接',
+    'share.page.linkCode': '链接码：',
+    'share.page.saveDialogTitle': '保存到我的空间',
+    'share.page.saveDialogConfirm': '保存到此处',
+    'share.page.needAccessFirst': '请先获取共享访问权限。',
+    'share.itemType.file': '文件',
+    'share.itemType.folder': '文件夹',
+    'share.info.type': '类型',
+    'share.info.name': '名称',
+    'share.info.size': '大小',
+    'share.info.expires': '有效期',
+    'share.info.password': '密码',
+    'share.info.never': '永不过期',
+    'share.info.passwordRequired': '需要',
+    'share.info.passwordNotRequired': '不需要',
+    'share.access.title': '访问权限',
+    'share.access.passwordLabel': '密码',
+    'share.access.passwordPlaceholder': '输入密码',
+    'share.access.checking': '校验中...',
+    'share.access.unlock': '解锁',
+    'share.access.accessing': '访问中...',
+    'share.access.getAccess': '获取访问权限',
+    'share.actions.title': '操作',
+    'share.actions.loading': '加载中...',
+    'share.actions.preview': '预览',
+    'share.actions.downloading': '下载中...',
+    'share.actions.download': '下载',
+    'share.actions.saving': '保存中...',
+    'share.actions.saveFolder': '将文件夹保存到我的空间',
+    'share.actions.save': '保存到我的空间',
+    'share.status.loadFailed': '无法加载共享内容，链接可能无效或已过期。',
+    'share.status.accessGranted': '访问已授权。',
+    'share.status.invalidPasswordOrExpired': '密码错误或共享已过期。',
+    'share.status.expiredOrUnavailable': '共享已过期或暂不可用。',
+    'share.status.downloadFailed': '下载失败。',
+    'share.status.previewFailed': '预览失败。',
+    'share.status.savedSuccess': '保存成功（{itemType}）。',
+    'share.status.saveFailed': '保存失败，请确认你已登录且邮箱已验证。',
+    'share.dialog.title': '共享：{itemName}',
+    'share.dialog.subtitle': '管理协作者权限和公开链接访问。',
+    'share.dialog.close': '关闭弹窗',
+    'share.dialog.section.collaborators': '协作者权限',
+    'share.dialog.searchPlaceholder': '搜索用户或用户组',
+    'share.dialog.searching': '搜索中...',
+    'share.dialog.result.userGroup': '用户组',
+    'share.dialog.emptyCollaborators': '暂无协作者。',
+    'share.dialog.collaborator.user': '用户',
+    'share.dialog.collaborator.group': '用户组',
+    'share.dialog.permission.read': '只读',
+    'share.dialog.permission.write': '可编辑',
+    'share.dialog.permission.admin': '管理员',
+    'share.dialog.remove': '移除',
+    'share.dialog.section.publicLink': '公开链接',
+    'share.dialog.publicDescription': '配置密码、到期时间和下载/预览权限。',
+    'share.dialog.generatingLink': '正在生成链接...',
+    'share.dialog.copy': '复制',
+    'share.dialog.passwordProtected': '密码保护',
+    'share.dialog.passwordPlaceholder': '留空则自动生成',
+    'share.dialog.regenerate': '重新生成',
+    'share.dialog.allowDownload': '允许下载',
+    'share.dialog.allowPreview': '允许预览',
+    'share.dialog.expireDate': '到期日期',
+    'share.dialog.clear': '清除',
+    'share.dialog.saving': '保存中...',
+    'share.dialog.saveSettings': '保存设置',
+    'share.dialog.settings.passwordUpdated': '密码已更新，请及时复制。',
+    'share.dialog.settings.saved': '共享设置已保存。',
+    'share.dialog.settings.saveFailed': '保存设置失败。',
+    'share.dialog.settings.regenerated': '已生成新密码，请及时复制。',
+    'share.dialog.settings.regenerateFailed': '重新生成密码失败。',
+    'share.dialog.settings.passwordCopied': '密码已复制。',
+    'share.dialog.settings.linkCopied': '链接已复制。',
+    'share.dialog.copyPassword.title': '复制密码',
+    'share.dialog.copyPassword.message': '剪贴板不可用，请手动复制此密码：',
+    'share.dialog.copyLink.title': '复制链接',
+    'share.dialog.copyLink.message': '剪贴板不可用，请手动复制此链接：',
+    'share.dialog.publicHiddenNotice': '当前仅在弹窗中隐藏公开链接，已有链接仍保持可用。',
+    'share.dialog.done': '完成',
+    'move.dialog.title.single': '移动“{itemName}”',
+    'move.dialog.title.multiple': '移动 {count} 个项目',
+    'move.dialog.title.default': '移动',
+    'move.dialog.prompt': '选择新的位置：',
+    'move.dialog.confirm': '移动到此处',
+    'move.dialog.root': '我的文件（根目录）',
+    'move.dialog.selectDestinationWarning': '请选择目标文件夹。',
+    'move.dialog.shareHandling.title': '共享链接处理',
+    'move.dialog.shareHandling.keep': '保留现有共享链接',
+    'move.dialog.shareHandling.revoke': '移动后撤销现有共享链接',
+    'move.dialog.loading': '加载中...',
+    'move.dialog.empty': '暂无可用文件夹。',
+    'move.dialog.cancel': '取消',
     'footer.termsOfService': '使用条款',
     'footer.privacyPolicy': '隐私政策',
   },
@@ -540,8 +890,183 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.upload.toast.success': 'Uploaded {fileName}.',
     'files.upload.toast.failed': 'Upload of {fileName} failed: {reason}',
     'files.upload.toast.unknownError': 'Unknown error',
+    'files.rename.toast.createdFolder': 'Created folder "{folderName}".',
+    'files.rename.toast.createFailed': 'Folder creation failed.',
+    'files.rename.toast.renamed': 'Renamed to "{newName}".',
+    'files.rename.toast.renameFailed': 'Rename failed.',
+    'files.delete.confirm.title': 'Move To Trash',
+    'files.delete.confirm.message': 'Move "{itemName}" to trash?',
+    'files.delete.confirm.confirmText': 'Move',
+    'files.delete.toast.success': '"{itemName}" moved to trash.',
+    'files.delete.toast.failed': 'Failed to move item to trash.',
+    'files.move.toast.noMovable': 'No movable items found.',
+    'files.move.toast.failedNoneMoved': 'Move failed. {reason}',
+    'files.move.toast.partial': 'Moved {succeeded}/{processed}. {reason}',
+    'files.move.toast.success': 'Moved {count} item(s).',
+    'files.move.toast.failed': 'Batch move failed.',
+    'files.move.reason.noneMoved': 'No items were moved.',
+    'files.move.reason.someFailed': 'Some items failed.',
+    'files.move.toast.selectAtLeastOne': 'Please select at least one item.',
+    'files.download.toast.failed': 'Download failed.',
+    'files.batch.download.toast.success': 'Downloaded {count} item(s).',
+    'files.batch.download.toast.failed': 'Failed to download selected files.',
+    'files.batch.delete.confirm.title': 'Move To Trash',
+    'files.batch.delete.confirm.message': 'Move {count} selected item(s) to trash?',
+    'files.batch.delete.confirm.confirmText': 'Move',
+    'files.batch.delete.toast.success': 'Moved {count} item(s) to trash.',
+    'files.batch.delete.toast.failed': 'Failed to move selected items to trash.',
     'files.root.myFiles': 'My Files',
     'files.owner.you': 'You',
+    'sharing.page.title': 'Sharing Center',
+    'sharing.page.description': 'Manage received items and links you shared with others.',
+    'sharing.tab.sharedWithMe': 'Shared With Me',
+    'sharing.tab.myShareLinks': 'My Share Links',
+    'sharing.empty.received': 'No files shared with you.',
+    'sharing.empty.links': 'No share links created yet.',
+    'sharing.itemType.file': 'File',
+    'sharing.itemType.folder': 'Folder',
+    'sharing.permission.read': 'Read',
+    'sharing.permission.write': 'Write',
+    'sharing.permission.admin': 'Admin',
+    'sharing.table.received.name': 'Name',
+    'sharing.table.received.sharedBy': 'Shared By',
+    'sharing.table.received.permission': 'Permission',
+    'sharing.table.received.sharedAt': 'Shared At',
+    'sharing.table.received.accept': 'Accept',
+    'sharing.table.links.resource': 'Resource',
+    'sharing.table.links.shareLink': 'Share Link',
+    'sharing.table.links.visitsDownloads': 'Visits / Downloads',
+    'sharing.table.links.createdAt': 'Created At',
+    'sharing.table.links.copy': 'Copy',
+    'sharing.table.links.delete': 'Delete',
+    'sharing.batch.selected': 'SELECTED',
+    'sharing.batch.acceptSelected': 'Accept Selected',
+    'sharing.batch.clear': 'Clear',
+    'sharing.confirm.deleteLink.title': 'Delete Share Link',
+    'sharing.confirm.deleteLink.message': 'Delete share link {shareLink}?',
+    'sharing.confirm.deleteLink.confirm': 'Delete',
+    'sharing.toast.linkDeleted': 'Share link deleted.',
+    'sharing.toast.linkDeleteFailed': 'Failed to delete share link.',
+    'sharing.toast.linkCopied': 'Share link copied.',
+    'sharing.copyDialog.title': 'Copy Share Link',
+    'sharing.copyDialog.message': 'Clipboard is unavailable. Copy this link manually:',
+    'trash.page.title': 'Recycle Bin',
+    'trash.page.description': 'Items are kept for up to 30 days before automatic cleanup.',
+    'trash.page.clearBin': 'Clear Bin',
+    'trash.page.empty': 'Recycle bin is empty.',
+    'trash.confirm.restore.title': 'Restore Item',
+    'trash.confirm.restore.message': 'Restore "{itemName}"?',
+    'trash.confirm.restore.confirm': 'Restore',
+    'trash.confirm.delete.title': 'Permanent Delete',
+    'trash.confirm.delete.message': 'Permanently delete "{itemName}"? This cannot be undone.',
+    'trash.confirm.delete.confirm': 'Delete',
+    'trash.confirm.clear.title': 'Clear Recycle Bin',
+    'trash.confirm.clear.message': 'Clear entire recycle bin? This cannot be undone.',
+    'trash.confirm.clear.confirm': 'Clear',
+    'trash.toast.restored': 'Restored "{itemName}".',
+    'trash.toast.restoreFailed': 'Restore failed.',
+    'trash.toast.deleted': 'Deleted "{itemName}".',
+    'trash.toast.deleteFailed': 'Permanent delete failed.',
+    'trash.toast.cleared': 'Recycle bin cleared.',
+    'trash.toast.clearFailed': 'Clear recycle bin failed.',
+    'trash.table.name': 'Name',
+    'trash.table.originalLocation': 'Original Location',
+    'trash.table.deletedAt': 'Deleted At',
+    'trash.table.expiresIn': 'Expires In',
+    'trash.table.days': '{days} days',
+    'trash.table.restore': 'Restore',
+    'trash.table.delete': 'Delete',
+    'share.page.title': 'Shared Link',
+    'share.page.linkCode': 'Link code:',
+    'share.page.saveDialogTitle': 'Save to My Space',
+    'share.page.saveDialogConfirm': 'Save Here',
+    'share.page.needAccessFirst': 'Please access the share first.',
+    'share.itemType.file': 'File',
+    'share.itemType.folder': 'Folder',
+    'share.info.type': 'Type',
+    'share.info.name': 'Name',
+    'share.info.size': 'Size',
+    'share.info.expires': 'Expires',
+    'share.info.password': 'Password',
+    'share.info.never': 'Never',
+    'share.info.passwordRequired': 'Required',
+    'share.info.passwordNotRequired': 'Not required',
+    'share.access.title': 'Access',
+    'share.access.passwordLabel': 'Password',
+    'share.access.passwordPlaceholder': 'Enter password',
+    'share.access.checking': 'Checking...',
+    'share.access.unlock': 'Unlock',
+    'share.access.accessing': 'Accessing...',
+    'share.access.getAccess': 'Get Access',
+    'share.actions.title': 'Actions',
+    'share.actions.loading': 'Loading...',
+    'share.actions.preview': 'Preview',
+    'share.actions.downloading': 'Downloading...',
+    'share.actions.download': 'Download',
+    'share.actions.saving': 'Saving...',
+    'share.actions.saveFolder': 'Save Folder to My Space',
+    'share.actions.save': 'Save to My Space',
+    'share.status.loadFailed': 'Unable to load share. The link may be invalid or expired.',
+    'share.status.accessGranted': 'Access granted.',
+    'share.status.invalidPasswordOrExpired': 'Invalid password or share expired.',
+    'share.status.expiredOrUnavailable': 'Share expired or unavailable.',
+    'share.status.downloadFailed': 'Download failed.',
+    'share.status.previewFailed': 'Preview failed.',
+    'share.status.savedSuccess': 'Saved successfully ({itemType}).',
+    'share.status.saveFailed': 'Save failed. Please make sure you are logged in and verified.',
+    'share.dialog.title': 'Share: {itemName}',
+    'share.dialog.subtitle': 'Manage collaborator permissions and public link access.',
+    'share.dialog.close': 'Close dialog',
+    'share.dialog.section.collaborators': 'Collaborator Permissions',
+    'share.dialog.searchPlaceholder': 'Search users or groups',
+    'share.dialog.searching': 'Searching...',
+    'share.dialog.result.userGroup': 'User group',
+    'share.dialog.emptyCollaborators': 'No collaborators configured.',
+    'share.dialog.collaborator.user': 'User',
+    'share.dialog.collaborator.group': 'Group',
+    'share.dialog.permission.read': 'Read',
+    'share.dialog.permission.write': 'Write',
+    'share.dialog.permission.admin': 'Admin',
+    'share.dialog.remove': 'Remove',
+    'share.dialog.section.publicLink': 'Public Link',
+    'share.dialog.publicDescription': 'Configure password, expiry date, and download/preview permissions.',
+    'share.dialog.generatingLink': 'Generating link...',
+    'share.dialog.copy': 'Copy',
+    'share.dialog.passwordProtected': 'Password protected',
+    'share.dialog.passwordPlaceholder': 'Leave blank to auto-generate',
+    'share.dialog.regenerate': 'Regenerate',
+    'share.dialog.allowDownload': 'Allow download',
+    'share.dialog.allowPreview': 'Allow preview',
+    'share.dialog.expireDate': 'Expire date',
+    'share.dialog.clear': 'Clear',
+    'share.dialog.saving': 'Saving...',
+    'share.dialog.saveSettings': 'Save settings',
+    'share.dialog.settings.passwordUpdated': 'Password updated. Copy it now.',
+    'share.dialog.settings.saved': 'Share settings saved.',
+    'share.dialog.settings.saveFailed': 'Failed to save settings.',
+    'share.dialog.settings.regenerated': 'New password generated. Copy it now.',
+    'share.dialog.settings.regenerateFailed': 'Failed to regenerate password.',
+    'share.dialog.settings.passwordCopied': 'Password copied.',
+    'share.dialog.settings.linkCopied': 'Link copied.',
+    'share.dialog.copyPassword.title': 'Copy Password',
+    'share.dialog.copyPassword.message': 'Clipboard is unavailable. Copy this password manually:',
+    'share.dialog.copyLink.title': 'Copy Link',
+    'share.dialog.copyLink.message': 'Clipboard is unavailable. Copy this link manually:',
+    'share.dialog.publicHiddenNotice': 'Public link hidden in this dialog. Existing links are kept.',
+    'share.dialog.done': 'Done',
+    'move.dialog.title.single': 'Move "{itemName}"',
+    'move.dialog.title.multiple': 'Move {count} items',
+    'move.dialog.title.default': 'Move',
+    'move.dialog.prompt': 'Choose a new location:',
+    'move.dialog.confirm': 'Move Here',
+    'move.dialog.root': 'My Files (Root)',
+    'move.dialog.selectDestinationWarning': 'Please select a destination folder.',
+    'move.dialog.shareHandling.title': 'Shared Link Handling',
+    'move.dialog.shareHandling.keep': 'Keep active share links',
+    'move.dialog.shareHandling.revoke': 'Revoke active share links after move',
+    'move.dialog.loading': 'Loading...',
+    'move.dialog.empty': 'No folders available.',
+    'move.dialog.cancel': 'Cancel',
     'footer.termsOfService': 'Terms of Service',
     'footer.privacyPolicy': 'Privacy Policy',
   },
