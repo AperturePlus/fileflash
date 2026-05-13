@@ -26,9 +26,7 @@ const formatTime = (s: string) => new Date(s).toLocaleString();
 const formatItemType = (itemType: SharedItem['itemType']) =>
   t(itemType === 'folder' ? 'sharing.itemType.folder' : 'sharing.itemType.file');
 const formatPermission = (permission: SharedItem['permission']) => {
-  if (permission === 'write') return t('sharing.permission.write');
-  if (permission === 'admin') return t('sharing.permission.admin');
-  return t('sharing.permission.read');
+  return permission === 'write' ? t('sharing.permission.write') : t('sharing.permission.read');
 };
 
 const onHeaderToggle = () => emit('toggle-all', !allSelected.value);
