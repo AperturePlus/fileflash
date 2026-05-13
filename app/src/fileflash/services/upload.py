@@ -303,7 +303,7 @@ class UploadService:
             upload_id=upload_id,
             payload=merge_request,
         )
-        return response.model_dump(by_alias=True)
+        return response.model_dump(by_alias=True, mode="json")
 
     async def merge_chunks(
         self,

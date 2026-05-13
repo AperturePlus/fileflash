@@ -708,3 +708,6 @@ async def test_execute_merge_job_calls_merge_chunks(monkeypatch: pytest.MonkeyPa
     merge_mock.assert_awaited_once()
     assert result["fileId"] == "901"
     assert result["fileName"] == "report.pdf"
+    assert result["downloadUrl"] == "/api/v1/files/901/download"
+    assert isinstance(result["createdAt"], str)
+    assert datetime.fromisoformat(result["createdAt"].replace("Z", "+00:00")) == expected.created_at

@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,7 +61,7 @@ async def mark_job_succeeded(
     if job is None:
         return
     job.status = "succeeded"
-    job.result = result
+    job.result = jsonable_encoder(result)
     job.error_message = None
     job.finished_at = now
     job.updated_at = now

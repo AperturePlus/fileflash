@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import pickle
 import threading
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -10,11 +11,11 @@ import pytest
 
 from fileflash.core.errors import ApiError
 from fileflash.tasks.registry import UnknownTaskTypeError, dispatch_task
+from fileflash.workers.bootstrap import WorkerRuntimeConfig
 from fileflash.workers.consumer import WorkerConsumer, _is_retryable_error
 from fileflash.workers.contracts import WorkerJobMessage
 from fileflash.workers.dispatcher import PicklableRemoteTaskError, execute_task
-from fileflash.workers.bootstrap import WorkerRuntimeConfig
-from fileflash.workers.repository import get_retry_delay_seconds
+from fileflash.workers.repository import get_retry_delay_seconds, mark_job_succeeded
 
 
 class _AsyncContextManager:
@@ -38,6 +39,38 @@ def test_retry_delay_uses_last_backoff_when_attempt_exceeds_schedule():
     assert get_retry_delay_seconds(schedule, attempt=1) == 3
     assert get_retry_delay_seconds(schedule, attempt=2) == 10
     assert get_retry_delay_seconds(schedule, attempt=4) == 30
+
+
+@pytest.mark.asyncio
+async def test_mark_job_succeeded_serializes_nested_datetime_result(monkeypatch):
+    created_at = datetime(2026, 5, 13, 8, 29, 51, tzinfo=UTC)
+    job = SimpleNamespace(
+        status="running",
+        result={},
+        error_message="previous",
+        finished_at=None,
+        updated_at=None,
+    )
+    load_mock = AsyncMock(return_value=job)
+    monkeypatch.setattr("fileflash.workers.repository._load_job_for_update", load_mock)
+
+    await mark_job_succeeded(
+        SimpleNamespace(),
+        job_id=11,
+        result={
+            "fileId": "11",
+            "metadata": {
+                "createdAt": created_at,
+            },
+        },
+    )
+
+    load_mock.assert_awaited_once()
+    assert job.status == "succeeded"
+    assert job.error_message is None
+    assert job.result["fileId"] == "11"
+    assert job.result["metadata"]["createdAt"] == created_at.isoformat()
+    assert not isinstance(job.result["metadata"]["createdAt"], datetime)
 
 
 def test_picklable_remote_task_error_can_be_pickled():
