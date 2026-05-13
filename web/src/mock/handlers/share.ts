@@ -36,6 +36,19 @@ function buildMockFileBlob(file: { name: string; mimeType?: string; content?: st
   return new Blob([`Binary file: ${file.name}`], { type: file.mimeType || 'application/octet-stream' });
 }
 
+function resolveSharedPreviewNode(node: any) {
+  if (!node?.mediaOptimization) {
+    return node;
+  }
+  if (node.mediaOptimization.status === 'ready') {
+    return {
+      ...node,
+      mimeType: node.mediaOptimization.optimizedMimeType || node.mimeType,
+    };
+  }
+  return node;
+}
+
 function generatePassword() {
   return Mock.Random.string('number', 6);
 }
@@ -404,7 +417,7 @@ export const setupShareMocks = () => {
       };
     }
 
-    return buildMockFileBlob(node);
+    return buildMockFileBlob(resolveSharedPreviewNode(node));
   });
 
   Mock.mock(/\/api\/v1\/shared-items(?:\?.*)?$/, 'get', (options) => {

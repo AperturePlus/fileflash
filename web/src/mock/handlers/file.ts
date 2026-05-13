@@ -46,6 +46,7 @@ function nodeToItem(node: VfsNode) {
     folderId: node.parent || 'root',
     permission: node.permission || 'owner',
     isStarred: node.isStarred || false,
+    mediaOptimization: node.mediaOptimization,
   };
 }
 
@@ -81,6 +82,20 @@ function buildMockFileBlob(file: VfsNode) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function resolvePreviewNode(file: VfsNode) {
+  const optimization = file.mediaOptimization;
+  if (!optimization) {
+    return file;
+  }
+  if (optimization.status === 'ready') {
+    return {
+      ...file,
+      mimeType: optimization.optimizedMimeType || file.mimeType,
+    };
+  }
+  return file;
 }
 
 function splitFileName(name: string) {
@@ -571,7 +586,7 @@ export const setupFileMocks = () => {
       };
     }
 
-    return buildMockFileBlob(node);
+    return buildMockFileBlob(resolvePreviewNode(node));
   });
 
   Mock.mock(/\/api\/v1\/files\/([^/]+)\/archive\/preview$/, 'post', (options) => {

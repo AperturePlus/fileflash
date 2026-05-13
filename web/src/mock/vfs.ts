@@ -18,6 +18,12 @@ export interface VfsNode {
   hash?: string;
   virusStatus?: 'clean' | 'pending' | 'flagged';
   thumbnailUrl?: string;
+  mediaOptimization?: {
+    status: 'queued' | 'running' | 'ready' | 'failed';
+    mediaType: 'audio' | 'video';
+    optimizedMimeType?: string;
+    updatedAt: string;
+  };
 }
 
 export interface Vfs {
@@ -165,6 +171,12 @@ const initialVfs: Vfs = {
     permission: 'owner',
     isStarred: true,
     virusStatus: 'clean',
+    mediaOptimization: {
+      status: 'ready',
+      mediaType: 'audio',
+      optimizedMimeType: 'audio/mp4',
+      updatedAt: nowIso(),
+    },
   },
   file9: {
     id: 'file9',
@@ -177,6 +189,11 @@ const initialVfs: Vfs = {
     updatedAt: nowIso(),
     permission: 'owner',
     virusStatus: 'clean',
+    mediaOptimization: {
+      status: 'running',
+      mediaType: 'video',
+      updatedAt: nowIso(),
+    },
   },
 };
 

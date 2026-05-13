@@ -170,6 +170,9 @@ export type LocaleKey =
   | 'files.action.delete'
   | 'files.action.star'
   | 'files.action.unstar'
+  | 'files.mediaOptimization.processing'
+  | 'files.mediaOptimization.ready'
+  | 'files.mediaOptimization.failedFallback'
   | 'files.folder.loading'
   | 'files.folder.noSubfolders'
   | 'files.upload.toast.success'
@@ -530,6 +533,9 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.action.delete': '删除',
     'files.action.star': '收藏',
     'files.action.unstar': '取消收藏',
+    'files.mediaOptimization.processing': '处理中',
+    'files.mediaOptimization.ready': '已优化',
+    'files.mediaOptimization.failedFallback': '优化失败，已回退原文件',
     'files.folder.loading': '加载中...',
     'files.folder.noSubfolders': '暂无子文件夹',
     'files.upload.toast.success': '已上传 {fileName}。',
@@ -885,6 +891,9 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.action.delete': 'Delete',
     'files.action.star': 'Star',
     'files.action.unstar': 'Unstar',
+    'files.mediaOptimization.processing': 'Processing',
+    'files.mediaOptimization.ready': 'Optimized',
+    'files.mediaOptimization.failedFallback': 'Optimization failed, fallback to source',
     'files.folder.loading': 'Loading...',
     'files.folder.noSubfolders': 'No subfolders',
     'files.upload.toast.success': 'Uploaded {fileName}.',

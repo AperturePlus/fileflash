@@ -34,6 +34,7 @@ function nodeToItem(node: VfsNode) {
     folderId: node.parent || 'root',
     permission: node.permission || 'owner',
     isStarred: node.isStarred || false,
+    mediaOptimization: node.mediaOptimization,
   };
 }
 

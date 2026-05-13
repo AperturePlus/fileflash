@@ -68,6 +68,19 @@ const isArchiveFile = (f: FileItem) => {
   return n.endsWith('.zip') || n.endsWith('.7z') || n.endsWith('.tar')
       || n.endsWith('.tar.gz') || n.endsWith('.tgz') || n.endsWith('.gz');
 };
+const mediaOptimizationLabel = (item: ContentItem): string | null => {
+  if (item.itemType !== 'file' || !item.mediaOptimization) {
+    return null;
+  }
+  const status = item.mediaOptimization.status;
+  if (status === 'queued' || status === 'running') return t('files.mediaOptimization.processing');
+  if (status === 'ready') return t('files.mediaOptimization.ready');
+  return t('files.mediaOptimization.failedFallback');
+};
+const mediaOptimizationStatus = (item: ContentItem): string | null => {
+  if (item.itemType !== 'file' || !item.mediaOptimization) return null;
+  return item.mediaOptimization.status;
+};
 </script>
 
 <template>
@@ -161,6 +174,13 @@ const isArchiveFile = (f: FileItem) => {
           @keydown.esc.prevent="emit('cancel-rename')"
         />
         <span v-else>{{ item.name }}</span>
+      </div>
+      <div
+        v-if="mediaOptimizationLabel(item)"
+        class="card__media-opt"
+        :class="`card__media-opt--${mediaOptimizationStatus(item)}`"
+      >
+        {{ mediaOptimizationLabel(item) }}
       </div>
       <div class="card__actions" @click.stop>
         <DropdownMenu>
@@ -277,6 +297,14 @@ const isArchiveFile = (f: FileItem) => {
   color: var(--text-primary);
   word-break: break-all;
 }
+.card__media-opt {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.card__media-opt--ready { color: #10b981; }
+.card__media-opt--failed { color: #f59e0b; }
 .card__rename {
   width: 100%;
   background: var(--surface-inset);

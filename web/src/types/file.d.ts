@@ -13,7 +13,15 @@ export interface FileItem {
     folderId: string;
     permission?: 'read' | 'write' | 'owner';
     isStarred?: boolean;
+    mediaOptimization?: MediaOptimization;
   }
+
+export interface MediaOptimization {
+  status: 'queued' | 'running' | 'ready' | 'failed';
+  mediaType: 'audio' | 'video';
+  optimizedMimeType?: string;
+  updatedAt: string;
+}
   
   /**
    * 文件夹项的基础结构

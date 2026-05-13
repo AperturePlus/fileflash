@@ -47,6 +47,19 @@ const isArchiveFile = (f: FileItem) => {
 
 const formatTime = (s: string) => new Date(s).toLocaleString();
 const formatSize = (b: number) => `${(b / 1024).toFixed(1)} KB`;
+const mediaOptimizationLabel = (item: ContentItem): string | null => {
+  if (item.itemType !== 'file' || !item.mediaOptimization) {
+    return null;
+  }
+  const status = item.mediaOptimization.status;
+  if (status === 'queued' || status === 'running') return t('files.mediaOptimization.processing');
+  if (status === 'ready') return t('files.mediaOptimization.ready');
+  return t('files.mediaOptimization.failedFallback');
+};
+const mediaOptimizationStatus = (item: ContentItem): string | null => {
+  if (item.itemType !== 'file' || !item.mediaOptimization) return null;
+  return item.mediaOptimization.status;
+};
 
 const onRowClick = (ev: MouseEvent) => {
   if (props.renaming) return;
@@ -117,7 +130,16 @@ const isTempRow = (item: ContentItem): item is FolderItem =>
       <span v-else>--</span>
     </div>
 
-    <div class="row__time">{{ formatTime(item.updatedAt) }}</div>
+    <div class="row__time">
+      <div>{{ formatTime(item.updatedAt) }}</div>
+      <div
+        v-if="mediaOptimizationLabel(item)"
+        class="row__media-opt"
+        :class="`row__media-opt--${mediaOptimizationStatus(item)}`"
+      >
+        {{ mediaOptimizationLabel(item) }}
+      </div>
+    </div>
 
     <div class="row__actions" @click.stop>
       <DropdownMenu>
@@ -202,6 +224,12 @@ const isTempRow = (item: ContentItem): item is FolderItem =>
   color: var(--text-secondary);
   font-size: 12.5px;
 }
+.row__media-opt {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.row__media-opt--ready { color: #10b981; }
+.row__media-opt--failed { color: #f59e0b; }
 .row__menu {
   width: 26px; height: 26px;
   background: transparent;
