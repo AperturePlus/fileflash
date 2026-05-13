@@ -128,6 +128,70 @@ export type LocaleKey =
   | 'settings.actions.export'
   | 'settings.actions.import'
   | 'settings.actions.reset'
+  | 'settings.resetSuccess'
+  | 'settings.appearance.theme.label'
+  | 'settings.appearance.theme.description'
+  | 'settings.appearance.theme.light'
+  | 'settings.appearance.theme.dark'
+  | 'settings.appearance.compactMode.label'
+  | 'settings.appearance.compactMode.description'
+  | 'settings.appearance.defaultFileView.label'
+  | 'settings.appearance.defaultFileView.description'
+  | 'settings.appearance.defaultFileView.option.list'
+  | 'settings.appearance.defaultFileView.option.grid'
+  | 'settings.appearance.defaultFileView.option.tiles'
+  | 'settings.appearance.showFileExtensions.label'
+  | 'settings.appearance.showFileExtensions.description'
+  | 'settings.uploads.maxConcurrentUploads.label'
+  | 'settings.uploads.maxConcurrentUploads.description'
+  | 'settings.uploads.chunkSize.label'
+  | 'settings.uploads.chunkSize.description'
+  | 'settings.uploads.autoRetryFailedUploads.label'
+  | 'settings.uploads.autoRetryFailedUploads.description'
+  | 'settings.uploads.retryAttempts.label'
+  | 'settings.uploads.retryAttempts.description'
+  | 'settings.files.itemsPerPage.label'
+  | 'settings.files.itemsPerPage.description'
+  | 'settings.files.showHiddenFiles.label'
+  | 'settings.files.showHiddenFiles.description'
+  | 'settings.files.autoRefreshInterval.label'
+  | 'settings.files.autoRefreshInterval.description'
+  | 'settings.files.autoDeleteDays.label'
+  | 'settings.files.autoDeleteDays.description'
+  | 'settings.files.autoDeleteDays.option.7'
+  | 'settings.files.autoDeleteDays.option.14'
+  | 'settings.files.autoDeleteDays.option.30'
+  | 'settings.files.autoDeleteDays.option.60'
+  | 'settings.files.autoDeleteDays.option.90'
+  | 'settings.files.confirmDelete.label'
+  | 'settings.files.confirmDelete.description'
+  | 'settings.notifications.desktop.label'
+  | 'settings.notifications.desktop.description'
+  | 'settings.notifications.sound.label'
+  | 'settings.notifications.sound.description'
+  | 'settings.notifications.uploadComplete.label'
+  | 'settings.notifications.uploadComplete.description'
+  | 'settings.notifications.error.label'
+  | 'settings.notifications.error.description'
+  | 'settings.security.sessionTimeout.label'
+  | 'settings.security.sessionTimeout.description'
+  | 'settings.security.sessionTimeout.option.disabled'
+  | 'settings.security.sessionTimeout.option.30m'
+  | 'settings.security.sessionTimeout.option.1h'
+  | 'settings.security.sessionTimeout.option.2h'
+  | 'settings.security.sessionTimeout.option.4h'
+  | 'settings.security.sessionTimeout.option.8h'
+  | 'settings.security.requirePasswordForSensitiveActions.label'
+  | 'settings.security.requirePasswordForSensitiveActions.description'
+  | 'settings.advanced.debugMode.label'
+  | 'settings.advanced.debugMode.description'
+  | 'settings.advanced.cacheDuration.label'
+  | 'settings.advanced.cacheDuration.description'
+  | 'settings.advanced.cacheDuration.option.1h'
+  | 'settings.advanced.cacheDuration.option.6h'
+  | 'settings.advanced.cacheDuration.option.12h'
+  | 'settings.advanced.cacheDuration.option.24h'
+  | 'settings.advanced.cacheDuration.option.72h'
   | 'files.toolbar.view.list'
   | 'files.toolbar.view.grid'
   | 'files.toolbar.searchTag'
@@ -491,6 +555,70 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'settings.actions.export': '导出设置',
     'settings.actions.import': '导入设置',
     'settings.actions.reset': '重置所有设置',
+    'settings.resetSuccess': '设置已重置。',
+    'settings.appearance.theme.label': '主题',
+    'settings.appearance.theme.description': '选择您喜欢的应用主题',
+    'settings.appearance.theme.light': '浅色',
+    'settings.appearance.theme.dark': '深色',
+    'settings.appearance.compactMode.label': '紧凑模式',
+    'settings.appearance.compactMode.description': '减少界面间距，显示更多内容',
+    'settings.appearance.defaultFileView.label': '默认文件视图',
+    'settings.appearance.defaultFileView.description': '选择文件列表的默认显示方式',
+    'settings.appearance.defaultFileView.option.list': '列表视图',
+    'settings.appearance.defaultFileView.option.grid': '网格视图',
+    'settings.appearance.defaultFileView.option.tiles': '瓦片视图',
+    'settings.appearance.showFileExtensions.label': '显示文件扩展名',
+    'settings.appearance.showFileExtensions.description': '在文件名中显示文件扩展名',
+    'settings.uploads.maxConcurrentUploads.label': '最大并发上传数',
+    'settings.uploads.maxConcurrentUploads.description': '同时上传的最大文件数量',
+    'settings.uploads.chunkSize.label': '分块大小',
+    'settings.uploads.chunkSize.description': '大文件分块上传的块大小 (MB)',
+    'settings.uploads.autoRetryFailedUploads.label': '自动重试失败的上传',
+    'settings.uploads.autoRetryFailedUploads.description': '网络错误时自动重试上传',
+    'settings.uploads.retryAttempts.label': '重试次数',
+    'settings.uploads.retryAttempts.description': '上传失败时的最大重试次数',
+    'settings.files.itemsPerPage.label': '每页显示项目数',
+    'settings.files.itemsPerPage.description': '文件列表每页显示的项目数量',
+    'settings.files.showHiddenFiles.label': '显示隐藏文件',
+    'settings.files.showHiddenFiles.description': '显示以点(.)开头的隐藏文件',
+    'settings.files.autoRefreshInterval.label': '自动刷新间隔',
+    'settings.files.autoRefreshInterval.description': '文件列表自动刷新的时间间隔 (秒，0 表示禁用)',
+    'settings.files.autoDeleteDays.label': '回收站自动清理',
+    'settings.files.autoDeleteDays.description': '回收站中文件的自动删除天数',
+    'settings.files.autoDeleteDays.option.7': '7 天',
+    'settings.files.autoDeleteDays.option.14': '14 天',
+    'settings.files.autoDeleteDays.option.30': '30 天',
+    'settings.files.autoDeleteDays.option.60': '60 天',
+    'settings.files.autoDeleteDays.option.90': '90 天',
+    'settings.files.confirmDelete.label': '删除确认',
+    'settings.files.confirmDelete.description': '删除文件时显示确认对话框',
+    'settings.notifications.desktop.label': '桌面通知',
+    'settings.notifications.desktop.description': '启用系统桌面通知',
+    'settings.notifications.sound.label': '声音通知',
+    'settings.notifications.sound.description': '操作完成时播放提示音',
+    'settings.notifications.uploadComplete.label': '上传完成通知',
+    'settings.notifications.uploadComplete.description': '文件上传完成时显示通知',
+    'settings.notifications.error.label': '错误通知',
+    'settings.notifications.error.description': '发生错误时显示通知',
+    'settings.security.sessionTimeout.label': '会话超时时间',
+    'settings.security.sessionTimeout.description': '自动登出的空闲时间 (分钟，0 表示禁用)',
+    'settings.security.sessionTimeout.option.disabled': '禁用',
+    'settings.security.sessionTimeout.option.30m': '30 分钟',
+    'settings.security.sessionTimeout.option.1h': '1 小时',
+    'settings.security.sessionTimeout.option.2h': '2 小时',
+    'settings.security.sessionTimeout.option.4h': '4 小时',
+    'settings.security.sessionTimeout.option.8h': '8 小时',
+    'settings.security.requirePasswordForSensitiveActions.label': '敏感操作密码确认',
+    'settings.security.requirePasswordForSensitiveActions.description': '执行删除、分享等敏感操作时要求密码确认',
+    'settings.advanced.debugMode.label': '调试模式',
+    'settings.advanced.debugMode.description': '启用详细的调试信息输出',
+    'settings.advanced.cacheDuration.label': '缓存持续时间',
+    'settings.advanced.cacheDuration.description': '本地缓存的保持时间 (小时)',
+    'settings.advanced.cacheDuration.option.1h': '1 小时',
+    'settings.advanced.cacheDuration.option.6h': '6 小时',
+    'settings.advanced.cacheDuration.option.12h': '12 小时',
+    'settings.advanced.cacheDuration.option.24h': '24 小时',
+    'settings.advanced.cacheDuration.option.72h': '72 小时',
     'files.toolbar.view.list': '列表',
     'files.toolbar.view.grid': '网格',
     'files.toolbar.searchTag': '搜索',
@@ -849,6 +977,70 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'settings.actions.export': 'Export Settings',
     'settings.actions.import': 'Import Settings',
     'settings.actions.reset': 'Reset All Settings',
+    'settings.resetSuccess': 'Settings reset.',
+    'settings.appearance.theme.label': 'Theme',
+    'settings.appearance.theme.description': 'Choose your preferred app theme',
+    'settings.appearance.theme.light': 'Light',
+    'settings.appearance.theme.dark': 'Dark',
+    'settings.appearance.compactMode.label': 'Compact Mode',
+    'settings.appearance.compactMode.description': 'Reduce spacing to show more content',
+    'settings.appearance.defaultFileView.label': 'Default File View',
+    'settings.appearance.defaultFileView.description': 'Choose the default display mode for file lists',
+    'settings.appearance.defaultFileView.option.list': 'List View',
+    'settings.appearance.defaultFileView.option.grid': 'Grid View',
+    'settings.appearance.defaultFileView.option.tiles': 'Tiles View',
+    'settings.appearance.showFileExtensions.label': 'Show File Extensions',
+    'settings.appearance.showFileExtensions.description': 'Display file extensions in filenames',
+    'settings.uploads.maxConcurrentUploads.label': 'Max Concurrent Uploads',
+    'settings.uploads.maxConcurrentUploads.description': 'Maximum number of files uploaded at the same time',
+    'settings.uploads.chunkSize.label': 'Chunk Size',
+    'settings.uploads.chunkSize.description': 'Chunk size for large file uploads (MB)',
+    'settings.uploads.autoRetryFailedUploads.label': 'Auto Retry Failed Uploads',
+    'settings.uploads.autoRetryFailedUploads.description': 'Automatically retry uploads on network errors',
+    'settings.uploads.retryAttempts.label': 'Retry Attempts',
+    'settings.uploads.retryAttempts.description': 'Maximum retry attempts when an upload fails',
+    'settings.files.itemsPerPage.label': 'Items Per Page',
+    'settings.files.itemsPerPage.description': 'Number of items displayed per page in file lists',
+    'settings.files.showHiddenFiles.label': 'Show Hidden Files',
+    'settings.files.showHiddenFiles.description': 'Display hidden files that start with a dot (.)',
+    'settings.files.autoRefreshInterval.label': 'Auto Refresh Interval',
+    'settings.files.autoRefreshInterval.description': 'Automatic refresh interval for file lists (seconds, 0 to disable)',
+    'settings.files.autoDeleteDays.label': 'Trash Auto Cleanup',
+    'settings.files.autoDeleteDays.description': 'Days before files in trash are automatically deleted',
+    'settings.files.autoDeleteDays.option.7': '7 days',
+    'settings.files.autoDeleteDays.option.14': '14 days',
+    'settings.files.autoDeleteDays.option.30': '30 days',
+    'settings.files.autoDeleteDays.option.60': '60 days',
+    'settings.files.autoDeleteDays.option.90': '90 days',
+    'settings.files.confirmDelete.label': 'Delete Confirmation',
+    'settings.files.confirmDelete.description': 'Show a confirmation dialog before deleting files',
+    'settings.notifications.desktop.label': 'Desktop Notifications',
+    'settings.notifications.desktop.description': 'Enable system desktop notifications',
+    'settings.notifications.sound.label': 'Sound Notifications',
+    'settings.notifications.sound.description': 'Play a sound when actions complete',
+    'settings.notifications.uploadComplete.label': 'Upload Complete Notifications',
+    'settings.notifications.uploadComplete.description': 'Show notifications when uploads finish',
+    'settings.notifications.error.label': 'Error Notifications',
+    'settings.notifications.error.description': 'Show notifications when errors occur',
+    'settings.security.sessionTimeout.label': 'Session Timeout',
+    'settings.security.sessionTimeout.description': 'Idle time before automatic logout (minutes, 0 to disable)',
+    'settings.security.sessionTimeout.option.disabled': 'Disabled',
+    'settings.security.sessionTimeout.option.30m': '30 minutes',
+    'settings.security.sessionTimeout.option.1h': '1 hour',
+    'settings.security.sessionTimeout.option.2h': '2 hours',
+    'settings.security.sessionTimeout.option.4h': '4 hours',
+    'settings.security.sessionTimeout.option.8h': '8 hours',
+    'settings.security.requirePasswordForSensitiveActions.label': 'Password Confirmation for Sensitive Actions',
+    'settings.security.requirePasswordForSensitiveActions.description': 'Require password confirmation for sensitive actions like delete or share',
+    'settings.advanced.debugMode.label': 'Debug Mode',
+    'settings.advanced.debugMode.description': 'Enable detailed debug output',
+    'settings.advanced.cacheDuration.label': 'Cache Duration',
+    'settings.advanced.cacheDuration.description': 'How long local cache is retained (hours)',
+    'settings.advanced.cacheDuration.option.1h': '1 hour',
+    'settings.advanced.cacheDuration.option.6h': '6 hours',
+    'settings.advanced.cacheDuration.option.12h': '12 hours',
+    'settings.advanced.cacheDuration.option.24h': '24 hours',
+    'settings.advanced.cacheDuration.option.72h': '72 hours',
     'files.toolbar.view.list': 'List',
     'files.toolbar.view.grid': 'Grid',
     'files.toolbar.searchTag': 'Search',
