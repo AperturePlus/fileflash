@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from fileflash.core.security import create_share_access_token, decode_share_access_token
 from fileflash.core.settings import Settings
+from fileflash.models.enums import UploadStatus
 from fileflash.models.tables_access_share import Share
+from fileflash.models.tables_storage import File, FileMediaMetadata, StorageObject
 from fileflash.schemas.share import CreateShareRequest, SaveShareRequest, UpdateShareSettingsRequest
 from fileflash.services.share import ShareService
 
@@ -19,6 +23,7 @@ class DummySession:
         self.flush = AsyncMock()
         self.execute = AsyncMock()
         self.add = AsyncMock()
+        self.scalar = AsyncMock()
 
 
 def make_settings(**overrides: object) -> Settings:
@@ -31,7 +36,12 @@ def make_settings(**overrides: object) -> Settings:
 
 
 def make_service(session: DummySession, settings: Settings | None = None) -> ShareService:
-    storage = SimpleNamespace(iter_object=AsyncMock())
+    storage = SimpleNamespace(
+        iter_object=AsyncMock(),
+        iter_object_range=AsyncMock(),
+        object_exists=AsyncMock(return_value=False),
+        stat_object=AsyncMock(),
+    )
     return ShareService(db=session, settings=settings or make_settings(), storage=storage)
 
 
@@ -163,4 +173,89 @@ async def test_save_requires_valid_share_token(monkeypatch: pytest.MonkeyPatch):
             ip_address="127.0.0.1",
             user_agent="pytest",
         )
+
+
+@pytest.mark.asyncio
+async def test_get_shared_file_stream_prefers_transcoded_when_preview(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = make_service(session)
+
+    share_row = Share(
+        share_id=1,
+        user_id=1,
+        resource_type="file",
+        file_id=9,
+        folder_id=None,
+        share_link="ABCD",
+        share_code="ABCD",
+        status="active",
+        allow_preview=True,
+        allow_download=True,
+    )
+    file_row = File(
+        file_id=9,
+        uploader_id=1,
+        owner_id=1,
+        folder_id=1,
+        file_name="video.mp4",
+        storage_object_id=33,
+        file_size=100,
+        file_ext="mp4",
+        mime_type="video/mp4",
+    )
+    source_object = StorageObject(
+        object_id=33,
+        bucket_name="fileflash",
+        object_key="objects/u1/source-video",
+        object_size=100,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="video/mp4",
+    )
+    optimized_object = StorageObject(
+        object_id=34,
+        bucket_name="fileflash",
+        object_key="optimized/transcode/v1/object-33/source-mp4-v1.mp4",
+        object_size=80,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="video/mp4",
+    )
+    metadata = FileMediaMetadata(source_object_id=33)
+    metadata.extra_metadata = {
+        "transcode": {
+            "status": "ready",
+            "mediaType": "video",
+            "optimizedBucketName": optimized_object.bucket_name,
+            "optimizedObjectKey": optimized_object.object_key,
+            "optimizedMimeType": "video/mp4",
+            "updatedAt": datetime.now(UTC).isoformat(),
+        }
+    }
+    metadata.extracted_at = datetime.now(UTC)
+
+    monkeypatch.setattr(service, "_resolve_share_for_access_token", AsyncMock(return_value=share_row))
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    monkeypatch.setattr(service, "_log_share_event", AsyncMock())
+    session.get = AsyncMock(return_value=source_object)
+    session.scalar = AsyncMock(side_effect=[metadata, optimized_object])
+    session.execute = AsyncMock(return_value=None)
+    async def _dummy_stream() -> AsyncIterator[bytes]:
+        yield b"data"
+
+    def _iter_object(**_kwargs: object) -> AsyncIterator[bytes]:
+        return _dummy_stream()
+
+    iter_mock = Mock(side_effect=_iter_object)
+    service.storage.iter_object = iter_mock
+
+    await service.get_shared_file_download_stream_response(
+        share_link="ABCD",
+        share_access_token="token",
+        action="preview",
+        range_header=None,
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+    )
+
+    iter_mock.assert_called_once()
+    assert iter_mock.call_args.kwargs["object_key"] == optimized_object.object_key
 

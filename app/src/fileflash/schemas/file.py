@@ -24,6 +24,7 @@ class FileItem(CamelModel):
     folder_id: str
     permission: Literal["read", "write", "owner"] | None = None
     is_starred: bool | None = None
+    media_optimization: MediaOptimization | None = None
 
 
 class FolderItem(CamelModel):
@@ -148,6 +149,13 @@ class MergeChunksResponse(CamelModel):
 
 class FileDetails(FileItem):
     status: bool
+
+
+class MediaOptimization(CamelModel):
+    status: Literal["queued", "running", "ready", "failed"]
+    media_type: Literal["audio", "video"]
+    optimized_mime_type: str | None = None
+    updated_at: datetime
 
 
 class RenameFileRequest(CamelModel):

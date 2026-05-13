@@ -27,6 +27,64 @@ def _extract_bearer_token(authorization: str | None) -> str | None:
     return authorization.split(" ", 1)[1].strip() or None
 
 
+def _extract_share_stream(
+    value: tuple[object, ...],
+) -> tuple[object, str, str, int, dict[str, str] | None]:
+    if len(value) == 5:
+        stream, filename, content_type, status_code, headers = value
+        if isinstance(filename, str) and isinstance(content_type, str) and isinstance(status_code, int) and isinstance(headers, dict):
+            return stream, filename, content_type, status_code, headers
+    if len(value) == 4:
+        stream, filename, content_type, status_code = value
+        if isinstance(filename, str) and isinstance(content_type, str) and isinstance(status_code, int):
+            return stream, filename, content_type, status_code, None
+    if len(value) == 3:
+        stream, filename, content_type = value
+        if isinstance(filename, str) and isinstance(content_type, str):
+            return stream, filename, content_type, 200, None
+
+    from ..core.errors import ApiError
+
+    raise ApiError(status_code=500, code=500, message="Invalid shared stream response")
+
+
+def _sanitize_stream_headers(
+    *,
+    headers: dict[str, str] | None,
+    filename: str,
+    disposition: str,
+) -> dict[str, str]:
+    fallback_content_disposition = build_content_disposition(filename, disposition=disposition)
+    if headers is None:
+        return {"Content-Disposition": fallback_content_disposition}
+
+    sanitized: dict[str, str] = {}
+    has_content_disposition = False
+    for key, value in headers.items():
+        key_text = str(key)
+        value_text = str(value)
+        header_name = key_text.strip().lower()
+
+        if header_name == "content-disposition":
+            has_content_disposition = True
+            try:
+                value_text.encode("latin-1")
+                sanitized[key_text] = value_text
+            except UnicodeEncodeError:
+                sanitized[key_text] = fallback_content_disposition
+            continue
+
+        try:
+            value_text.encode("latin-1")
+        except UnicodeEncodeError:
+            continue
+        sanitized[key_text] = value_text
+
+    if not has_content_disposition:
+        sanitized["Content-Disposition"] = fallback_content_disposition
+    return sanitized
+
+
 @router.post("")
 async def create_share(
     payload: CreateShareRequest,
@@ -133,6 +191,7 @@ async def save_share_to_my_space(
 async def download_shared_file(
     share_link: str,
     authorization: str | None = Header(default=None),
+    range_header: str | None = Header(default=None, alias="Range"),
     client_ip: str = Depends(get_client_ip),
     user_agent: str | None = Depends(get_user_agent),
     share_service: ShareService = Depends(get_share_service),
@@ -143,21 +202,33 @@ async def download_shared_file(
 
         raise ApiError(status_code=401, code=401, message="Missing share access token")
 
-    stream, filename, content_type = await share_service.get_shared_file_stream(
-        share_link=share_link,
-        share_access_token=token,
-        action="download",
-        ip_address=client_ip,
-        user_agent=user_agent,
-    )
-    headers = {"Content-Disposition": build_content_disposition(filename, disposition="attachment")}
-    return StreamingResponse(stream, media_type=content_type, headers=headers)
+    if hasattr(share_service, "get_shared_file_download_stream_response"):
+        raw = await share_service.get_shared_file_download_stream_response(
+            share_link=share_link,
+            share_access_token=token,
+            action="download",
+            range_header=range_header,
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+    else:
+        raw = await share_service.get_shared_file_stream(
+            share_link=share_link,
+            share_access_token=token,
+            action="download",
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+    stream, filename, content_type, status_code, headers = _extract_share_stream(tuple(raw))
+    response_headers = _sanitize_stream_headers(headers=headers, filename=filename, disposition="attachment")
+    return StreamingResponse(stream, media_type=content_type, headers=response_headers, status_code=status_code)
 
 
 @router.get("/{share_link}/preview")
 async def preview_shared_file(
     share_link: str,
     authorization: str | None = Header(default=None),
+    range_header: str | None = Header(default=None, alias="Range"),
     client_ip: str = Depends(get_client_ip),
     user_agent: str | None = Depends(get_user_agent),
     share_service: ShareService = Depends(get_share_service),
@@ -168,13 +239,24 @@ async def preview_shared_file(
 
         raise ApiError(status_code=401, code=401, message="Missing share access token")
 
-    stream, filename, content_type = await share_service.get_shared_file_stream(
-        share_link=share_link,
-        share_access_token=token,
-        action="preview",
-        ip_address=client_ip,
-        user_agent=user_agent,
-    )
-    headers = {"Content-Disposition": build_content_disposition(filename, disposition="inline")}
-    return StreamingResponse(stream, media_type=content_type, headers=headers)
+    if hasattr(share_service, "get_shared_file_download_stream_response"):
+        raw = await share_service.get_shared_file_download_stream_response(
+            share_link=share_link,
+            share_access_token=token,
+            action="preview",
+            range_header=range_header,
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+    else:
+        raw = await share_service.get_shared_file_stream(
+            share_link=share_link,
+            share_access_token=token,
+            action="preview",
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+    stream, filename, content_type, status_code, headers = _extract_share_stream(tuple(raw))
+    response_headers = _sanitize_stream_headers(headers=headers, filename=filename, disposition="inline")
+    return StreamingResponse(stream, media_type=content_type, headers=response_headers, status_code=status_code)
 

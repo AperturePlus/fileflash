@@ -9,7 +9,7 @@ from fileflash.core.errors import ApiError
 from fileflash.models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
 from fileflash.models.tables_access_share import FavoriteItem
 from fileflash.models.tables_identity import User
-from fileflash.models.tables_storage import File, Folder
+from fileflash.models.tables_storage import File, FileMediaMetadata, Folder
 from fileflash.schemas.file import (
     BatchFilesRequest,
     CreateFolderRequest,
@@ -377,6 +377,36 @@ async def test_folder_service_rename_folder_auto_suffix(monkeypatch: pytest.Monk
     assert response.name == "Docs (1)"
     assert folder.folder_name == "Docs (1)"
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_folder_service_load_media_optimization_map_parses_transcode_metadata():
+    session = DummySession()
+    service = FolderService(db=session)
+    file_row = make_file_row()
+    extracted_at = datetime(2026, 5, 13, 8, 30, tzinfo=UTC)
+    metadata_row = FileMediaMetadata(
+        source_object_id=9,
+        extra_metadata={
+            "transcode": {
+                "status": "ready",
+                "mediaType": "video",
+                "optimizedMimeType": "video/mp4",
+                "updatedAt": "2026-05-13T08:31:00Z",
+            }
+        },
+        extracted_at=extracted_at,
+    )
+    session.scalars = AsyncMock(return_value=[metadata_row])
+
+    result = await service._load_media_optimization_map([file_row])
+
+    assert 1 in result
+    media = result[1]
+    assert media.status == "ready"
+    assert media.media_type == "video"
+    assert media.optimized_mime_type == "video/mp4"
+    assert media.updated_at == datetime(2026, 5, 13, 8, 31, tzinfo=UTC)
 
 
 @pytest.mark.asyncio

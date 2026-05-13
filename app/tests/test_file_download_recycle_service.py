@@ -7,17 +7,27 @@ import pytest
 
 from fileflash.core.errors import ApiError
 from fileflash.models.enums import FileStatus, FolderStatus, FolderType, UploadStatus
-from fileflash.models.tables_storage import File, Folder, StorageObject
+from fileflash.models.tables_storage import File, FileMediaMetadata, Folder, StorageObject
 from fileflash.schemas.file import BatchFilesRequest
 from fileflash.services.file import FileService
 
 
 class DummyStorage:
-    async def iter_object(self, *, object_key: str):  # noqa: ARG002
+    async def iter_object(self, *, object_key: str, bucket_name: str | None = None):  # noqa: ARG002
         yield b"abcdefghij"
 
-    async def iter_object_range(self, *, object_key: str, start: int, end: int):  # noqa: ARG002
+    async def iter_object_range(
+        self,
+        *,
+        object_key: str,
+        start: int,
+        end: int,
+        bucket_name: str | None = None,
+    ):  # noqa: ARG002
         yield bytes(range(start, end + 1))
+
+    async def object_exists(self, *, bucket_name: str, object_key: str):  # noqa: ARG002
+        return False
 
 
 class DummySession:
@@ -273,6 +283,95 @@ async def test_get_preview_stream_rejects_invalid_range(monkeypatch: pytest.Monk
         )
 
     assert exc.value.status_code == 416
+
+
+@pytest.mark.asyncio
+async def test_get_preview_stream_prefers_transcoded_object_when_ready(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    storage = DummyStorage()
+    service = FileService(db=session, storage=storage)
+
+    file_row = make_file_row(file_id=11, file_name="preview.mp4")
+    file_row.file_ext = "mp4"
+    file_row.mime_type = "video/mp4"
+    file_row.storage_object_id = 101
+    source_object = StorageObject(
+        object_id=101,
+        bucket_name="fileflash",
+        object_key="objects/u1/source",
+        object_size=256,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="video/mp4",
+    )
+    optimized_object = StorageObject(
+        object_id=102,
+        bucket_name="fileflash",
+        object_key="optimized/transcode/v1/object-101/source-mp4-v1.mp4",
+        object_size=128,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="video/mp4",
+    )
+    metadata = FileMediaMetadata(source_object_id=101)
+    metadata.extra_metadata = {
+        "transcode": {
+            "status": "ready",
+            "mediaType": "video",
+            "optimizedBucketName": optimized_object.bucket_name,
+            "optimizedObjectKey": optimized_object.object_key,
+            "optimizedMimeType": "video/mp4",
+            "updatedAt": datetime.now(UTC).isoformat(),
+        }
+    }
+    metadata.extracted_at = datetime.now(UTC)
+
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    session.get = AsyncMock(return_value=source_object)
+    session.scalar = AsyncMock(side_effect=[metadata, optimized_object])
+
+    result = await service.get_preview_stream(user_id=1, file_id="11", range_header=None)
+    assert result.status_code == 200
+    assert result.headers["Content-Length"] == "128"
+
+
+@pytest.mark.asyncio
+async def test_get_preview_stream_falls_back_to_source_when_transcoded_missing(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    storage = DummyStorage()
+    service = FileService(db=session, storage=storage)
+
+    file_row = make_file_row(file_id=12, file_name="preview.mp4")
+    file_row.file_ext = "mp4"
+    file_row.mime_type = "video/mp4"
+    file_row.storage_object_id = 201
+    source_object = StorageObject(
+        object_id=201,
+        bucket_name="fileflash",
+        object_key="objects/u1/source-2",
+        object_size=512,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="video/mp4",
+    )
+    metadata = FileMediaMetadata(source_object_id=201)
+    metadata.extra_metadata = {
+        "transcode": {
+            "status": "ready",
+            "mediaType": "video",
+            "optimizedBucketName": "fileflash",
+            "optimizedObjectKey": "optimized/not-found.mp4",
+            "optimizedMimeType": "video/mp4",
+            "updatedAt": datetime.now(UTC).isoformat(),
+        }
+    }
+    metadata.extracted_at = datetime.now(UTC)
+
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    session.get = AsyncMock(return_value=source_object)
+    session.scalar = AsyncMock(side_effect=[metadata, None])
+    monkeypatch.setattr(service.storage, "object_exists", AsyncMock(return_value=False))
+
+    result = await service.get_preview_stream(user_id=1, file_id="12", range_header=None)
+    assert result.status_code == 200
+    assert result.headers["Content-Length"] == "512"
 
 
 @pytest.mark.asyncio

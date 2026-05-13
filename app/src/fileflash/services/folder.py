@@ -17,7 +17,7 @@ from ..db.transaction import (
 from ..models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
 from ..models.tables_access_share import FavoriteItem
 from ..models.tables_identity import User
-from ..models.tables_storage import File, Folder
+from ..models.tables_storage import File, FileMediaMetadata, Folder
 from ..schemas.common import PaginatedData, PaginationMeta
 from ..schemas.file import (
     ContentItem,
@@ -28,6 +28,7 @@ from ..schemas.file import (
     FolderPathResponse,
     FolderSizeResponse,
     GetFolderContentsQuery,
+    MediaOptimization,
     MoveFolderRequest,
     MoveFolderResponse,
     PathItem,
@@ -114,13 +115,21 @@ class FolderService:
         file_ids = [r[0].file_id for r in file_rows]
         starred_folders = await self._starred_folder_ids(user_id, folder_ids)
         starred_files = await self._starred_file_ids(user_id, file_ids)
+        media_optimization_map = await self._load_media_optimization_map([f for f, _ in file_rows])
 
         # merge: folders first, then files
         all_items: list[ContentItem] = []
         for folder, uname in folder_rows:
             all_items.append(self._to_folder_item(folder, uname, folder.folder_id in starred_folders))
         for f, uname in file_rows:
-            all_items.append(self._to_file_item(f, uname, f.file_id in starred_files))
+            all_items.append(
+                self._to_file_item(
+                    f,
+                    uname,
+                    f.file_id in starred_files,
+                    media_optimization=media_optimization_map.get(int(f.file_id)),
+                )
+            )
 
         total = len(all_items)
         per_page = query.per_page
@@ -485,8 +494,68 @@ class FolderService:
         except ValueError as exc:
             raise ApiError(status_code=400, code=400, message=f"Invalid {name}") from exc
 
+    async def _load_media_optimization_map(self, files: list[File]) -> dict[int, MediaOptimization]:
+        if not files:
+            return {}
+        source_object_ids = [int(row.storage_object_id) for row in files if row.storage_object_id is not None]
+        if not source_object_ids:
+            return {}
+
+        metadata_rows = list(
+            await self.db.scalars(
+                select(FileMediaMetadata).where(FileMediaMetadata.source_object_id.in_(source_object_ids))
+            )
+        )
+        by_object_id = {
+            int(row.source_object_id): row for row in metadata_rows if isinstance(row, FileMediaMetadata)
+        }
+        result: dict[int, MediaOptimization] = {}
+        for row in files:
+            media = self._parse_media_optimization(by_object_id.get(int(row.storage_object_id)))
+            if media is not None:
+                result[int(row.file_id)] = media
+        return result
+
     @staticmethod
-    def _to_file_item(f: File, owner_name: str, is_starred: bool) -> FileItem:
+    def _parse_media_optimization(metadata_row: FileMediaMetadata | None) -> MediaOptimization | None:
+        if metadata_row is None:
+            return None
+        transcode = (metadata_row.extra_metadata or {}).get("transcode")
+        if not isinstance(transcode, dict):
+            return None
+        status = str(transcode.get("status") or "").strip().lower()
+        media_type = str(transcode.get("mediaType") or "").strip().lower()
+        if status not in {"queued", "running", "ready", "failed"}:
+            return None
+        if media_type not in {"audio", "video"}:
+            return None
+        updated_at_raw = transcode.get("updatedAt")
+        if isinstance(updated_at_raw, datetime):
+            updated_at = updated_at_raw
+        else:
+            text = str(updated_at_raw or "").strip()
+            try:
+                updated_at = datetime.fromisoformat(text.replace("Z", "+00:00")) if text else metadata_row.extracted_at
+            except ValueError:
+                updated_at = metadata_row.extracted_at
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        optimized_mime_type = transcode.get("optimizedMimeType")
+        return MediaOptimization(
+            status=status,  # type: ignore[arg-type]
+            media_type=media_type,  # type: ignore[arg-type]
+            optimized_mime_type=str(optimized_mime_type) if optimized_mime_type else None,
+            updated_at=updated_at,
+        )
+
+    @staticmethod
+    def _to_file_item(
+        f: File,
+        owner_name: str,
+        is_starred: bool,
+        *,
+        media_optimization: MediaOptimization | None = None,
+    ) -> FileItem:
         return FileItem(
             id=str(f.file_id),
             name=f.file_name,
@@ -502,6 +571,7 @@ class FolderService:
             folder_id=str(f.folder_id),
             permission="owner",
             is_starred=is_starred,
+            media_optimization=media_optimization,
         )
 
     @staticmethod

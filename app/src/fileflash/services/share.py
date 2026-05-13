@@ -12,6 +12,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
+from ..core.http_headers import build_content_disposition
 from ..core.security import (
     create_share_access_token,
     decode_share_access_token,
@@ -27,7 +28,7 @@ from ..db.transaction import (
 )
 from ..models.enums import FileStatus, FolderStatus, FolderType, ShareStatus
 from ..models.tables_access_share import Share, ShareAccessLog
-from ..models.tables_storage import File, Folder, StorageObject
+from ..models.tables_storage import File, FileMediaMetadata, Folder, StorageObject
 from ..s3.minio_client import MinioObjectStorageClient
 from ..schemas.common import PaginatedData, PaginationMeta
 from ..schemas.share import (
@@ -401,8 +402,28 @@ class ShareService:
         action: Literal["download", "preview"],
         ip_address: str,
         user_agent: str | None,
-    ) -> tuple[AsyncIterator[bytes], str, str]:
-        async def _operation() -> tuple[AsyncIterator[bytes], str, str]:
+    ) -> tuple[AsyncIterator[bytes], str, str, int]:
+        stream, filename, content_type, status_code, _headers = await self.get_shared_file_download_stream_response(
+            share_link=share_link,
+            share_access_token=share_access_token,
+            action=action,
+            range_header=None,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return stream, filename, content_type, status_code
+
+    async def get_shared_file_download_stream_response(
+        self,
+        *,
+        share_link: str,
+        share_access_token: str,
+        action: Literal["download", "preview"],
+        range_header: str | None,
+        ip_address: str,
+        user_agent: str | None,
+    ) -> tuple[AsyncIterator[bytes], str, str, int, dict[str, str]]:
+        async def _operation() -> tuple[AsyncIterator[bytes], str, str, int, dict[str, str]]:
             await apply_local_lock_timeout(self.db)
             share_row = await self._resolve_share_for_access_token(
                 share_link=share_link,
@@ -418,8 +439,14 @@ class ShareService:
                 raise ApiError(status_code=403, code=403, message="Preview is not allowed for this share")
 
             file_row = await self._get_active_file(file_id=int(share_row.file_id), owner_id=share_row.user_id)
-            storage_object = await self.db.get(StorageObject, int(file_row.storage_object_id))
+            storage_object = await self._resolve_shared_stream_storage_object(
+                file_row=file_row,
+                prefer_optimized=(action == "preview"),
+            )
             if storage_object is None:
+                raise ApiError(status_code=404, code=404, message="Shared file content not found")
+            object_size = int(storage_object.object_size or file_row.file_size or 0)
+            if object_size <= 0:
                 raise ApiError(status_code=404, code=404, message="Shared file content not found")
 
             if action == "download":
@@ -439,8 +466,48 @@ class ShareService:
             )
             await self.db.commit()
 
-            content_type = file_row.mime_type or storage_object.content_type or "application/octet-stream"
-            return self.storage.iter_object(object_key=storage_object.object_key), file_row.file_name, content_type
+            content_type = (
+                storage_object.content_type
+                or file_row.mime_type
+                or "application/octet-stream"
+            )
+            headers = {
+                "Accept-Ranges": "bytes",
+                "Content-Disposition": build_content_disposition(
+                    file_row.file_name,
+                    disposition="attachment" if action == "download" else "inline",
+                ),
+            }
+
+            byte_range = self._parse_range_header(range_header=range_header, file_size=object_size)
+            if byte_range is None:
+                headers["Content-Length"] = str(object_size)
+                return (
+                    self.storage.iter_object(
+                        bucket_name=storage_object.bucket_name,
+                        object_key=storage_object.object_key,
+                    ),
+                    file_row.file_name,
+                    content_type,
+                    200,
+                    headers,
+                )
+
+            start, end = byte_range
+            headers["Content-Length"] = str(end - start + 1)
+            headers["Content-Range"] = f"bytes {start}-{end}/{object_size}"
+            return (
+                self.storage.iter_object_range(
+                    bucket_name=storage_object.bucket_name,
+                    object_key=storage_object.object_key,
+                    start=start,
+                    end=end,
+                ),
+                file_row.file_name,
+                content_type,
+                206,
+                headers,
+            )
 
         try:
             return await run_with_transaction_retry(self.db, _operation)
@@ -876,6 +943,109 @@ class ShareService:
                 source_file_id=int(child.file_id),
                 target_folder_id=target_folder_id,
             )
+
+    async def _resolve_shared_stream_storage_object(
+        self,
+        *,
+        file_row: File,
+        prefer_optimized: bool,
+    ) -> StorageObject | None:
+        source_object = await self.db.get(StorageObject, int(file_row.storage_object_id))
+        if source_object is None:
+            return None
+        if not prefer_optimized:
+            return source_object
+
+        metadata_row = await self.db.scalar(
+            select(FileMediaMetadata)
+            .where(FileMediaMetadata.source_object_id == int(file_row.storage_object_id))
+            .limit(1)
+        )
+        if not isinstance(metadata_row, FileMediaMetadata):
+            return source_object
+        transcode = (metadata_row.extra_metadata or {}).get("transcode")
+        if not isinstance(transcode, dict):
+            return source_object
+        if str(transcode.get("status") or "").strip().lower() != "ready":
+            return source_object
+
+        bucket_name = str(transcode.get("optimizedBucketName") or "").strip()
+        object_key = str(transcode.get("optimizedObjectKey") or "").strip()
+        if not bucket_name or not object_key:
+            return source_object
+
+        optimized_object = await self.db.scalar(
+            select(StorageObject)
+            .where(
+                and_(
+                    StorageObject.bucket_name == bucket_name,
+                    StorageObject.object_key == object_key,
+                )
+            )
+            .limit(1)
+        )
+        if isinstance(optimized_object, StorageObject):
+            return optimized_object
+
+        exists = await self.storage.object_exists(bucket_name=bucket_name, object_key=object_key)
+        if not exists:
+            return source_object
+        stat = await self.storage.stat_object(bucket_name=bucket_name, object_key=object_key)
+        created = StorageObject(
+            bucket_name=bucket_name,
+            object_key=object_key,
+            object_size=int(stat.size),
+            etag=stat.etag,
+            version_id=stat.version_id,
+            content_type=stat.content_type,
+        )
+        self.db.add(created)
+        await self.db.flush()
+        return created
+
+    @staticmethod
+    def _parse_range_header(range_header: str | None, file_size: int) -> tuple[int, int] | None:
+        if not range_header:
+            return None
+
+        value = range_header.strip()
+        if not value.lower().startswith("bytes="):
+            raise ApiError(status_code=416, code=416, message="Invalid Range header")
+
+        spec = value[6:].strip()
+        if "," in spec:
+            raise ApiError(status_code=416, code=416, message="Multiple ranges are not supported")
+
+        if spec.startswith("-"):
+            suffix_part = spec[1:].strip()
+            if not suffix_part.isdigit():
+                raise ApiError(status_code=416, code=416, message="Invalid Range header")
+            suffix = int(suffix_part)
+            if suffix <= 0:
+                raise ApiError(status_code=416, code=416, message="Invalid Range header")
+            start = max(file_size - suffix, 0)
+            end = file_size - 1
+            return start, end
+
+        if "-" not in spec:
+            raise ApiError(status_code=416, code=416, message="Invalid Range header")
+
+        start_part, end_part = spec.split("-", 1)
+        if not start_part.strip().isdigit():
+            raise ApiError(status_code=416, code=416, message="Invalid Range header")
+        start = int(start_part.strip())
+        end = file_size - 1
+        if end_part.strip():
+            if not end_part.strip().isdigit():
+                raise ApiError(status_code=416, code=416, message="Invalid Range header")
+            end = int(end_part.strip())
+
+        if start < 0 or start >= file_size or end < start:
+            raise ApiError(status_code=416, code=416, message="Requested range is not satisfiable")
+
+        if end >= file_size:
+            end = file_size - 1
+        return start, end
 
     async def _log_share_event(
         self,

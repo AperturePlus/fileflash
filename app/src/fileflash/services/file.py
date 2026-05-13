@@ -25,7 +25,7 @@ from ..db.transaction import (
 from ..models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType, ShareStatus, UploadStatus
 from ..models.tables_access_share import FavoriteItem, Share
 from ..models.tables_identity import User
-from ..models.tables_storage import File, Folder, StorageObject
+from ..models.tables_storage import File, FileMediaMetadata, Folder, StorageObject
 from ..s3.minio_client import MinioObjectStorageClient
 from ..schemas.common import PaginatedData, PaginationMeta
 from ..schemas.file import (
@@ -39,6 +39,7 @@ from ..schemas.file import (
     FileDetails,
     FileItem,
     GetFilesQuery,
+    MediaOptimization,
     MoveFileRequest,
     MoveFileResponse,
     RenameFileRequest,
@@ -60,6 +61,8 @@ _SORT_COLUMNS = {
 }
 
 _RECYCLE_RETENTION_DAYS = 30
+
+TRANSCODE_READY_STATUS = "ready"
 
 
 @dataclass(slots=True)
@@ -108,8 +111,17 @@ class FileService:
         rows = (await self.db.execute(base.offset(offset).limit(per_page))).all()
 
         starred_ids = await self._starred_file_ids(user_id, [r[0].file_id for r in rows])
+        media_optimization_map = await self._load_media_optimization_map([r[0] for r in rows])
 
-        items = [self._to_file_item(f, username, f.file_id in starred_ids) for f, username in rows]
+        items = [
+            self._to_file_item(
+                f,
+                username,
+                f.file_id in starred_ids,
+                media_optimization=media_optimization_map.get(int(f.file_id)),
+            )
+            for f, username in rows
+        ]
         return self._paginate(items, total, query.page, per_page)
 
     async def get_file(self, *, user_id: int, file_id: int) -> FileDetails:
@@ -132,6 +144,7 @@ class FileService:
 
         f, username = row
         is_starred = await self._is_file_starred(user_id, file_id)
+        media_optimization = await self._load_file_media_optimization(f)
         return FileDetails(
             id=str(f.file_id),
             name=f.file_name,
@@ -147,6 +160,7 @@ class FileService:
             folder_id=str(f.folder_id),
             permission="owner",
             is_starred=is_starred,
+            media_optimization=media_optimization,
             status=True,
         )
 
@@ -261,7 +275,10 @@ class FileService:
             raise ApiError(status_code=503, code=503, message="Object storage is unavailable")
 
         file_row = await self._get_active_file(user_id=user_id, file_id=file_id)
-        storage_object = await self.db.get(StorageObject, int(file_row.storage_object_id))
+        storage_object = await self._resolve_stream_storage_object(
+            file_row=file_row,
+            prefer_optimized=(content_disposition == "inline"),
+        )
         if storage_object is None or storage_object.upload_status != UploadStatus.ACTIVE:
             raise ApiError(status_code=404, code=404, message="File content not found")
 
@@ -286,7 +303,10 @@ class FileService:
         byte_range = self._parse_range_header(range_header=range_header, file_size=object_size)
         if byte_range is None:
             headers["Content-Length"] = str(object_size)
-            stream = self.storage.iter_object(object_key=storage_object.object_key)
+            stream = self.storage.iter_object(
+                bucket_name=storage_object.bucket_name,
+                object_key=storage_object.object_key,
+            )
             return DownloadStreamResult(
                 stream=stream,
                 filename=file_row.file_name,
@@ -299,6 +319,7 @@ class FileService:
         headers["Content-Length"] = str(end - start + 1)
         headers["Content-Range"] = f"bytes {start}-{end}/{object_size}"
         stream = self.storage.iter_object_range(
+            bucket_name=storage_object.bucket_name,
             object_key=storage_object.object_key,
             start=start,
             end=end,
@@ -396,7 +417,10 @@ class FileService:
                 for file_row, storage_object in files_with_storage:
                     zip_path = self._safe_zip_path(file_paths.get(int(file_row.file_id), file_row.file_name))
                     with archive.open(zip_path, mode="w") as entry:
-                        async for chunk in self.storage.iter_object(object_key=storage_object.object_key):
+                        async for chunk in self.storage.iter_object(
+                            bucket_name=storage_object.bucket_name,
+                            object_key=storage_object.object_key,
+                        ):
                             entry.write(chunk)
         except Exception as exc:  # noqa: BLE001
             if os.path.exists(tmp_path):
@@ -705,8 +729,16 @@ class FileService:
         ).all()
 
         items: list[ContentItem] = []
+        media_optimization_map = await self._load_media_optimization_map([f for f, _ in file_rows])
         for f, username in file_rows:
-            items.append(self._to_file_item(f, username, is_starred=True))
+            items.append(
+                self._to_file_item(
+                    f,
+                    username,
+                    is_starred=True,
+                    media_optimization=media_optimization_map.get(int(f.file_id)),
+                )
+            )
         for folder, username in folder_rows:
             items.append(self._to_folder_item(folder, username, is_starred=True))
 
@@ -1523,7 +1555,10 @@ class FileService:
             raise ApiError(status_code=503, code=503, message="Object storage is unavailable")
 
         try:
-            await self.storage.remove_object(object_key=storage_object.object_key)
+            await self.storage.remove_object(
+                bucket_name=storage_object.bucket_name,
+                object_key=storage_object.object_key,
+            )
         except Exception as exc:  # noqa: BLE001
             raise ApiError(
                 status_code=503,
@@ -1684,8 +1719,157 @@ class FileService:
             )
         ) is not None
 
+    async def _load_media_optimization_map(self, files: list[File]) -> dict[int, MediaOptimization]:
+        if not files:
+            return {}
+
+        source_object_ids = [int(row.storage_object_id) for row in files if row.storage_object_id is not None]
+        if not source_object_ids:
+            return {}
+
+        metadata_rows = list(
+            await self.db.scalars(
+                select(FileMediaMetadata).where(FileMediaMetadata.source_object_id.in_(source_object_ids))
+            )
+        )
+        by_object_id = {
+            int(row.source_object_id): row for row in metadata_rows if isinstance(row, FileMediaMetadata)
+        }
+
+        result: dict[int, MediaOptimization] = {}
+        for file_row in files:
+            media = self._parse_media_optimization(by_object_id.get(int(file_row.storage_object_id)))
+            if media is not None:
+                result[int(file_row.file_id)] = media
+        return result
+
+    async def _load_file_media_optimization(self, file_row: File) -> MediaOptimization | None:
+        metadata_row = await self.db.scalar(
+            select(FileMediaMetadata)
+            .where(FileMediaMetadata.source_object_id == int(file_row.storage_object_id))
+            .limit(1)
+        )
+        if not isinstance(metadata_row, FileMediaMetadata):
+            return None
+        return self._parse_media_optimization(metadata_row)
+
+    def _parse_media_optimization(self, metadata_row: FileMediaMetadata | None) -> MediaOptimization | None:
+        if metadata_row is None:
+            return None
+        extra = metadata_row.extra_metadata or {}
+        transcode = extra.get("transcode")
+        if not isinstance(transcode, dict):
+            return None
+
+        status = str(transcode.get("status") or "").strip().lower()
+        media_type = str(transcode.get("mediaType") or "").strip().lower()
+        updated_at_raw = transcode.get("updatedAt")
+        optimized_mime_type = transcode.get("optimizedMimeType")
+        if status not in {"queued", "running", "ready", "failed"}:
+            return None
+        if media_type not in {"audio", "video"}:
+            return None
+
+        updated_at = self._parse_datetime(updated_at_raw) or metadata_row.extracted_at
+        if not updated_at:
+            return None
+
+        return MediaOptimization(
+            status=status,  # type: ignore[arg-type]
+            media_type=media_type,  # type: ignore[arg-type]
+            optimized_mime_type=str(optimized_mime_type) if optimized_mime_type else None,
+            updated_at=updated_at,
+        )
+
+    async def _resolve_stream_storage_object(
+        self,
+        *,
+        file_row: File,
+        prefer_optimized: bool,
+    ) -> StorageObject | None:
+        source_object = await self.db.get(StorageObject, int(file_row.storage_object_id))
+        if source_object is None:
+            return None
+        if not prefer_optimized:
+            return source_object
+
+        metadata_row = await self.db.scalar(
+            select(FileMediaMetadata)
+            .where(FileMediaMetadata.source_object_id == int(file_row.storage_object_id))
+            .limit(1)
+        )
+        if not isinstance(metadata_row, FileMediaMetadata):
+            return source_object
+        transcode = (metadata_row.extra_metadata or {}).get("transcode")
+        if not isinstance(transcode, dict):
+            return source_object
+        if str(transcode.get("status") or "").strip().lower() != TRANSCODE_READY_STATUS:
+            return source_object
+
+        bucket_name = str(transcode.get("optimizedBucketName") or "").strip()
+        object_key = str(transcode.get("optimizedObjectKey") or "").strip()
+        if not bucket_name or not object_key:
+            return source_object
+
+        optimized_object = await self.db.scalar(
+            select(StorageObject)
+            .where(
+                and_(
+                    StorageObject.bucket_name == bucket_name,
+                    StorageObject.object_key == object_key,
+                    StorageObject.upload_status == UploadStatus.ACTIVE,
+                )
+            )
+            .limit(1)
+        )
+        if isinstance(optimized_object, StorageObject):
+            return optimized_object
+
+        if self.storage is None:
+            return source_object
+        exists = await self.storage.object_exists(bucket_name=bucket_name, object_key=object_key)
+        if not exists:
+            return source_object
+
+        stat = await self.storage.stat_object(bucket_name=bucket_name, object_key=object_key)
+        created = StorageObject(
+            bucket_name=bucket_name,
+            object_key=object_key,
+            object_size=int(stat.size),
+            etag=stat.etag,
+            version_id=stat.version_id,
+            content_type=stat.content_type,
+            upload_status=UploadStatus.ACTIVE,
+        )
+        self.db.add(created)
+        await self.db.flush()
+        return created
+
     @staticmethod
-    def _to_file_item(f: File, owner_name: str, is_starred: bool) -> FileItem:
+    def _parse_datetime(raw: object) -> datetime | None:
+        if raw is None:
+            return None
+        if isinstance(raw, datetime):
+            return raw
+        text = str(raw).strip()
+        if not text:
+            return None
+        try:
+            value = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
+
+    @staticmethod
+    def _to_file_item(
+        f: File,
+        owner_name: str,
+        is_starred: bool,
+        *,
+        media_optimization: MediaOptimization | None = None,
+    ) -> FileItem:
         return FileItem(
             id=str(f.file_id),
             name=f.file_name,
@@ -1701,6 +1885,7 @@ class FileService:
             folder_id=str(f.folder_id),
             permission="owner",
             is_starred=is_starred,
+            media_optimization=media_optimization,
         )
 
     @staticmethod
