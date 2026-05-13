@@ -10,9 +10,9 @@ import pytest
 from fileflash.core.errors import ApiError
 from fileflash.core.settings import Settings
 from fileflash.models.enums import UploadPartStatus, UploadTaskStatus
-from fileflash.models.tables_storage import File, StorageObject, UploadTask, UploadTaskPart
+from fileflash.models.tables_storage import File, FileMediaMetadata, StorageObject, UploadTask, UploadTaskPart
 from fileflash.s3.minio_client import ObjectStat, ObjectStorageAuthError, ObjectWriteResult
-from fileflash.schemas.file import MergeChunksRequest, UploadPreflightRequest
+from fileflash.schemas.file import MergeChunksRequest, MergeChunksResponse, UploadPreflightRequest
 from fileflash.services.upload import UploadService
 
 
@@ -31,6 +31,8 @@ class DummySession:
     async def flush(self) -> None:
         now = datetime.now(UTC)
         for index, obj in enumerate(self.added, start=1):
+            if isinstance(obj, StorageObject) and obj.object_id is None:
+                obj.object_id = index
             if isinstance(obj, UploadTask) and obj.task_id is None:
                 obj.task_id = index
             if isinstance(obj, File) and obj.file_id is None:
@@ -68,7 +70,11 @@ def make_service(session: DummySession, settings: Settings | None = None) -> tup
         remove_objects=AsyncMock(),
         compute_object_hash=AsyncMock(return_value="0" * 64),
     )
-    service = UploadService(db=session, settings=settings or make_settings(), storage=storage)
+    jobs = SimpleNamespace(
+        enqueue=AsyncMock(),
+        enqueue_transcode_job=AsyncMock(),
+    )
+    service = UploadService(db=session, settings=settings or make_settings(), storage=storage, jobs=jobs)
     return service, storage
 
 
@@ -538,3 +544,167 @@ async def test_merge_logs_warning_for_non_continuous_chunks(
     assert exc.value.status_code == 400
     assert "upload-non-contiguous" in caplog.text
     assert "non-continuous chunks" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_merge_enqueues_transcode_for_video_and_sets_queued_metadata(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    task = UploadTask(
+        task_id=50,
+        user_id=9,
+        folder_id=1,
+        file_name="movie.mp4",
+        mime_type="video/mp4",
+        bucket_name="fileflash",
+        object_key="objects/u9/movie",
+        object_hash="1" * 64,
+        total_size=4,
+        chunk_size=2,
+        upload_id="upload-video-transcode",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    parts = [
+        UploadTaskPart(task_id=50, part_number=0, part_size=2, status=UploadPartStatus.UPLOADED),
+        UploadTaskPart(task_id=50, part_number=1, part_size=2, status=UploadPartStatus.UPLOADED),
+    ]
+    session.scalars_queue = [parts]
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=1))
+    monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_find_storage_object", AsyncMock(return_value=None))
+    storage.compute_object_hash = AsyncMock(return_value="1" * 64)
+
+    response = await service.merge_chunks(
+        user_id=9,
+        upload_id="upload-video-transcode",
+        payload=MergeChunksRequest(
+            fileHash="1" * 64,
+            fileName="movie.mp4",
+            mimeType="video/mp4",
+            parentId="1",
+        ),
+    )
+
+    assert response.file_name == "movie.mp4"
+    created_metadata = next(obj for obj in session.added if isinstance(obj, FileMediaMetadata))
+    assert created_metadata.extra_metadata["transcode"]["status"] == "queued"
+    service.jobs.enqueue_transcode_job.assert_awaited_once()  # type: ignore[union-attr]
+
+
+@pytest.mark.asyncio
+async def test_merge_transcode_enqueue_failure_does_not_fail_upload(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    service.jobs.enqueue_transcode_job = AsyncMock(  # type: ignore[union-attr]
+        side_effect=ApiError(status_code=503, code=503, message="Job queue unavailable")
+    )
+    task = UploadTask(
+        task_id=51,
+        user_id=9,
+        folder_id=1,
+        file_name="audio.mp3",
+        mime_type="audio/mpeg",
+        bucket_name="fileflash",
+        object_key="objects/u9/audio",
+        object_hash="2" * 64,
+        total_size=4,
+        chunk_size=2,
+        upload_id="upload-audio-transcode",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    parts = [
+        UploadTaskPart(task_id=51, part_number=0, part_size=2, status=UploadPartStatus.UPLOADED),
+        UploadTaskPart(task_id=51, part_number=1, part_size=2, status=UploadPartStatus.UPLOADED),
+    ]
+    session.scalars_queue = [parts]
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=1))
+    monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_find_storage_object", AsyncMock(return_value=None))
+    storage.compute_object_hash = AsyncMock(return_value="2" * 64)
+
+    response = await service.merge_chunks(
+        user_id=9,
+        upload_id="upload-audio-transcode",
+        payload=MergeChunksRequest(
+            fileHash="2" * 64,
+            fileName="audio.mp3",
+            mimeType="audio/mpeg",
+            parentId="1",
+        ),
+    )
+
+    assert response.file_name == "audio.mp3"
+    created_metadata = next(obj for obj in session.added if isinstance(obj, FileMediaMetadata))
+    assert created_metadata.extra_metadata["transcode"]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_merge_job_uses_normalized_payload(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, _storage = make_service(session)
+    fake_job = SimpleNamespace(job_id=1234, task_type="task.upload_merge", status="pending")
+    service.jobs.enqueue = AsyncMock(return_value=fake_job)  # type: ignore[union-attr]
+
+    payload = MergeChunksRequest(
+        fileHash="A" * 64,
+        fileName="movie.mp4",
+        mimeType="video/mp4",
+        parentId="root",
+        conflictStrategy="rename",
+    )
+    job = await service.enqueue_merge_job(
+        user_id=7,
+        upload_id="upload-merge-job",
+        payload=payload,
+    )
+
+    assert job is fake_job
+    service.jobs.enqueue.assert_awaited_once()  # type: ignore[union-attr]
+    _db, kwargs = service.jobs.enqueue.await_args.args, service.jobs.enqueue.await_args.kwargs  # type: ignore[union-attr]
+    assert kwargs["task_type"] == "task.upload_merge"
+    assert kwargs["requested_by"] == 7
+    assert kwargs["idempotency_key"].startswith("upload:7:upload-merge-job:merge:")
+    assert kwargs["payload"]["userId"] == 7
+    assert kwargs["payload"]["uploadId"] == "upload-merge-job"
+    assert kwargs["payload"]["mergeRequest"]["fileHash"] == ("a" * 64)
+
+
+@pytest.mark.asyncio
+async def test_execute_merge_job_calls_merge_chunks(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, _storage = make_service(session)
+    expected = MergeChunksResponse(
+        fileId="901",
+        fileName="report.pdf",
+        fileSize=1024,
+        mimeType="application/pdf",
+        folderId="root",
+        objectHash="f" * 64,
+        createdAt=datetime.now(UTC),
+        downloadUrl="/api/v1/files/901/download",
+    )
+    merge_mock = AsyncMock(return_value=expected)
+    monkeypatch.setattr(service, "merge_chunks", merge_mock)
+
+    result = await service.execute_merge_job(
+        payload={
+            "userId": 99,
+            "uploadId": "upload-exec-1",
+            "mergeRequest": {
+                "fileHash": "f" * 64,
+                "fileName": "report.pdf",
+                "mimeType": "application/pdf",
+                "parentId": "root",
+            },
+        }
+    )
+
+    merge_mock.assert_awaited_once()
+    assert result["fileId"] == "901"
+    assert result["fileName"] == "report.pdf"

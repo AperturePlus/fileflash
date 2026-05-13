@@ -112,17 +112,26 @@ class BackgroundJobService:
         self,
         db: AsyncSession,
         *,
-        input_path: str,
-        output_path: str | None = None,
-        object_id: int | None = None,
+        source_bucket_name: str,
+        source_object_key: str,
+        source_object_id: int,
+        output_bucket_name: str,
+        output_object_key: str,
+        file_id: int | None = None,
         requested_by: int | None = None,
         idempotency_key: str | None = None,
     ) -> BackgroundJob:
-        payload: dict[str, Any] = {"inputPath": input_path}
-        if output_path is not None:
-            payload["outputPath"] = output_path
-        if object_id is not None:
-            payload["objectId"] = object_id
+        payload: dict[str, Any] = {
+            "sourceBucketName": source_bucket_name,
+            "sourceObjectKey": source_object_key,
+            "sourceObjectId": source_object_id,
+            "outputBucketName": output_bucket_name,
+            "outputObjectKey": output_object_key,
+        }
+        if file_id is not None:
+            payload["fileId"] = file_id
+        if requested_by is not None:
+            payload["requestedBy"] = requested_by
         return await self.enqueue(
             db,
             task_type="task.transcode",

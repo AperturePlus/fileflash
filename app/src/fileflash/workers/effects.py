@@ -71,11 +71,12 @@ async def _apply_transcode_effects(
     payload: dict[str, Any],
     result: dict[str, Any],
 ) -> None:
-    object_id = _coerce_int(payload.get("objectId"))
+    object_id = _coerce_int(payload.get("sourceObjectId")) or _coerce_int(payload.get("objectId"))
     if object_id is None:
         return
 
     metadata = result.get("metadata") or {}
+    now = datetime.now(UTC)
     row = await db.scalar(
         select(FileMediaMetadata).where(FileMediaMetadata.source_object_id == object_id).limit(1)
     )
@@ -90,13 +91,90 @@ async def _apply_transcode_effects(
     row.sample_rate = _coerce_int(metadata.get("sampleRate"))
     row.video_codec = _truncate(metadata.get("videoCodec"), 64)
     row.audio_codec = _truncate(metadata.get("audioCodec"), 64)
-    row.extra_metadata = {
+    extra = dict(row.extra_metadata or {})
+    extra["transcodeProfile"] = result.get("transcodeProfile") or {}
+    extra["transcode"] = {
+        "status": "ready",
         "mediaType": result.get("mediaType"),
-        "inputPath": result.get("inputPath"),
-        "outputPath": result.get("outputPath"),
-        "transcodeProfile": result.get("transcodeProfile") or {},
+        "profileVersion": (result.get("transcodeProfile") or {}).get("version"),
+        "optimizedMimeType": result.get("optimizedMimeType"),
+        "optimizedBucketName": result.get("outputBucketName"),
+        "optimizedObjectKey": result.get("outputObjectKey"),
+        "outputObjectEtag": result.get("outputObjectEtag"),
+        "outputObjectVersionId": result.get("outputObjectVersionId"),
+        "outputObjectSize": _coerce_int(result.get("outputObjectSize")),
+        "updatedAt": now.isoformat(),
     }
-    row.extracted_at = datetime.now(UTC)
+    row.extra_metadata = extra
+    row.extracted_at = now
+
+
+async def mark_transcode_running(
+    db: AsyncSession,
+    *,
+    payload: dict[str, Any],
+) -> None:
+    object_id = _coerce_int(payload.get("sourceObjectId")) or _coerce_int(payload.get("objectId"))
+    if object_id is None:
+        return
+
+    row = await db.scalar(
+        select(FileMediaMetadata).where(FileMediaMetadata.source_object_id == object_id).limit(1)
+    )
+    if row is None:
+        row = FileMediaMetadata(source_object_id=object_id)
+        db.add(row)
+
+    now = datetime.now(UTC)
+    extra = dict(row.extra_metadata or {})
+    transcode = dict(extra.get("transcode") or {})
+    transcode["status"] = "running"
+    transcode["mediaType"] = transcode.get("mediaType") or payload.get("mediaType")
+    transcode["updatedAt"] = now.isoformat()
+    if payload.get("outputBucketName"):
+        transcode["optimizedBucketName"] = payload.get("outputBucketName")
+    if payload.get("outputObjectKey"):
+        transcode["optimizedObjectKey"] = payload.get("outputObjectKey")
+    if payload.get("profileVersion"):
+        transcode["profileVersion"] = payload.get("profileVersion")
+    extra["transcode"] = transcode
+    row.extra_metadata = extra
+    row.extracted_at = now
+
+
+async def mark_transcode_failed(
+    db: AsyncSession,
+    *,
+    payload: dict[str, Any],
+    error_message: str,
+) -> None:
+    object_id = _coerce_int(payload.get("sourceObjectId")) or _coerce_int(payload.get("objectId"))
+    if object_id is None:
+        return
+
+    row = await db.scalar(
+        select(FileMediaMetadata).where(FileMediaMetadata.source_object_id == object_id).limit(1)
+    )
+    if row is None:
+        row = FileMediaMetadata(source_object_id=object_id)
+        db.add(row)
+
+    now = datetime.now(UTC)
+    extra = dict(row.extra_metadata or {})
+    transcode = dict(extra.get("transcode") or {})
+    transcode["status"] = "failed"
+    transcode["mediaType"] = transcode.get("mediaType") or payload.get("mediaType")
+    transcode["error"] = _truncate(error_message, 500)
+    transcode["updatedAt"] = now.isoformat()
+    if payload.get("outputBucketName"):
+        transcode["optimizedBucketName"] = payload.get("outputBucketName")
+    if payload.get("outputObjectKey"):
+        transcode["optimizedObjectKey"] = payload.get("outputObjectKey")
+    if payload.get("profileVersion"):
+        transcode["profileVersion"] = payload.get("profileVersion")
+    extra["transcode"] = transcode
+    row.extra_metadata = extra
+    row.extracted_at = now
 
 
 async def _apply_archive_extract_effects(

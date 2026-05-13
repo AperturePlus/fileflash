@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import and_, func, or_, select
@@ -28,18 +30,30 @@ from ..models.enums import (
     UploadStatus,
     UploadTaskStatus,
 )
-from ..models.tables_storage import File, Folder, StorageObject, UploadTask, UploadTaskPart
+from ..models.tables_storage import File, FileMediaMetadata, Folder, StorageObject, UploadTask, UploadTaskPart
+from ..models.tables_worker import BackgroundJob
 from ..s3.minio_client import MinioObjectStorageClient, ObjectStorageError
 from ..schemas.file import MergeChunksRequest, MergeChunksResponse, UploadPreflightRequest, UploadPreflightResponse
+from .background_jobs import BackgroundJobService
 
 logger = logging.getLogger(__name__)
 
+TRANSCODE_PROFILE_VERSION = "mp4-v1"
+
 
 class UploadService:
-    def __init__(self, *, db: AsyncSession, settings: Settings, storage: MinioObjectStorageClient) -> None:
+    def __init__(
+        self,
+        *,
+        db: AsyncSession,
+        settings: Settings,
+        storage: MinioObjectStorageClient,
+        jobs: BackgroundJobService | None = None,
+    ) -> None:
         self.db = db
         self.settings = settings
         self.storage = storage
+        self.jobs = jobs
 
     async def preflight(self, *, user_id: int, payload: UploadPreflightRequest) -> UploadPreflightResponse:
         async def _operation() -> UploadPreflightResponse:
@@ -227,6 +241,69 @@ class UploadService:
         task.status = UploadTaskStatus.UPLOADING
         task.last_error = None
         await self.db.commit()
+
+    async def enqueue_merge_job(
+        self,
+        *,
+        user_id: int,
+        upload_id: str,
+        payload: MergeChunksRequest,
+    ) -> BackgroundJob:
+        jobs = self.jobs
+        if jobs is None:
+            raise ApiError(status_code=503, code=503, message="Job queue unavailable")
+
+        # Normalize hash early to keep retries idempotent for equivalent requests.
+        normalized_hash, _ = self._normalize_hash(payload.file_hash)
+        normalized_payload = MergeChunksRequest(
+            file_hash=normalized_hash,
+            file_name=payload.file_name,
+            mime_type=payload.mime_type,
+            parent_id=payload.parent_id,
+            conflict_strategy=payload.conflict_strategy,
+        )
+        merge_request_payload = normalized_payload.model_dump(by_alias=True, exclude_none=True)
+        job_payload: dict[str, Any] = {
+            "userId": user_id,
+            "uploadId": upload_id,
+            "mergeRequest": merge_request_payload,
+        }
+        idempotency_key = self._build_merge_job_idempotency_key(
+            user_id=user_id,
+            upload_id=upload_id,
+            merge_request_payload=merge_request_payload,
+        )
+        return await jobs.enqueue(
+            self.db,
+            task_type="task.upload_merge",
+            payload=job_payload,
+            idempotency_key=idempotency_key,
+            requested_by=user_id,
+        )
+
+    async def execute_merge_job(self, *, payload: dict[str, Any]) -> dict[str, Any]:
+        raw_user_id = payload.get("userId")
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Merge job payload requires valid userId") from exc
+        if user_id <= 0:
+            raise ValueError("Merge job payload userId must be > 0")
+
+        upload_id = str(payload.get("uploadId") or "").strip()
+        if not upload_id:
+            raise ValueError("Merge job payload requires uploadId")
+
+        merge_request_raw = payload.get("mergeRequest")
+        if not isinstance(merge_request_raw, dict):
+            raise ValueError("Merge job payload requires mergeRequest object")
+        merge_request = MergeChunksRequest.model_validate(merge_request_raw)
+        response = await self.merge_chunks(
+            user_id=user_id,
+            upload_id=upload_id,
+            payload=merge_request,
+        )
+        return response.model_dump(by_alias=True)
 
     async def merge_chunks(
         self,
@@ -429,6 +506,13 @@ class UploadService:
             task.last_error = None
             task.completed_at = now
             await self.db.commit()
+
+            if self._is_transcode_candidate(resolved_mime_type):
+                await self._enqueue_transcode_after_merge(
+                    user_id=user_id,
+                    file_row=file_row,
+                    storage_object=storage_object,
+                )
 
             try:
                 await self.storage.remove_objects(object_keys=source_keys)
@@ -741,6 +825,17 @@ class UploadService:
         return f"{self.settings.upload_temp_prefix}/u{task.user_id}/{upload_id}/part-{chunk_index:08d}"
 
     @staticmethod
+    def _build_merge_job_idempotency_key(
+        *,
+        user_id: int,
+        upload_id: str,
+        merge_request_payload: dict[str, Any],
+    ) -> str:
+        canonical = json.dumps(merge_request_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
+        return f"upload:{user_id}:{upload_id}:merge:{digest}"
+
+    @staticmethod
     def _extract_ext(file_name: str) -> str | None:
         suffix = Path(file_name).suffix.strip(".").lower()
         return suffix or None
@@ -752,3 +847,163 @@ class UploadService:
     @staticmethod
     def _normalize_task_hash(value: str | None) -> str:
         return (value or "").strip().lower()
+
+    async def _enqueue_transcode_after_merge(
+        self,
+        *,
+        user_id: int,
+        file_row: File,
+        storage_object: StorageObject,
+    ) -> None:
+        source_object_id = await self._resolve_storage_object_id(
+            storage_object=storage_object,
+            file_row=file_row,
+        )
+        if source_object_id is None:
+            logger.warning(
+                "Skip transcode enqueue because source object id is missing userId=%s fileId=%s objectKey=%s",
+                user_id,
+                file_row.file_id,
+                storage_object.object_key,
+            )
+            return
+
+        output_key = self._build_transcode_output_key(
+            source_object_id=source_object_id,
+            source_object_key=storage_object.object_key,
+            media_type=self._media_type_from_mime(file_row.mime_type or storage_object.content_type),
+        )
+        idempotency_key = f"object:{source_object_id}:transcode:{TRANSCODE_PROFILE_VERSION}"
+        now = datetime.now(UTC)
+
+        metadata = await self.db.scalar(
+            select(FileMediaMetadata).where(FileMediaMetadata.source_object_id == source_object_id).limit(1)
+        )
+        if metadata is None:
+            metadata = FileMediaMetadata(source_object_id=source_object_id)
+            self.db.add(metadata)
+
+        extra = dict(metadata.extra_metadata or {})
+        extra["transcode"] = {
+            "status": "queued",
+            "mediaType": self._media_type_from_mime(file_row.mime_type or storage_object.content_type),
+            "profileVersion": TRANSCODE_PROFILE_VERSION,
+            "optimizedBucketName": self.settings.object_storage_bucket,
+            "optimizedObjectKey": output_key,
+            "updatedAt": now.isoformat(),
+        }
+        metadata.extra_metadata = extra
+        metadata.extracted_at = now
+        await self.db.commit()
+
+        jobs = self.jobs
+        if jobs is None:
+            failed_extra = dict(metadata.extra_metadata or {})
+            failed_extra["transcode"] = {
+                "status": "failed",
+                "mediaType": self._media_type_from_mime(file_row.mime_type or storage_object.content_type),
+                "profileVersion": TRANSCODE_PROFILE_VERSION,
+                "optimizedBucketName": self.settings.object_storage_bucket,
+                "optimizedObjectKey": output_key,
+                "error": "Job queue unavailable",
+                "updatedAt": datetime.now(UTC).isoformat(),
+            }
+            metadata.extra_metadata = failed_extra
+            metadata.extracted_at = datetime.now(UTC)
+            await self.db.commit()
+            return
+
+        try:
+            await jobs.enqueue_transcode_job(
+                self.db,
+                source_bucket_name=storage_object.bucket_name,
+                source_object_key=storage_object.object_key,
+                source_object_id=source_object_id,
+                output_bucket_name=self.settings.object_storage_bucket,
+                output_object_key=output_key,
+                file_id=int(file_row.file_id),
+                requested_by=user_id,
+                idempotency_key=idempotency_key,
+            )
+        except ApiError as exc:
+            logger.warning(
+                "Enqueue transcode failed but upload kept userId=%s fileId=%s objectId=%s error=%s",
+                user_id,
+                file_row.file_id,
+                storage_object.object_id,
+                exc.message,
+            )
+            failed_extra = dict(metadata.extra_metadata or {})
+            failed_extra["transcode"] = {
+                "status": "failed",
+                "mediaType": self._media_type_from_mime(file_row.mime_type or storage_object.content_type),
+                "profileVersion": TRANSCODE_PROFILE_VERSION,
+                "optimizedBucketName": self.settings.object_storage_bucket,
+                "optimizedObjectKey": output_key,
+                "error": exc.message[:500],
+                "updatedAt": datetime.now(UTC).isoformat(),
+            }
+            metadata.extra_metadata = failed_extra
+            metadata.extracted_at = datetime.now(UTC)
+            await self.db.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "Unexpected transcode enqueue failure but upload kept userId=%s fileId=%s objectId=%s",
+                user_id,
+                file_row.file_id,
+                storage_object.object_id,
+            )
+            failed_extra = dict(metadata.extra_metadata or {})
+            failed_extra["transcode"] = {
+                "status": "failed",
+                "mediaType": self._media_type_from_mime(file_row.mime_type or storage_object.content_type),
+                "profileVersion": TRANSCODE_PROFILE_VERSION,
+                "optimizedBucketName": self.settings.object_storage_bucket,
+                "optimizedObjectKey": output_key,
+                "error": f"{type(exc).__name__}: {exc}"[:500],
+                "updatedAt": datetime.now(UTC).isoformat(),
+            }
+            metadata.extra_metadata = failed_extra
+            metadata.extracted_at = datetime.now(UTC)
+            await self.db.commit()
+
+    async def _resolve_storage_object_id(
+        self,
+        *,
+        storage_object: StorageObject,
+        file_row: File,
+    ) -> int | None:
+        resolved = self._coerce_positive_int(storage_object.object_id) or self._coerce_positive_int(file_row.storage_object_id)
+        if resolved is not None:
+            return resolved
+
+        await self.db.flush()
+        resolved = self._coerce_positive_int(storage_object.object_id) or self._coerce_positive_int(file_row.storage_object_id)
+        return resolved
+
+    @staticmethod
+    def _is_transcode_candidate(mime_type: str | None) -> bool:
+        value = (mime_type or "").lower()
+        return value.startswith("video/") or value.startswith("audio/")
+
+    @staticmethod
+    def _media_type_from_mime(mime_type: str | None) -> str:
+        value = (mime_type or "").lower()
+        return "video" if value.startswith("video/") else "audio"
+
+    @staticmethod
+    def _build_transcode_output_key(*, source_object_id: int, source_object_key: str, media_type: str) -> str:
+        suffix = ".mp4" if media_type == "video" else ".m4a"
+        original_stem = Path(source_object_key).stem or f"obj-{source_object_id}"
+        return (
+            f"optimized/transcode/v1/object-{source_object_id}/"
+            f"{original_stem}-{TRANSCODE_PROFILE_VERSION}{suffix}"
+        )
+
+    @staticmethod
+    def _coerce_positive_int(value: object) -> int | None:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None

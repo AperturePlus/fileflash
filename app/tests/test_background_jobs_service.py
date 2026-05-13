@@ -117,3 +117,31 @@ def test_build_queue_message_injects_job_id_when_missing_or_none():
     keep_existing = BackgroundJob(payload={"jobId": 777, "targetFolderId": "root"}, requested_by=9, **base_kwargs)
     keep_message = _build_queue_message(keep_existing)
     assert keep_message.payload["jobId"] == 777
+
+
+@pytest.mark.asyncio
+async def test_enqueue_transcode_job_uses_object_storage_payload():
+    session = DummySession()
+    queue = SimpleNamespace(publish=AsyncMock(return_value="1-0"))
+    service = BackgroundJobService(queue_publisher=queue)
+
+    job = await service.enqueue_transcode_job(
+        session,  # type: ignore[arg-type]
+        source_bucket_name="fileflash",
+        source_object_key="objects/u1/src.mp4",
+        source_object_id=101,
+        output_bucket_name="fileflash",
+        output_object_key="optimized/transcode/v1/object-101/src-mp4-v1.mp4",
+        file_id=999,
+        requested_by=1,
+        idempotency_key="object:101:transcode:mp4-v1",
+    )
+
+    payload = job.payload
+    assert payload["sourceBucketName"] == "fileflash"
+    assert payload["sourceObjectKey"] == "objects/u1/src.mp4"
+    assert payload["sourceObjectId"] == 101
+    assert payload["outputBucketName"] == "fileflash"
+    assert payload["outputObjectKey"].endswith(".mp4")
+    assert payload["fileId"] == 999
+    assert payload["requestedBy"] == 1

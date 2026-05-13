@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import io
 import logging
+import os
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -78,12 +79,14 @@ class MinioObjectStorageClient:
             region=settings.object_storage_region,
         )
 
-    async def ensure_bucket(self) -> None:
+    async def ensure_bucket(self, *, bucket_name: str | None = None) -> None:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+
         def _run() -> None:
             try:
-                if self._client.bucket_exists(self.bucket_name):
+                if self._client.bucket_exists(resolved_bucket):
                     return
-                self._client.make_bucket(self.bucket_name, location=self.region)
+                self._client.make_bucket(resolved_bucket, location=self.region)
             except S3Error as exc:
                 if exc.code in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
                     return
@@ -91,7 +94,7 @@ class MinioObjectStorageClient:
             except Exception as exc:  # noqa: BLE001
                 logger.exception(
                     "Object storage availability check failed for bucket=%s",
-                    self.bucket_name,
+                    resolved_bucket,
                 )
                 raise ObjectStorageUnavailableError("Object storage unavailable") from exc
 
@@ -109,12 +112,20 @@ class MinioObjectStorageClient:
             return ObjectStorageAuthError(f"Object storage authentication failed: {code}")
         return ObjectStorageUnavailableError(f"Object storage unavailable: {code}")
 
-    async def put_bytes(self, *, object_key: str, data: bytes, content_type: str) -> ObjectWriteResult:
-        await self.ensure_bucket()
+    async def put_bytes(
+        self,
+        *,
+        object_key: str,
+        data: bytes,
+        content_type: str,
+        bucket_name: str | None = None,
+    ) -> ObjectWriteResult:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+        await self.ensure_bucket(bucket_name=resolved_bucket)
 
         def _run() -> ObjectWriteResult:
             result = self._client.put_object(
-                self.bucket_name,
+                resolved_bucket,
                 object_key,
                 io.BytesIO(data),
                 len(data),
@@ -124,19 +135,28 @@ class MinioObjectStorageClient:
 
         return await asyncio.to_thread(_run)
 
-    async def compose_object(self, *, object_key: str, source_keys: list[str]) -> ObjectWriteResult:
-        await self.ensure_bucket()
+    async def compose_object(
+        self,
+        *,
+        object_key: str,
+        source_keys: list[str],
+        bucket_name: str | None = None,
+    ) -> ObjectWriteResult:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+        await self.ensure_bucket(bucket_name=resolved_bucket)
 
         def _run() -> ObjectWriteResult:
-            sources = [ComposeSource(self.bucket_name, source_key) for source_key in source_keys]
-            result = self._client.compose_object(self.bucket_name, object_key, sources)
+            sources = [ComposeSource(resolved_bucket, source_key) for source_key in source_keys]
+            result = self._client.compose_object(resolved_bucket, object_key, sources)
             return ObjectWriteResult(etag=result.etag, version_id=result.version_id)
 
         return await asyncio.to_thread(_run)
 
-    async def stat_object(self, *, object_key: str) -> ObjectStat:
+    async def stat_object(self, *, object_key: str, bucket_name: str | None = None) -> ObjectStat:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+
         def _run() -> ObjectStat:
-            stat = self._client.stat_object(self.bucket_name, object_key)
+            stat = self._client.stat_object(resolved_bucket, object_key)
             return ObjectStat(
                 size=stat.size,
                 etag=getattr(stat, "etag", None),
@@ -146,21 +166,25 @@ class MinioObjectStorageClient:
 
         return await asyncio.to_thread(_run)
 
-    async def remove_object(self, *, object_key: str) -> None:
+    async def remove_object(self, *, object_key: str, bucket_name: str | None = None) -> None:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+
         def _run() -> None:
-            self._client.remove_object(self.bucket_name, object_key)
+            self._client.remove_object(resolved_bucket, object_key)
 
         await asyncio.to_thread(_run)
 
-    async def remove_objects(self, *, object_keys: Iterable[str]) -> None:
+    async def remove_objects(self, *, object_keys: Iterable[str], bucket_name: str | None = None) -> None:
         keys = [key for key in object_keys if key]
         if not keys:
             return
 
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+
         def _run() -> None:
             errors = list(
                 self._client.remove_objects(
-                    self.bucket_name,
+                    resolved_bucket,
                     (DeleteObject(key) for key in keys),
                 )
             )
@@ -170,10 +194,12 @@ class MinioObjectStorageClient:
 
         await asyncio.to_thread(_run)
 
-    async def compute_object_hash(self, *, object_key: str, algorithm: str) -> str:
+    async def compute_object_hash(self, *, object_key: str, algorithm: str, bucket_name: str | None = None) -> str:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+
         def _run() -> str:
             hasher = hashlib.new(algorithm)
-            response = self._client.get_object(self.bucket_name, object_key)
+            response = self._client.get_object(resolved_bucket, object_key)
             try:
                 for chunk in response.stream(1024 * 1024):
                     hasher.update(chunk)
@@ -184,10 +210,17 @@ class MinioObjectStorageClient:
 
         return await asyncio.to_thread(_run)
 
-    async def iter_object(self, *, object_key: str, chunk_size: int = 1024 * 1024) -> AsyncIterator[bytes]:
-        await self.ensure_bucket()
+    async def iter_object(
+        self,
+        *,
+        object_key: str,
+        chunk_size: int = 1024 * 1024,
+        bucket_name: str | None = None,
+    ) -> AsyncIterator[bytes]:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+        await self.ensure_bucket(bucket_name=resolved_bucket)
 
-        response = await asyncio.to_thread(self._client.get_object, self.bucket_name, object_key)
+        response = await asyncio.to_thread(self._client.get_object, resolved_bucket, object_key)
         try:
             while True:
                 chunk = await asyncio.to_thread(response.read, chunk_size)
@@ -205,8 +238,10 @@ class MinioObjectStorageClient:
         start: int,
         end: int,
         chunk_size: int = 1024 * 1024,
+        bucket_name: str | None = None,
     ) -> AsyncIterator[bytes]:
-        await self.ensure_bucket()
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+        await self.ensure_bucket(bucket_name=resolved_bucket)
 
         if start < 0 or end < start:
             raise ValueError("Invalid byte range")
@@ -214,7 +249,7 @@ class MinioObjectStorageClient:
         length = end - start + 1
         response = await asyncio.to_thread(
             self._client.get_object,
-            self.bucket_name,
+            resolved_bucket,
             object_key,
             start,
             length,
@@ -231,3 +266,59 @@ class MinioObjectStorageClient:
         finally:
             await asyncio.to_thread(response.close)
             await asyncio.to_thread(response.release_conn)
+
+    async def fget_object(
+        self,
+        *,
+        object_key: str,
+        file_path: str,
+        bucket_name: str | None = None,
+    ) -> ObjectWriteResult:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+
+        def _run() -> ObjectWriteResult:
+            result = self._client.fget_object(resolved_bucket, object_key, file_path)
+            return ObjectWriteResult(etag=getattr(result, "etag", None), version_id=getattr(result, "version_id", None))
+
+        return await asyncio.to_thread(_run)
+
+    async def fput_object(
+        self,
+        *,
+        object_key: str,
+        file_path: str,
+        content_type: str,
+        bucket_name: str | None = None,
+    ) -> ObjectWriteResult:
+        resolved_bucket = self._resolve_bucket_name(bucket_name)
+        await self.ensure_bucket(bucket_name=resolved_bucket)
+
+        def _run() -> ObjectWriteResult:
+            result = self._client.fput_object(
+                resolved_bucket,
+                object_key,
+                file_path,
+                content_type=content_type,
+            )
+            return ObjectWriteResult(etag=getattr(result, "etag", None), version_id=getattr(result, "version_id", None))
+
+        return await asyncio.to_thread(_run)
+
+    async def object_exists(self, *, object_key: str, bucket_name: str | None = None) -> bool:
+        try:
+            await self.stat_object(object_key=object_key, bucket_name=bucket_name)
+        except S3Error as exc:
+            if exc.code in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
+                return False
+            raise
+        except Exception:
+            return False
+        return True
+
+    @staticmethod
+    def file_size(file_path: str) -> int:
+        return int(os.path.getsize(file_path))
+
+    def _resolve_bucket_name(self, bucket_name: str | None) -> str:
+        value = (bucket_name or "").strip()
+        return value or self.bucket_name

@@ -10,12 +10,17 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ..core import get_settings
+from ..core.errors import ApiError
 from ..db.session import SessionLocal
+from ..s3.minio_client import MinioObjectStorageClient
+from ..services.background_jobs import BackgroundJobService
 from ..services.job_queue import RedisStreamJobQueue
+from ..services.upload import UploadService
 from .bootstrap import WorkerRuntimeConfig, build_worker_runtime_config, create_process_pool
 from .contracts import WorkerJobMessage
 from .dispatcher import PicklableRemoteTaskError, execute_task
 from .effects import apply_task_effects
+from .effects import mark_transcode_failed, mark_transcode_running
 from .repository import (
     get_retry_delay_seconds,
     mark_job_failed_or_retrying,
@@ -39,6 +44,13 @@ class WorkerConsumer:
         self._executor = executor
         self._queue = queue
         self._session_factory = session_factory
+        self._settings = get_settings()
+        self._storage = MinioObjectStorageClient.from_settings(self._settings)
+        self._job_publisher = RedisStreamJobQueue(
+            redis_url=self._settings.redis_url,
+            stream_key=self._settings.worker_queue_stream,
+        )
+        self._jobs = BackgroundJobService(queue_publisher=self._job_publisher)
 
     async def run(self) -> None:
         logger.info(
@@ -79,9 +91,14 @@ class WorkerConsumer:
         payload = dict(message.payload)
         if payload.get("jobId") in (None, ""):
             payload["jobId"] = message.job_id
+        if message.task_type == "task.upload_merge":
+            await self._process_upload_merge(slot=slot, message=message, payload=payload)
+            return
         if message.task_type in ("task.transcode", "media.transcode"):
             payload.setdefault("ffmpegBinary", self._config.ffmpeg_binary)
             payload.setdefault("ffprobeBinary", self._config.ffprobe_binary)
+            payload.setdefault("profileVersion", "mp4-v1")
+            await self._mark_transcode_running(payload)
 
         started_at = datetime.now(UTC)
         try:
@@ -126,6 +143,52 @@ class WorkerConsumer:
             message.trace_id,
         )
 
+    async def _process_upload_merge(
+        self,
+        *,
+        slot: int,
+        message: WorkerJobMessage,
+        payload: dict[str, Any],
+    ) -> None:
+        started_at = datetime.now(UTC)
+        try:
+            result = await asyncio.wait_for(
+                self._run_upload_merge(payload=payload),
+                timeout=self._config.task_timeout_seconds,
+            )
+        except Exception as exc:
+            await self._handle_failure(slot=slot, message=message, error=exc)
+            return
+
+        try:
+            async with self._session_factory() as db:
+                async with db.begin():
+                    await mark_job_succeeded(db, job_id=message.job_id, result=result)
+        except Exception as exc:
+            await self._handle_failure(slot=slot, message=message, error=exc)
+            return
+
+        duration_ms = int((datetime.now(UTC) - started_at).total_seconds() * 1000)
+        logger.info(
+            "Worker slot=%s succeeded jobId=%s taskType=%s attempt=%s durationMs=%s traceId=%s",
+            slot,
+            message.job_id,
+            message.task_type,
+            message.attempt,
+            duration_ms,
+            message.trace_id,
+        )
+
+    async def _run_upload_merge(self, *, payload: dict[str, Any]) -> dict[str, Any]:
+        async with self._session_factory() as db:
+            service = UploadService(
+                db=db,
+                settings=self._settings,
+                storage=self._storage,
+                jobs=self._jobs,
+            )
+            return await service.execute_merge_job(payload=payload)
+
     async def _handle_failure(
         self,
         *,
@@ -134,7 +197,10 @@ class WorkerConsumer:
         error: Exception,
     ) -> None:
         retryable = _is_retryable_error(error)
-        error_message = f"{type(error).__name__}: {error}"
+        if isinstance(error, ApiError):
+            error_message = f"ApiError[{error.status_code}/{error.code}]: {error.message}"
+        else:
+            error_message = f"{type(error).__name__}: {error}"
         async with self._session_factory() as db:
             async with db.begin():
                 state = await mark_job_failed_or_retrying(
@@ -144,6 +210,12 @@ class WorkerConsumer:
                     retryable=retryable,
                     retry_backoff_seconds=self._config.retry_backoff_seconds,
                 )
+                if state == "failed" and message.task_type in ("task.transcode", "media.transcode"):
+                    await mark_transcode_failed(
+                        db,
+                        payload=dict(message.payload),
+                        error_message=error_message,
+                    )
 
         if state == "retrying":
             next_attempt = message.attempt + 1
@@ -184,8 +256,23 @@ class WorkerConsumer:
         await asyncio.sleep(delay_seconds)
         await self._queue.publish(message)
 
+    async def _mark_transcode_running(self, payload: dict[str, Any]) -> None:
+        async with self._session_factory() as db:
+            async with db.begin():
+                await mark_transcode_running(db, payload=payload)
+
+    async def aclose(self) -> None:
+        await self._job_publisher.aclose()
+
 
 def _is_retryable_error(error: Exception) -> bool:
+    if isinstance(error, ApiError):
+        if error.status_code >= 500:
+            return True
+        if isinstance(error.data, dict) and error.data.get("retryable") is True:
+            return True
+        return False
+
     if isinstance(error, PicklableRemoteTaskError) and error.retryable_hint is not None:
         return bool(error.retryable_hint)
 
@@ -227,6 +314,7 @@ async def run_worker() -> None:
         try:
             await consumer.run()
         finally:
+            await consumer.aclose()
             await queue.aclose()
 
 

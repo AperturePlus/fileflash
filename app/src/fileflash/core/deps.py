@@ -115,8 +115,9 @@ def get_upload_service(
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
     storage: MinioObjectStorageClient = Depends(get_object_storage),
+    jobs: BackgroundJobService = Depends(get_background_job_service),
 ) -> UploadService:
-    return UploadService(db=db, settings=settings, storage=storage)
+    return UploadService(db=db, settings=settings, storage=storage, jobs=jobs)
 
 
 def get_share_service(

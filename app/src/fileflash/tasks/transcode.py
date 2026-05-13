@@ -1,66 +1,123 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
+import tempfile
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..core.settings import get_settings
+from ..s3.minio_client import MinioObjectStorageClient
+
+TRANSCODE_PROFILE_VERSION = "mp4-v1"
+
+
+@dataclass(slots=True)
+class TranscodeTaskPayload:
+    source_bucket_name: str
+    source_object_key: str
+    source_object_id: int
+    output_bucket_name: str
+    output_object_key: str
+    file_id: int | None
+    requested_by: int | None
+    ffmpeg_binary: str
+    ffprobe_binary: str
+    timeout_seconds: int
+    probe_timeout_seconds: int
+
 
 def run_media_transcode(payload: dict[str, Any] | Any) -> dict[str, Any]:
-    input_path = _resolve_input_path(payload)
-    ffmpeg_binary = str(payload.get("ffmpegBinary") or "ffmpeg")
-    ffprobe_binary = str(payload.get("ffprobeBinary") or "ffprobe")
-    timeout_seconds = _coerce_positive_int(payload.get("timeoutSeconds"), 900)
-    probe_timeout_seconds = _coerce_positive_int(
-        payload.get("probeTimeoutSeconds"),
-        min(60, timeout_seconds),
-    )
+    parsed = _parse_payload(payload)
+    settings = get_settings()
+    storage = MinioObjectStorageClient.from_settings(settings)
 
-    source_probe = probe_media(
-        input_path,
-        ffprobe_binary=ffprobe_binary,
-        timeout_seconds=probe_timeout_seconds,
-    )
-    media_type = detect_media_type(source_probe)
-    output_path = resolve_output_path(
-        input_path=input_path,
-        media_type=media_type,
-        raw_output_path=payload.get("outputPath"),
-        raw_target_container=payload.get("targetContainer"),
-    )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="fileflash-transcode-") as tmp_dir_raw:
+        tmp_dir = Path(tmp_dir_raw)
+        source_path = tmp_dir / "source"
+        source_suffix = Path(parsed.source_object_key).suffix.lower()
+        output_suffix = ".mp4"
 
-    ffmpeg_command = build_ffmpeg_command(
-        input_path=input_path,
-        output_path=output_path,
-        media_type=media_type,
-        ffmpeg_binary=ffmpeg_binary,
-        payload=payload,
-    )
-    _run_command(ffmpeg_command, timeout_seconds=timeout_seconds)
+        try:
+            _run_async(
+                storage.fget_object(
+                    bucket_name=parsed.source_bucket_name,
+                    object_key=parsed.source_object_key,
+                    file_path=str(source_path),
+                )
+            )
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Source object not found: {parsed.source_bucket_name}/{parsed.source_object_key}"
+            ) from exc
 
-    if not output_path.exists():
-        raise RuntimeError(f"Transcode finished but output does not exist: {output_path}")
+        source_probe = probe_media(
+            source_path,
+            ffprobe_binary=parsed.ffprobe_binary,
+            timeout_seconds=parsed.probe_timeout_seconds,
+        )
+        media_type = detect_media_type(source_probe)
+        if media_type == "audio":
+            output_suffix = ".m4a"
+        output_path = tmp_dir / f"optimized{output_suffix}"
 
-    output_probe = probe_media(
-        output_path,
-        ffprobe_binary=ffprobe_binary,
-        timeout_seconds=probe_timeout_seconds,
-    )
-    metadata = extract_media_metadata(output_probe)
-    return {
-        "mediaType": media_type,
-        "inputPath": str(input_path),
-        "outputPath": str(output_path),
-        "transcodeProfile": {
-            "container": output_path.suffix.lower().lstrip("."),
-            "videoCodec": _first_stream_codec(output_probe, "video"),
-            "audioCodec": _first_stream_codec(output_probe, "audio"),
-        },
-        "metadata": metadata,
-        "transcodedAt": datetime.now(UTC).isoformat(),
-    }
+        ffmpeg_command = build_ffmpeg_command(
+            input_path=source_path,
+            output_path=output_path,
+            media_type=media_type,
+            ffmpeg_binary=parsed.ffmpeg_binary,
+            payload=payload,
+        )
+        _run_command(ffmpeg_command, timeout_seconds=parsed.timeout_seconds)
+
+        if not output_path.exists():
+            raise RuntimeError(f"Transcode finished but output does not exist: {output_path}")
+
+        upload_result = _run_async(
+            storage.fput_object(
+                bucket_name=parsed.output_bucket_name,
+                object_key=parsed.output_object_key,
+                file_path=str(output_path),
+                content_type="video/mp4" if media_type == "video" else "audio/mp4",
+            )
+        )
+        output_stat = _run_async(
+            storage.stat_object(
+                bucket_name=parsed.output_bucket_name,
+                object_key=parsed.output_object_key,
+            )
+        )
+        output_probe = probe_media(
+            output_path,
+            ffprobe_binary=parsed.ffprobe_binary,
+            timeout_seconds=parsed.probe_timeout_seconds,
+        )
+        metadata = extract_media_metadata(output_probe)
+
+        return {
+            "mediaType": media_type,
+            "sourceObjectId": parsed.source_object_id,
+            "sourceBucketName": parsed.source_bucket_name,
+            "sourceObjectKey": parsed.source_object_key,
+            "outputBucketName": parsed.output_bucket_name,
+            "outputObjectKey": parsed.output_object_key,
+            "outputObjectEtag": upload_result.etag or output_stat.etag,
+            "outputObjectVersionId": upload_result.version_id or output_stat.version_id,
+            "outputObjectSize": int(output_stat.size),
+            "optimizedMimeType": "video/mp4" if media_type == "video" else "audio/mp4",
+            "transcodeProfile": {
+                "version": TRANSCODE_PROFILE_VERSION,
+                "container": output_suffix.lstrip("."),
+                "videoCodec": _first_stream_codec(output_probe, "video"),
+                "audioCodec": _first_stream_codec(output_probe, "audio"),
+                "sourceExtension": source_suffix.lstrip("."),
+            },
+            "metadata": metadata,
+            "transcodedAt": datetime.now(UTC).isoformat(),
+        }
 
 
 def probe_media(input_path: Path, *, ffprobe_binary: str, timeout_seconds: int) -> dict[str, Any]:
@@ -90,25 +147,6 @@ def detect_media_type(probe_data: dict[str, Any]) -> str:
     raise ValueError("Input media does not contain video or audio stream")
 
 
-def resolve_output_path(
-    *,
-    input_path: Path,
-    media_type: str,
-    raw_output_path: Any,
-    raw_target_container: Any,
-) -> Path:
-    if raw_output_path:
-        return Path(str(raw_output_path)).expanduser()
-
-    if raw_target_container:
-        suffix = "." + str(raw_target_container).strip().lstrip(".").lower()
-    elif media_type == "video":
-        suffix = ".mp4"
-    else:
-        suffix = ".m4a"
-    return input_path.with_suffix(suffix)
-
-
 def build_ffmpeg_command(
     *,
     input_path: Path,
@@ -127,29 +165,43 @@ def build_ffmpeg_command(
         crf = _coerce_positive_int(payload.get("videoCrf"), 23)
         command.extend(
             [
+                "-vf",
+                "scale=w=min(iw\\,1920):h=min(ih\\,1080):force_original_aspect_ratio=decrease,"
+                "scale=trunc(iw/2)*2:trunc(ih/2)*2",
                 "-c:v",
                 video_codec,
                 "-preset",
                 preset,
                 "-crf",
                 str(crf),
+                "-pix_fmt",
+                "yuv420p",
                 "-movflags",
                 "+faststart",
                 "-c:a",
                 audio_codec,
                 "-b:a",
                 f"{audio_bitrate}k",
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0?",
             ]
         )
     else:
-        preferred_codec = payload.get("audioCodec")
-        if preferred_codec:
-            audio_codec = str(preferred_codec)
-        elif output_path.suffix.lower() == ".mp3":
-            audio_codec = "libmp3lame"
-        else:
-            audio_codec = "aac"
-        command.extend(["-vn", "-c:a", audio_codec, "-b:a", f"{audio_bitrate}k"])
+        command.extend(
+            [
+                "-vn",
+                "-c:a",
+                "aac",
+                "-b:a",
+                f"{audio_bitrate}k",
+                "-movflags",
+                "+faststart",
+                "-map",
+                "0:a:0",
+            ]
+        )
 
     command.append(str(output_path))
     return command
@@ -174,14 +226,44 @@ def extract_media_metadata(probe_data: dict[str, Any]) -> dict[str, int | str | 
     }
 
 
-def _resolve_input_path(payload: dict[str, Any] | Any) -> Path:
-    raw_input = str(payload.get("inputPath") or payload.get("localPath") or "").strip()
-    if not raw_input:
-        raise ValueError("Transcode payload requires inputPath or localPath")
-    input_path = Path(raw_input).expanduser()
-    if not input_path.exists() or not input_path.is_file():
-        raise FileNotFoundError(f"Transcode input not found: {input_path}")
-    return input_path
+def _parse_payload(payload: dict[str, Any] | Any) -> TranscodeTaskPayload:
+    source_bucket_name = str(payload.get("sourceBucketName") or "").strip()
+    source_object_key = str(payload.get("sourceObjectKey") or "").strip()
+    output_bucket_name = str(payload.get("outputBucketName") or source_bucket_name).strip()
+    output_object_key = str(payload.get("outputObjectKey") or "").strip()
+    source_object_id = _coerce_positive_int(payload.get("sourceObjectId"), 0)
+    if not source_bucket_name:
+        raise ValueError("Transcode payload requires sourceBucketName")
+    if not source_object_key:
+        raise ValueError("Transcode payload requires sourceObjectKey")
+    if not output_bucket_name:
+        raise ValueError("Transcode payload requires outputBucketName")
+    if not output_object_key:
+        raise ValueError("Transcode payload requires outputObjectKey")
+    if source_object_id <= 0:
+        raise ValueError("Transcode payload requires sourceObjectId")
+
+    timeout_seconds = _coerce_positive_int(payload.get("timeoutSeconds"), 900)
+    probe_timeout_seconds = _coerce_positive_int(
+        payload.get("probeTimeoutSeconds"),
+        min(60, timeout_seconds),
+    )
+    file_id = _safe_int(payload.get("fileId"))
+    requested_by = _safe_int(payload.get("requestedBy"))
+
+    return TranscodeTaskPayload(
+        source_bucket_name=source_bucket_name,
+        source_object_key=source_object_key,
+        source_object_id=source_object_id,
+        output_bucket_name=output_bucket_name,
+        output_object_key=output_object_key,
+        file_id=file_id,
+        requested_by=requested_by,
+        ffmpeg_binary=str(payload.get("ffmpegBinary") or "ffmpeg"),
+        ffprobe_binary=str(payload.get("ffprobeBinary") or "ffprobe"),
+        timeout_seconds=timeout_seconds,
+        probe_timeout_seconds=probe_timeout_seconds,
+    )
 
 
 def _run_command(command: list[str], *, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
@@ -199,6 +281,10 @@ def _run_command(command: list[str], *, timeout_seconds: int) -> subprocess.Comp
         stderr = (result.stderr or "").strip()
         raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(command)} | {stderr}")
     return result
+
+
+def _run_async(awaitable: Any) -> Any:
+    return asyncio.run(awaitable)
 
 
 def _safe_int(raw: Any) -> int | None:

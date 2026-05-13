@@ -6,6 +6,7 @@ from ..core.deps import get_current_user, get_upload_service
 from ..core.errors import api_success
 from ..models.tables_identity import User
 from ..schemas.file import MergeChunksRequest, UploadPreflightRequest
+from ..schemas.job import to_background_job_response
 from ..services.upload import UploadService
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
@@ -47,14 +48,14 @@ async def merge_chunks(
     current_user: User = Depends(get_current_user),
     upload_service: UploadService = Depends(get_upload_service),
 ):
-    response = await upload_service.merge_chunks(
+    job = await upload_service.enqueue_merge_job(
         user_id=current_user.user_id,
         upload_id=upload_id,
         payload=payload,
     )
     return api_success(
-        data=response.model_dump(by_alias=True),
-        message="File uploaded successfully",
+        data=to_background_job_response(job).model_dump(by_alias=True),
+        message="Upload merge job created",
         code=201,
         status_code=201,
     )
