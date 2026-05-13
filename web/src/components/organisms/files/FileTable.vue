@@ -18,6 +18,7 @@ const props = defineProps<{
   renameValue: string;
   sortKey: SortKey;
   sortDirection: 'asc' | 'desc';
+  registerRenameInput?: (itemId: string, el: HTMLInputElement | null) => void;
 }>();
 
 const localeStore = useLocaleStore();
@@ -81,6 +82,9 @@ const mediaOptimizationStatus = (item: ContentItem): string | null => {
   if (item.itemType !== 'file' || !item.mediaOptimization) return null;
   return item.mediaOptimization.status;
 };
+
+const isTempFolder = (item: ContentItem): item is FolderItem =>
+  item.itemType === 'folder' && item.id.startsWith('temp-new-folder');
 </script>
 
 <template>
@@ -114,6 +118,7 @@ const mediaOptimizationStatus = (item: ContentItem): string | null => {
       :selected="isSelected(item.id)"
       :renaming="renamingId === item.id"
       :rename-value="renameValue"
+      :register-rename-input="registerRenameInput"
       @update:rename-value="emit('update:renameValue', $event)"
       @toggle-select="emit('toggleSelect', $event)"
       @select="emit('select', $event)"
@@ -138,6 +143,7 @@ const mediaOptimizationStatus = (item: ContentItem): string | null => {
       :key="item.id"
       class="card"
       :class="{ 'card--selected': isSelected(item.id) }"
+      :data-temp-folder-row="renamingId === item.id && isTempFolder(item) ? item.id : null"
       draggable="true"
       @click.stop="emit('select', { item, modifiers: { shift: $event.shiftKey } })"
       @dblclick="renamingId === item.id ? null : emit('activate', item)"
@@ -166,6 +172,7 @@ const mediaOptimizationStatus = (item: ContentItem): string | null => {
       <div class="card__name">
         <input
           v-if="renamingId === item.id"
+          :ref="(el) => registerRenameInput?.(item.id, el as HTMLInputElement | null)"
           :value="renameValue"
           class="card__rename"
           @input="emit('update:renameValue', ($event.target as HTMLInputElement).value)"

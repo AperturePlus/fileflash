@@ -11,6 +11,7 @@ const props = defineProps<{
   selected: boolean;
   renaming: boolean;
   renameValue: string;
+  registerRenameInput?: (itemId: string, el: HTMLInputElement | null) => void;
 }>();
 
 const localeStore = useLocaleStore();
@@ -107,6 +108,7 @@ const isTempRow = (item: ContentItem): item is FolderItem =>
 
       <input
         v-if="renaming"
+        :ref="(el) => props.registerRenameInput?.(item.id, el as HTMLInputElement | null)"
         v-model="renameProxy"
         class="row__rename"
         @blur="emit('finish-rename')"

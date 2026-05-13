@@ -12,6 +12,17 @@ import { ui } from '../utils/ui';
 import { useNewFolderCancel } from './useNewFolderCancel';
 
 type ShareHandling = 'keep' | 'revoke';
+const TEMP_NEW_FOLDER_PREFIX = 'temp-new-folder';
+
+function formatLocalTimestamp(date: Date): string {
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+}
 
 export function useFileActions(currentFolderId: Ref<string | null>) {
   const fileStore = useFileStore();
@@ -36,7 +47,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     renameInputValue,
     onCancel: () => {
       const tempId = renamingItemId.value;
-      if (tempId && tempId.startsWith('temp-new-folder')) {
+      if (tempId && tempId.startsWith(TEMP_NEW_FOLDER_PREFIX)) {
         fileStore.items = fileStore.items.filter((i) => i.id !== tempId);
       }
       cancelRename();
@@ -44,18 +55,26 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     },
   });
 
+  const registerRenameInput = (itemId: string, el: HTMLInputElement | null) => {
+    if (renamingItemId.value !== itemId) return;
+    renameInput.value = el;
+  };
+
   const startRename = async (item: ContentItem) => {
     renamingItemId.value = item.id;
     renameInputValue.value = item.name;
+    renameInput.value = null;
     await nextTick();
     renameInput.value?.focus();
+    renameInput.value?.select();
   };
 
   const cancelRename = () => {
-    if (renamingItemId.value && renamingItemId.value.startsWith('temp-new-folder')) {
+    if (renamingItemId.value && renamingItemId.value.startsWith(TEMP_NEW_FOLDER_PREFIX)) {
       fileStore.items = fileStore.items.filter((i) => i.id !== renamingItemId.value);
     }
     newFolderCancel.uninstall();
+    renameInput.value = null;
     renamingItemId.value = null;
     renameInputValue.value = '';
     isRenaming.value = false;
@@ -66,13 +85,22 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     isRenaming.value = true;
 
     const item = fileStore.items.find((i) => i.id === renamingItemId.value);
-    if (!item || renameInputValue.value === item.name || renameInputValue.value.trim() === '') {
+    if (!item) {
       cancelRename();
       return;
     }
     const newName = renameInputValue.value.trim();
+    if (newName === '') {
+      cancelRename();
+      return;
+    }
+    const isTempFolder = item.id.startsWith(TEMP_NEW_FOLDER_PREFIX);
+    if (!isTempFolder && newName === item.name) {
+      cancelRename();
+      return;
+    }
 
-    if (item.id.startsWith('temp-new-folder')) {
+    if (isTempFolder) {
       try {
         await createFolder({ folderName: newName, parentFolderId: currentFolderId.value || 'root' });
         await fileStore.fetchFolderContents(currentFolderId.value || 'root', { silent: true });
@@ -259,11 +287,21 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
   };
 
   const handleCreateFolder = () => {
-    const tempId = `temp-new-folder-${Date.now()}`;
+    const now = new Date();
+    const baseName = `${t('files.toolbar.newFolder')}-${formatLocalTimestamp(now)}`;
+    const existingNames = new Set(fileStore.items.map((item) => item.name));
+    let defaultFolderName = baseName;
+    let index = 2;
+    while (existingNames.has(defaultFolderName)) {
+      defaultFolderName = `${baseName}-${index}`;
+      index += 1;
+    }
+
+    const tempId = `${TEMP_NEW_FOLDER_PREFIX}-${Date.now()}`;
     const tempFolder: FolderItem = {
       itemType: 'folder',
       id: tempId,
-      name: '',
+      name: defaultFolderName,
       size: 0,
       ownerName: t('files.owner.you'),
       updatedAt: new Date().toISOString(),
@@ -304,7 +342,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
   return {
     renamingItemId,
     renameInputValue,
-    renameInput,
+    registerRenameInput,
     itemToMove,
     moveItemCount,
     moveHasActiveShare,

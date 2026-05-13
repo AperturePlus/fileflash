@@ -126,6 +126,7 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
       <FileTable v-if="displayItems.length > 0"
         :mode="viewMode" :items="displayItems" :selection="selectedItems"
         :renaming-id="a.renamingItemId.value" :rename-value="a.renameInputValue.value"
+        :register-rename-input="a.registerRenameInput"
         :sort-key="sortKey" :sort-direction="sortDirection"
         @update:rename-value="a.renameInputValue.value = $event"
         @toggle-select="selection.toggleSelection" @select="onItemSelect" @activate="onItemActivate"
