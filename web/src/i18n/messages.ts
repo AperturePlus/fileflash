@@ -21,6 +21,8 @@ export type LocaleKey =
   | 'sidebar.myFiles'
   | 'sidebar.shared'
   | 'sidebar.recycleBin'
+  | 'sidebar.starred'
+  | 'sidebar.starredEmpty'
   | 'sidebar.workspaceTree'
   | 'sidebar.storage'
   | 'sidebar.skills'
@@ -242,6 +244,8 @@ export type LocaleKey =
   | 'files.upload.toast.success'
   | 'files.upload.toast.failed'
   | 'files.upload.toast.unknownError'
+  | 'files.star.toast.failed'
+  | 'files.star.toast.unknownError'
   | 'files.rename.toast.createdFolder'
   | 'files.rename.toast.createFailed'
   | 'files.rename.toast.renamed'
@@ -448,6 +452,8 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.myFiles': '我的文件',
     'sidebar.shared': '共享',
     'sidebar.recycleBin': '回收站',
+    'sidebar.starred': 'Starred',
+    'sidebar.starredEmpty': '暂无收藏',
     'sidebar.workspaceTree': '工作区目录',
     'sidebar.storage': '存储',
     'sidebar.skills': '技能',
@@ -669,6 +675,8 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.upload.toast.success': '已上传 {fileName}。',
     'files.upload.toast.failed': '上传 {fileName} 失败：{reason}',
     'files.upload.toast.unknownError': '未知错误',
+    'files.star.toast.failed': '收藏操作失败：{reason}',
+    'files.star.toast.unknownError': '未知错误',
     'files.rename.toast.createdFolder': '已创建文件夹“{folderName}”。',
     'files.rename.toast.createFailed': '创建文件夹失败。',
     'files.rename.toast.renamed': '已重命名为“{newName}”。',
@@ -870,6 +878,8 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.myFiles': 'My Files',
     'sidebar.shared': 'Shared',
     'sidebar.recycleBin': 'Recycle Bin',
+    'sidebar.starred': 'Starred',
+    'sidebar.starredEmpty': 'No starred items',
     'sidebar.workspaceTree': 'Workspace Tree',
     'sidebar.storage': 'Storage',
     'sidebar.skills': 'Skills',
@@ -1091,6 +1101,8 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.upload.toast.success': 'Uploaded {fileName}.',
     'files.upload.toast.failed': 'Upload of {fileName} failed: {reason}',
     'files.upload.toast.unknownError': 'Unknown error',
+    'files.star.toast.failed': 'Failed to update star status: {reason}',
+    'files.star.toast.unknownError': 'Unknown error',
     'files.rename.toast.createdFolder': 'Created folder "{folderName}".',
     'files.rename.toast.createFailed': 'Folder creation failed.',
     'files.rename.toast.renamed': 'Renamed to "{newName}".',
