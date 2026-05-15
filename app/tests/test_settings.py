@@ -13,6 +13,7 @@ def test_upload_related_settings_defaults():
     assert settings.object_storage_bucket == "fileflash"
     assert settings.upload_chunk_size_default == 5 * 1024 * 1024
     assert settings.upload_session_ttl_seconds == 24 * 3600
+    assert settings.starred_items_limit == 20
     assert settings.worker_process_count == 1
 
 
@@ -40,4 +41,12 @@ def test_worker_process_count_from_env():
         WORKER_PROCESS_COUNT="3",
     )
     assert settings.worker_process_count == 3
+
+
+def test_starred_items_limit_from_env():
+    settings = Settings(
+        FF_DB_URI="postgresql://root:pwd@localhost:5432/fileflash",
+        STARRED_ITEMS_LIMIT="12",
+    )
+    assert settings.starred_items_limit == 12
 
