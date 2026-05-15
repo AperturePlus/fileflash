@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -293,6 +294,7 @@ async def test_folder_service_move_folder_delegates_to_file_service(monkeypatch:
 class DummyFolderSession:
     def __init__(self) -> None:
         self.commit = AsyncMock()
+        self.execute = AsyncMock()
         self.scalar = AsyncMock()
         self.get = AsyncMock()
         self.refresh = AsyncMock()
@@ -491,7 +493,9 @@ async def test_file_service_toggle_file_star_adds_favorite(monkeypatch: pytest.M
 
     monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
     monkeypatch.setattr(service, "get_file", AsyncMock(return_value=expected))
-    session.scalar = AsyncMock(return_value=None)
+    monkeypatch.setattr(service, "_get_file_favorite", AsyncMock(side_effect=[None, None]))
+    monkeypatch.setattr(service, "_lock_user_for_star_update", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_count_starred_items", AsyncMock(return_value=0))
 
     result = await service.toggle_file_star(user_id=1, file_id="1", is_starred=True)
 
@@ -532,7 +536,7 @@ async def test_file_service_toggle_file_star_removes_favorite(monkeypatch: pytes
         isStarred=False,
         status=True,
     )))
-    session.scalar = AsyncMock(return_value=existing_favorite)
+    monkeypatch.setattr(service, "_get_file_favorite", AsyncMock(return_value=existing_favorite))
 
     await service.toggle_file_star(user_id=1, file_id="1", is_starred=False)
 
@@ -548,8 +552,11 @@ async def test_folder_service_toggle_folder_star_adds_favorite():
     folder = make_folder_row(folder_id=200)
     owner = User(user_id=1, username="owner", email="owner@example.com", password_hash="hash")
 
-    session.scalar = AsyncMock(side_effect=[folder, None])
+    session.scalar = AsyncMock(return_value=folder)
     session.get = AsyncMock(return_value=owner)
+    service._get_folder_favorite = AsyncMock(side_effect=[None, None])  # type: ignore[method-assign]
+    service._count_starred_items = AsyncMock(return_value=0)  # type: ignore[method-assign]
+    service._lock_user_for_star_update = AsyncMock(return_value=None)  # type: ignore[method-assign]
 
     response = await service.toggle_folder_star(user_id=1, folder_id="200", is_starred=True)
 
@@ -578,8 +585,9 @@ async def test_folder_service_toggle_folder_star_removes_favorite():
         file_id=None,
     )
 
-    session.scalar = AsyncMock(side_effect=[folder, existing_favorite])
+    session.scalar = AsyncMock(return_value=folder)
     session.get = AsyncMock(return_value=owner)
+    service._get_folder_favorite = AsyncMock(return_value=existing_favorite)  # type: ignore[method-assign]
 
     response = await service.toggle_folder_star(user_id=1, folder_id="200", is_starred=False)
 

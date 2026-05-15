@@ -75,9 +75,16 @@ class DownloadStreamResult:
 
 
 class FileService:
-    def __init__(self, *, db: AsyncSession, storage: MinioObjectStorageClient | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        db: AsyncSession,
+        storage: MinioObjectStorageClient | None = None,
+        starred_items_limit: int = 20,
+    ) -> None:
         self.db = db
         self.storage = storage
+        self.starred_items_limit = starred_items_limit
 
     async def list_files(self, *, user_id: int, query: GetFilesQuery) -> PaginatedData[FileItem]:
         folder_id = await self._resolve_folder_id(user_id, query.folder_id)
@@ -210,25 +217,27 @@ class FileService:
         is_starred: bool,
     ) -> FileDetails:
         file_row = await self._get_active_file(user_id=user_id, file_id=file_id, for_update=True)
-        favorite = await self.db.scalar(
-            select(FavoriteItem).where(
-                and_(
-                    FavoriteItem.user_id == user_id,
-                    FavoriteItem.item_type == FavoriteItemType.FILE,
-                    FavoriteItem.file_id == int(file_row.file_id),
-                )
-            )
-        )
+        favorite = await self._get_file_favorite(user_id=user_id, file_id=int(file_row.file_id))
 
         if is_starred and favorite is None:
-            self.db.add(
-                FavoriteItem(
-                    user_id=user_id,
-                    item_type=FavoriteItemType.FILE,
-                    file_id=int(file_row.file_id),
-                    folder_id=None,
+            await self._lock_user_for_star_update(user_id=user_id)
+            favorite = await self._get_file_favorite(user_id=user_id, file_id=int(file_row.file_id))
+            if favorite is None:
+                starred_count = await self._count_starred_items(user_id=user_id)
+                if starred_count >= self.starred_items_limit:
+                    raise ApiError(
+                        status_code=400,
+                        code=400,
+                        message=f"已达收藏上限 {self.starred_items_limit}",
+                    )
+                self.db.add(
+                    FavoriteItem(
+                        user_id=user_id,
+                        item_type=FavoriteItemType.FILE,
+                        file_id=int(file_row.file_id),
+                        folder_id=None,
+                    )
                 )
-            )
         elif not is_starred and favorite is not None:
             await self.db.delete(favorite)
 
@@ -1692,6 +1701,30 @@ class FileService:
         if exists is None:
             raise ApiError(status_code=404, code=404, message="Folder not found")
         return int(fid)
+
+    async def _get_file_favorite(self, *, user_id: int, file_id: int) -> FavoriteItem | None:
+        return await self.db.scalar(
+            select(FavoriteItem).where(
+                and_(
+                    FavoriteItem.user_id == user_id,
+                    FavoriteItem.item_type == FavoriteItemType.FILE,
+                    FavoriteItem.file_id == file_id,
+                )
+            )
+        )
+
+    async def _lock_user_for_star_update(self, *, user_id: int) -> None:
+        locked_user = await self.db.scalar(
+            select(User.user_id).where(User.user_id == user_id).with_for_update()
+        )
+        if locked_user is None:
+            raise ApiError(status_code=404, code=404, message="User not found")
+
+    async def _count_starred_items(self, *, user_id: int) -> int:
+        count = await self.db.scalar(
+            select(func.count(FavoriteItem.favorite_id)).where(FavoriteItem.user_id == user_id)
+        )
+        return int(count or 0)
 
     async def _starred_file_ids(self, user_id: int, file_ids: list[int]) -> set[int]:
         if not file_ids:
