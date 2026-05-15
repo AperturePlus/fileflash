@@ -709,48 +709,61 @@ class FileService:
     async def list_starred(self, *, user_id: int) -> PaginatedData[ContentItem]:
         file_rows = (
             await self.db.execute(
-                select(File, User.username)
+                select(FavoriteItem.created_at, File, User.username)
                 .join(User, User.user_id == File.owner_id)
                 .join(
                     FavoriteItem,
                     and_(
                         FavoriteItem.file_id == File.file_id,
                         FavoriteItem.user_id == user_id,
+                        FavoriteItem.item_type == FavoriteItemType.FILE,
                     ),
                 )
-                .where(and_(File.owner_id == user_id, File.status == FileStatus.ACTIVE))
+                .where(
+                    and_(
+                        File.owner_id == user_id,
+                        File.status == FileStatus.ACTIVE,
+                        File.is_latest.is_(True),
+                    )
+                )
             )
         ).all()
 
         folder_rows = (
             await self.db.execute(
-                select(Folder, User.username)
+                select(FavoriteItem.created_at, Folder, User.username)
                 .join(User, User.user_id == Folder.owner_id)
                 .join(
                     FavoriteItem,
                     and_(
                         FavoriteItem.folder_id == Folder.folder_id,
                         FavoriteItem.user_id == user_id,
+                        FavoriteItem.item_type == FavoriteItemType.FOLDER,
                     ),
                 )
                 .where(and_(Folder.owner_id == user_id, Folder.status == FolderStatus.ACTIVE))
             )
         ).all()
 
-        items: list[ContentItem] = []
-        media_optimization_map = await self._load_media_optimization_map([f for f, _ in file_rows])
-        for f, username in file_rows:
-            items.append(
-                self._to_file_item(
-                    f,
-                    username,
-                    is_starred=True,
-                    media_optimization=media_optimization_map.get(int(f.file_id)),
+        media_optimization_map = await self._load_media_optimization_map([f for _, f, _ in file_rows])
+        starred_items: list[tuple[datetime, ContentItem]] = []
+        for starred_at, f, username in file_rows:
+            starred_items.append(
+                (
+                    starred_at,
+                    self._to_file_item(
+                        f,
+                        username,
+                        is_starred=True,
+                        media_optimization=media_optimization_map.get(int(f.file_id)),
+                    ),
                 )
             )
-        for folder, username in folder_rows:
-            items.append(self._to_folder_item(folder, username, is_starred=True))
+        for starred_at, folder, username in folder_rows:
+            starred_items.append((starred_at, self._to_folder_item(folder, username, is_starred=True)))
 
+        starred_items.sort(key=lambda entry: (entry[0], entry[1].id), reverse=True)
+        items = [item for _, item in starred_items]
         return self._paginate(items, len(items), 1, max(len(items), 1))
 
     async def move_file(self, *, user_id: int, file_id: str, payload: MoveFileRequest) -> MoveFileResponse:

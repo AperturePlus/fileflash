@@ -596,3 +596,75 @@ async def test_folder_service_toggle_folder_star_removes_favorite():
     assert session.added == []
     assert session.deleted == [existing_favorite]
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_service_toggle_file_star_rejects_when_limit_reached(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = FileService(db=session, starred_items_limit=2)
+    file_row = make_file_row()
+
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    monkeypatch.setattr(service, "_get_file_favorite", AsyncMock(side_effect=[None, None]))
+    monkeypatch.setattr(service, "_lock_user_for_star_update", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_count_starred_items", AsyncMock(return_value=2))
+
+    with pytest.raises(ApiError) as exc:
+        await service.toggle_file_star(user_id=1, file_id="1", is_starred=True)
+
+    assert exc.value.status_code == 400
+    assert exc.value.code == 400
+    assert "已达收藏上限 2" in exc.value.message
+    session.commit.assert_not_awaited()
+    assert session.added == []
+
+
+@pytest.mark.asyncio
+async def test_folder_service_toggle_folder_star_rejects_when_limit_reached():
+    session = DummyFolderSession()
+    service = FolderService(db=session, starred_items_limit=2)
+    folder = make_folder_row(folder_id=200)
+    owner = User(user_id=1, username="owner", email="owner@example.com", password_hash="hash")
+
+    session.scalar = AsyncMock(return_value=folder)
+    session.get = AsyncMock(return_value=owner)
+    service._get_folder_favorite = AsyncMock(side_effect=[None, None])  # type: ignore[method-assign]
+    service._count_starred_items = AsyncMock(return_value=2)  # type: ignore[method-assign]
+    service._lock_user_for_star_update = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    with pytest.raises(ApiError) as exc:
+        await service.toggle_folder_star(user_id=1, folder_id="200", is_starred=True)
+
+    assert exc.value.status_code == 400
+    assert exc.value.code == 400
+    assert "已达收藏上限 2" in exc.value.message
+    session.commit.assert_not_awaited()
+    assert session.added == []
+
+
+@pytest.mark.asyncio
+async def test_file_service_list_starred_orders_by_recent_favorite(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = FileService(db=session)
+
+    older = datetime(2026, 5, 13, 8, 0, tzinfo=UTC)
+    middle = datetime(2026, 5, 13, 9, 0, tzinfo=UTC)
+    newer = datetime(2026, 5, 13, 10, 0, tzinfo=UTC)
+
+    file_old = make_file_row()
+    file_old.file_id = 1
+    file_old.file_name = "old.txt"
+    file_new = make_file_row()
+    file_new.file_id = 2
+    file_new.file_name = "new.txt"
+    folder_mid = make_folder_row(folder_id=200)
+    folder_mid.folder_name = "docs"
+
+    file_execute_result = SimpleNamespace(all=lambda: [(older, file_old, "owner"), (newer, file_new, "owner")])
+    folder_execute_result = SimpleNamespace(all=lambda: [(middle, folder_mid, "owner")])
+    session.execute = AsyncMock(side_effect=[file_execute_result, folder_execute_result])
+    monkeypatch.setattr(service, "_load_media_optimization_map", AsyncMock(return_value={}))
+
+    response = await service.list_starred(user_id=1)
+
+    assert [item.id for item in response.items] == ["2", "200", "1"]
