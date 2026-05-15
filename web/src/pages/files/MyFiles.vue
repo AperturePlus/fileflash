@@ -21,6 +21,7 @@ import ExtractArchiveDialog from './components/ExtractArchiveDialog.vue';
 import { eventBus } from '../../utils/eventBus';
 import type { ContentItem, FileItem } from '../../types/file';
 import { isArchiveFileName } from '../../utils/archive';
+import { ui } from '../../utils/ui';
 
 const fileStore = useFileStore();
 const localeStore = useLocaleStore();
@@ -83,12 +84,30 @@ const onItemActivate = (item: ContentItem) => {
 
 const onClearSelection = () => selection.clear();
 
+const resolveStarErrorMessage = (error: unknown): string => {
+  const maybeResponseMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  if (typeof maybeResponseMessage === 'string' && maybeResponseMessage.trim()) {
+    return maybeResponseMessage.trim();
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return t('files.star.toast.unknownError');
+};
+
 const onToggleStar = async (item: ContentItem) => {
   const next = !item.isStarred;
   try {
     if (item.itemType === 'file') await toggleFileStar(item.id, next); else await toggleFolderStar(item.id, next);
     const f = fileStore.items.find((e) => e.id === item.id); if (f) f.isStarred = next;
-  } catch (e) { console.error('Failed to update star status', e); }
+    eventBus.emit('refresh-file-tree');
+  } catch (e) {
+    const reason = resolveStarErrorMessage(e);
+    ui.toast({
+      type: 'error',
+      message: t('files.star.toast.failed').replace('{reason}', reason),
+    });
+  }
 };
 const navigateBC = (id: string) => { isSearching.value = false; searchQuery.value = ''; searchResults.value = []; fileStore.navigateToFolder(id); };
 
