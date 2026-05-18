@@ -25,7 +25,7 @@ class StubPlanService:
 
 class StubExecuteService:
     async def enqueue_execute(self, *, user_id: int, request: ExecuteAgentRequest):
-        from src.schemas.agent import ExecuteAgentResponse
+        from fileflash.schemas.agent import ExecuteAgentResponse
 
         assert user_id == 1
         assert request.plan_job_id == "101"
@@ -87,7 +87,7 @@ def test_cancel_agent_job() -> None:
 
 
 def test_mock_planner_builds_plan_result() -> None:
-    from src.agents.mock_planner import build_mock_plan_result, should_simulate_failure
+    from fileflash.agents.mock_planner import build_mock_plan_result, should_simulate_failure
 
     request = PlanAgentRequest(input="organize my files")
     plan = build_mock_plan_result(job_id=99, request=request)
@@ -99,7 +99,7 @@ def test_mock_planner_builds_plan_result() -> None:
 
 
 def test_policy_guard_blocks_writes_by_default() -> None:
-    from src.agents.harness.policy import PolicyGuard
+    from fileflash.agents.harness.policy import PolicyGuard
 
     guard = PolicyGuard(allow_writes=False, execution_policy="confirm")
     decision = guard.evaluate_tool_call("drive.moveFile", "write")
