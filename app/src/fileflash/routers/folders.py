@@ -26,7 +26,10 @@ async def list_folders(
     folder_service: FolderService = Depends(get_folder_service),
 ):
     result = await folder_service.list_folders(
-        user_id=current_user.user_id, parent_id=parent_id, page=page, per_page=per_page,
+        user_id=current_user.user_id,
+        parent_id=parent_id,
+        page=page,
+        per_page=per_page,
     )
     return api_success(data=result.model_dump(by_alias=True))
 
@@ -42,7 +45,12 @@ async def get_root_contents(
     folder_service: FolderService = Depends(get_folder_service),
 ):
     query = GetFolderContentsQuery(
-        folder_id="0", sort=sort, order=order, search=search, page=page, per_page=per_page,
+        folder_id="0",
+        sort=sort,
+        order=order,
+        search=search,
+        page=page,
+        per_page=per_page,
     )
     result = await folder_service.get_root_contents(user_id=current_user.user_id, query=query)
     return api_success(data=result.model_dump(by_alias=True))
@@ -60,7 +68,12 @@ async def get_folder_contents(
     folder_service: FolderService = Depends(get_folder_service),
 ):
     query = GetFolderContentsQuery(
-        folder_id=folder_id, sort=sort, order=order, search=search, page=page, per_page=per_page,
+        folder_id=folder_id,
+        sort=sort,
+        order=order,
+        search=search,
+        page=page,
+        per_page=per_page,
     )
     result = await folder_service.get_folder_contents(user_id=current_user.user_id, query=query)
     return api_success(data=result.model_dump(by_alias=True))

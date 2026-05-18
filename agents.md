@@ -110,3 +110,12 @@
 - 严禁提交真实密钥/口令到仓库（邮件、JWT、数据库、Redis 等）。
 - 新环境统一从 `app/src/.env.example` 拷贝并填充。
 - 生产环境必须替换 `JWT_SECRET_KEY` 为高强度随机值（>=32 bytes）。
+
+## 11. Agent（MVP-A）
+
+- **范围**：自然语言规划 → 用户确认 → **模拟/只读执行**（`drive.listFolder`、`drive.resolvePath`）；写工具默认关闭，需 `AGENT_ALLOW_WRITE_TOOLS=true` 且通过 `PolicyGuard`。
+- **契约**：与 `web/src/types/agent.d.ts` 一致；`POST /agent/plan`、`POST /agent/execute`、`POST /agent/cancel/{jobId}`，轮询 `GET /jobs/{jobId}`。
+- **进程**：API 入队；消费 `fileflash:agents` 由 `uv run python -m src.workers.agent_consumer`（或 `fileflash-agent-worker`）。无 Redis 时开发环境可 `AGENT_INLINE_PROCESSING=true` 在 API 进程内处理。
+- **LangChain**：仅在 Worker / `PlanRunner` 内调用；无 `AGENT_LLM_API_KEY` 时降级 `agents/mock_planner.py`。
+- **Apifox**：联调步骤 `docs/agent-apifox.md`；字段说明 `docs/agent-api.md`；OpenAPI：`http://127.0.0.1:8000/openapi.json`。
+- **密钥**：`AGENT_LLM_API_KEY` 仅写入 `app/src/.env.local`（已 gitignore），模板见 `app/src/.env.local.example`。

@@ -38,8 +38,13 @@ async def list_files(
     file_service: FileService = Depends(get_file_service),
 ):
     query = GetFilesQuery(
-        folder_id=folder_id, sort=sort, order=order,
-        search=search, mime_type=mime_type, page=page, per_page=per_page,
+        folder_id=folder_id,
+        sort=sort,
+        order=order,
+        search=search,
+        mime_type=mime_type,
+        page=page,
+        per_page=per_page,
     )
     result = await file_service.list_files(user_id=current_user.user_id, query=query)
     return api_success(data=result.model_dump(by_alias=True))
