@@ -38,6 +38,7 @@ app/src/.env.secrets
 docs/design
 .sandbox_*
 .test_*
+*.md
 
 app/artifacts/
 
