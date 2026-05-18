@@ -1,5 +1,5 @@
 import Mock from 'mockjs';
-import { addLog, addNotification } from '../state';
+import { addLog, addNotification, mockJobs } from '../state';
 import { vfsApi } from '../vfs';
 import { arrayBufferToBase64 } from '../../utils/hash';
 
@@ -421,77 +421,116 @@ export const setupUploadMocks = () => {
 
   Mock.mock(/\/api\/v1\/uploads\/([^/]+)\/merge$/, 'post', async (options) => {
     const uploadId = (options.url.match(/\/api\/v1\/uploads\/([^/]+)\/merge/) || [])[1];
-    const session = sessions.get(uploadId);
+    const mergeRequest = JSON.parse(options.body || '{}');
+    const now = new Date().toISOString();
+    const jobId = `job_${Mock.Random.guid()}`;
+    const job = {
+      jobId,
+      taskType: 'task.upload_merge',
+      status: 'pending',
+      priority: 100,
+      payload: {
+        userId: 1,
+        uploadId,
+        mergeRequest,
+      },
+      result: {},
+      errorMessage: null as string | null,
+      attempt: 0,
+      maxAttempts: 5,
+      scheduledAt: now,
+      startedAt: null as string | null,
+      finishedAt: null as string | null,
+      traceId: `mock-${jobId}`,
+      idempotencyKey: `upload:1:${uploadId}:merge:mock`,
+      cancelRequestedAt: null as string | null,
+      requestedBy: '1',
+      createdAt: now,
+      updatedAt: now,
+    };
+    mockJobs[jobId] = job as any;
 
-    if (!session) {
-      return {
-        success: false,
-        code: 404,
-        message: 'Upload session not found',
-        data: null,
-      };
-    }
+    setTimeout(() => {
+      void (async () => {
+        const runningAt = new Date().toISOString();
+        job.status = 'running';
+        job.startedAt = runningAt;
+        job.updatedAt = runningAt;
 
-    const sortedIndexes = [...session.uploadedChunkIndexes].sort((a, b) => a - b);
-    const sortedChunks = sortedIndexes.map((index) => session.chunks.get(index)).filter(Boolean) as Blob[];
+        try {
+          const session = sessions.get(uploadId);
+          if (!session) {
+            throw new Error('Upload session not found');
+          }
 
-    if (!sortedChunks.length) {
-      return {
-        success: false,
-        code: 400,
-        message: 'No uploaded chunks found',
-        data: null,
-      };
-    }
+          const sortedIndexes = [...session.uploadedChunkIndexes].sort((a, b) => a - b);
+          const sortedChunks = sortedIndexes.map((index) => session.chunks.get(index)).filter(Boolean) as Blob[];
+          if (!sortedChunks.length) {
+            throw new Error('No uploaded chunks found');
+          }
 
-    const mergedBlob = new Blob(sortedChunks, { type: session.mimeType });
-    const buffer = await mergedBlob.arrayBuffer();
-    const base64Content = arrayBufferToBase64(buffer);
+          const mergedBlob = new Blob(sortedChunks, { type: session.mimeType });
+          const buffer = await mergedBlob.arrayBuffer();
+          const base64Content = arrayBufferToBase64(buffer);
 
-    const created = vfsApi.createFile(
-      session.parentId,
-      session.fileName,
-      mergedBlob.size,
-      session.mimeType,
-      base64Content,
-    );
+          const created = vfsApi.createFile(
+            session.parentId,
+            session.fileName,
+            mergedBlob.size,
+            session.mimeType,
+            base64Content,
+          );
+          const node = vfsApi.get(created.id);
+          if (node) {
+            node.hash = session.fileHash;
+            node.virusStatus = 'clean';
+            node.updatedAt = new Date().toISOString();
+          }
 
-    const node = vfsApi.get(created.id);
-    if (node) {
-      node.hash = session.fileHash;
-      node.virusStatus = 'clean';
-      node.updatedAt = new Date().toISOString();
-    }
+          sessions.delete(uploadId);
+          hashToSessionId.delete(session.fileHash);
 
-    sessions.delete(uploadId);
-    hashToSessionId.delete(session.fileHash);
+          for (const batch of batchSessions.values()) {
+            const target = batch.items.find((item) => item.fileHash === session.fileHash);
+            if (target) {
+              target.status = 'COMPLETE';
+              target.fileId = created.id;
+              batch.updatedAt = new Date().toISOString();
+            }
+          }
 
-    for (const batch of batchSessions.values()) {
-      const target = batch.items.find((item) => item.fileHash === session.fileHash);
-      if (target) {
-        target.status = 'COMPLETE';
-        target.fileId = created.id;
-        batch.updatedAt = new Date().toISOString();
-      }
-    }
+          addLog('file_upload', { fileId: created.id, fileName: created.name, size: created.size || 0 });
+          addNotification(`Upload complete: ${created.name}`, true);
 
-    addLog('file_upload', { fileId: created.id, fileName: created.name, size: created.size || 0 });
-    addNotification(`Upload complete: ${created.name}`, true);
+          job.status = 'succeeded';
+          job.result = {
+            fileId: created.id,
+            fileName: created.name,
+            fileSize: created.size || 0,
+            mimeType: created.mimeType || 'application/octet-stream',
+            folderId: created.parent || 'root',
+            objectHash: session.fileHash,
+            createdAt: created.createdAt,
+            downloadUrl: `/api/v1/files/${created.id}/download`,
+          };
+          job.errorMessage = null;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Merge failed';
+          job.status = 'failed';
+          job.errorMessage = message;
+        } finally {
+          const finishedAt = new Date().toISOString();
+          job.finishedAt = finishedAt;
+          job.updatedAt = finishedAt;
+        }
+      })();
+    }, 120);
 
     return {
       success: true,
       code: 201,
-      message: 'File created successfully',
-      data: {
-        fileId: created.id,
-        fileName: created.name,
-        fileSize: created.size || 0,
-        mimeType: created.mimeType || 'application/octet-stream',
-        folderId: created.parent || 'root',
-        objectHash: session.fileHash,
-        createdAt: created.createdAt,
-        downloadUrl: `/api/v1/files/${created.id}/download`,
-      },
+      message: 'Upload merge job created',
+      data: job,
     };
   });
 };

@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../store/settings';
 import { useThemeStore } from '../../store/theme';
 import { useUserStore } from '../../store/user';
 import type { AppLanguage } from '../../types/user';
+import { ui } from '../../utils/ui';
 
 const themeStore = useThemeStore();
 const settingsStore = useSettingsStore();
@@ -72,16 +73,22 @@ const updateLanguagePreference = async () => {
     console.error('Failed to update language preference:', error);
     localeStore.setLocale(previousLanguage);
     selectedLanguage.value = previousLanguage;
-    alert(t('settings.language.updateFailed'));
+    ui.toast({ type: 'error', message: t('settings.language.updateFailed') });
   } finally {
     isUpdatingLanguage.value = false;
   }
 };
 
-const resetSettings = () => {
-  if (confirm(t('settings.confirmReset'))) {
-    settingsStore.resetSettings();
-  }
+const resetSettings = async () => {
+  const confirmed = await ui.confirm({
+    title: t('settings.actions.reset'),
+    message: t('settings.confirmReset'),
+    confirmText: t('settings.actions.reset'),
+    danger: true,
+  });
+  if (!confirmed) return;
+  settingsStore.resetSettings();
+  ui.toast({ type: 'success', message: t('settings.resetSuccess') });
 };
 
 const exportSettings = () => {
@@ -102,9 +109,9 @@ const importSettings = (event: Event) => {
     reader.onload = (e) => {
       const result = e.target?.result as string;
       if (settingsStore.importSettings(result)) {
-        alert(t('settings.importSuccess'));
+        ui.toast({ type: 'success', message: t('settings.importSuccess') });
       } else {
-        alert(t('settings.importFailed'));
+        ui.toast({ type: 'error', message: t('settings.importFailed') });
       }
     };
     reader.readAsText(file);
@@ -142,8 +149,8 @@ const importSettings = (event: Event) => {
           
           <div class="setting-item">
             <div class="setting-label">
-              <h3>主题</h3>
-              <p>选择您喜欢的应用主题</p>
+              <h3>{{ t('settings.appearance.theme.label') }}</h3>
+              <p>{{ t('settings.appearance.theme.description') }}</p>
             </div>
             <div class="setting-control">
               <div class="theme-switcher">
@@ -153,7 +160,7 @@ const importSettings = (event: Event) => {
                   @click="themeStore.setTheme('light')"
                 >
                   <div class="theme-preview light"></div>
-                  <span>浅色</span>
+                  <span>{{ t('settings.appearance.theme.light') }}</span>
                 </button>
                 <button 
                   class="theme-option" 
@@ -161,7 +168,7 @@ const importSettings = (event: Event) => {
                   @click="themeStore.setTheme('dark')"
                 >
                   <div class="theme-preview dark"></div>
-                  <span>深色</span>
+                  <span>{{ t('settings.appearance.theme.dark') }}</span>
                 </button>
               </div>
             </div>
@@ -188,8 +195,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>紧凑模式</h3>
-              <p>减少界面间距，显示更多内容</p>
+              <h3>{{ t('settings.appearance.compactMode.label') }}</h3>
+              <p>{{ t('settings.appearance.compactMode.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -205,8 +212,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>默认文件视图</h3>
-              <p>选择文件列表的默认显示方式</p>
+              <h3>{{ t('settings.appearance.defaultFileView.label') }}</h3>
+              <p>{{ t('settings.appearance.defaultFileView.description') }}</p>
             </div>
             <div class="setting-control">
               <select 
@@ -214,17 +221,17 @@ const importSettings = (event: Event) => {
                 @change="settingsStore.updateSetting('defaultFileView', settings.defaultFileView)"
                 class="select-input"
               >
-                <option value="list">列表视图</option>
-                <option value="grid">网格视图</option>
-                <option value="tiles">瓦片视图</option>
+                <option value="list">{{ t('settings.appearance.defaultFileView.option.list') }}</option>
+                <option value="grid">{{ t('settings.appearance.defaultFileView.option.grid') }}</option>
+                <option value="tiles">{{ t('settings.appearance.defaultFileView.option.tiles') }}</option>
               </select>
             </div>
           </div>
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>显示文件扩展名</h3>
-              <p>在文件名中显示文件扩展名</p>
+              <h3>{{ t('settings.appearance.showFileExtensions.label') }}</h3>
+              <p>{{ t('settings.appearance.showFileExtensions.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -245,8 +252,8 @@ const importSettings = (event: Event) => {
           
           <div class="setting-item">
             <div class="setting-label">
-              <h3>最大并发上传数</h3>
-              <p>同时上传的最大文件数量</p>
+              <h3>{{ t('settings.uploads.maxConcurrentUploads.label') }}</h3>
+              <p>{{ t('settings.uploads.maxConcurrentUploads.description') }}</p>
             </div>
             <div class="setting-control">
               <input 
@@ -262,8 +269,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>分块大小</h3>
-              <p>大文件分块上传的块大小 (MB)</p>
+              <h3>{{ t('settings.uploads.chunkSize.label') }}</h3>
+              <p>{{ t('settings.uploads.chunkSize.description') }}</p>
             </div>
             <div class="setting-control">
               <select 
@@ -282,8 +289,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>自动重试失败的上传</h3>
-              <p>网络错误时自动重试上传</p>
+              <h3>{{ t('settings.uploads.autoRetryFailedUploads.label') }}</h3>
+              <p>{{ t('settings.uploads.autoRetryFailedUploads.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -299,8 +306,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item" v-if="settings.autoRetryFailedUploads">
             <div class="setting-label">
-              <h3>重试次数</h3>
-              <p>上传失败时的最大重试次数</p>
+              <h3>{{ t('settings.uploads.retryAttempts.label') }}</h3>
+              <p>{{ t('settings.uploads.retryAttempts.description') }}</p>
             </div>
             <div class="setting-control">
               <input 
@@ -321,8 +328,8 @@ const importSettings = (event: Event) => {
           
           <div class="setting-item">
             <div class="setting-label">
-              <h3>每页显示项目数</h3>
-              <p>文件列表每页显示的项目数量</p>
+              <h3>{{ t('settings.files.itemsPerPage.label') }}</h3>
+              <p>{{ t('settings.files.itemsPerPage.description') }}</p>
             </div>
             <div class="setting-control">
               <select 
@@ -340,8 +347,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>显示隐藏文件</h3>
-              <p>显示以点(.)开头的隐藏文件</p>
+              <h3>{{ t('settings.files.showHiddenFiles.label') }}</h3>
+              <p>{{ t('settings.files.showHiddenFiles.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -357,8 +364,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>自动刷新间隔</h3>
-              <p>文件列表自动刷新的时间间隔 (秒，0 表示禁用)</p>
+              <h3>{{ t('settings.files.autoRefreshInterval.label') }}</h3>
+              <p>{{ t('settings.files.autoRefreshInterval.description') }}</p>
             </div>
             <div class="setting-control">
               <input 
@@ -374,8 +381,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>回收站自动清理</h3>
-              <p>回收站中文件的自动删除天数</p>
+              <h3>{{ t('settings.files.autoDeleteDays.label') }}</h3>
+              <p>{{ t('settings.files.autoDeleteDays.description') }}</p>
             </div>
             <div class="setting-control">
               <select 
@@ -383,19 +390,19 @@ const importSettings = (event: Event) => {
                 @change="settingsStore.updateSetting('autoDeleteDays', settings.autoDeleteDays)"
                 class="select-input"
               >
-                <option :value="7">7 天</option>
-                <option :value="14">14 天</option>
-                <option :value="30">30 天</option>
-                <option :value="60">60 天</option>
-                <option :value="90">90 天</option>
+                <option :value="7">{{ t('settings.files.autoDeleteDays.option.7') }}</option>
+                <option :value="14">{{ t('settings.files.autoDeleteDays.option.14') }}</option>
+                <option :value="30">{{ t('settings.files.autoDeleteDays.option.30') }}</option>
+                <option :value="60">{{ t('settings.files.autoDeleteDays.option.60') }}</option>
+                <option :value="90">{{ t('settings.files.autoDeleteDays.option.90') }}</option>
               </select>
             </div>
           </div>
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>删除确认</h3>
-              <p>删除文件时显示确认对话框</p>
+              <h3>{{ t('settings.files.confirmDelete.label') }}</h3>
+              <p>{{ t('settings.files.confirmDelete.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -416,8 +423,8 @@ const importSettings = (event: Event) => {
           
           <div class="setting-item">
             <div class="setting-label">
-              <h3>桌面通知</h3>
-              <p>启用系统桌面通知</p>
+              <h3>{{ t('settings.notifications.desktop.label') }}</h3>
+              <p>{{ t('settings.notifications.desktop.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -433,8 +440,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>声音通知</h3>
-              <p>操作完成时播放提示音</p>
+              <h3>{{ t('settings.notifications.sound.label') }}</h3>
+              <p>{{ t('settings.notifications.sound.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -450,8 +457,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>上传完成通知</h3>
-              <p>文件上传完成时显示通知</p>
+              <h3>{{ t('settings.notifications.uploadComplete.label') }}</h3>
+              <p>{{ t('settings.notifications.uploadComplete.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -467,8 +474,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>错误通知</h3>
-              <p>发生错误时显示通知</p>
+              <h3>{{ t('settings.notifications.error.label') }}</h3>
+              <p>{{ t('settings.notifications.error.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -489,8 +496,8 @@ const importSettings = (event: Event) => {
           
           <div class="setting-item">
             <div class="setting-label">
-              <h3>会话超时时间</h3>
-              <p>自动登出的空闲时间 (分钟，0 表示禁用)</p>
+              <h3>{{ t('settings.security.sessionTimeout.label') }}</h3>
+              <p>{{ t('settings.security.sessionTimeout.description') }}</p>
             </div>
             <div class="setting-control">
               <select 
@@ -498,20 +505,20 @@ const importSettings = (event: Event) => {
                 @change="settingsStore.updateSetting('sessionTimeout', settings.sessionTimeout)"
                 class="select-input"
               >
-                <option :value="0">禁用</option>
-                <option :value="30">30 分钟</option>
-                <option :value="60">1 小时</option>
-                <option :value="120">2 小时</option>
-                <option :value="240">4 小时</option>
-                <option :value="480">8 小时</option>
+                <option :value="0">{{ t('settings.security.sessionTimeout.option.disabled') }}</option>
+                <option :value="30">{{ t('settings.security.sessionTimeout.option.30m') }}</option>
+                <option :value="60">{{ t('settings.security.sessionTimeout.option.1h') }}</option>
+                <option :value="120">{{ t('settings.security.sessionTimeout.option.2h') }}</option>
+                <option :value="240">{{ t('settings.security.sessionTimeout.option.4h') }}</option>
+                <option :value="480">{{ t('settings.security.sessionTimeout.option.8h') }}</option>
               </select>
             </div>
           </div>
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>敏感操作密码确认</h3>
-              <p>执行删除、分享等敏感操作时要求密码确认</p>
+              <h3>{{ t('settings.security.requirePasswordForSensitiveActions.label') }}</h3>
+              <p>{{ t('settings.security.requirePasswordForSensitiveActions.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -532,8 +539,8 @@ const importSettings = (event: Event) => {
           
           <div class="setting-item">
             <div class="setting-label">
-              <h3>调试模式</h3>
-              <p>启用详细的调试信息输出</p>
+              <h3>{{ t('settings.advanced.debugMode.label') }}</h3>
+              <p>{{ t('settings.advanced.debugMode.description') }}</p>
             </div>
             <div class="setting-control">
               <label class="switch">
@@ -549,8 +556,8 @@ const importSettings = (event: Event) => {
 
           <div class="setting-item">
             <div class="setting-label">
-              <h3>缓存持续时间</h3>
-              <p>本地缓存的保持时间 (小时)</p>
+              <h3>{{ t('settings.advanced.cacheDuration.label') }}</h3>
+              <p>{{ t('settings.advanced.cacheDuration.description') }}</p>
             </div>
             <div class="setting-control">
               <select 
@@ -558,11 +565,11 @@ const importSettings = (event: Event) => {
                 @change="settingsStore.updateSetting('cacheDuration', settings.cacheDuration)"
                 class="select-input"
               >
-                <option :value="1">1 小时</option>
-                <option :value="6">6 小时</option>
-                <option :value="12">12 小时</option>
-                <option :value="24">24 小时</option>
-                <option :value="72">72 小时</option>
+                <option :value="1">{{ t('settings.advanced.cacheDuration.option.1h') }}</option>
+                <option :value="6">{{ t('settings.advanced.cacheDuration.option.6h') }}</option>
+                <option :value="12">{{ t('settings.advanced.cacheDuration.option.12h') }}</option>
+                <option :value="24">{{ t('settings.advanced.cacheDuration.option.24h') }}</option>
+                <option :value="72">{{ t('settings.advanced.cacheDuration.option.72h') }}</option>
               </select>
             </div>
           </div>

@@ -4,6 +4,8 @@ import type { Share, SharedItem } from '../types/share';
 import type { NotificationItem } from '../types/notification';
 import type { LogItem } from '../types/log';
 import type { User, UserPreference } from '../types/user';
+import type { BackgroundJob } from '../types/file';
+import type { AgentSkillItem } from '../types/skill';
 
 export type MockUserRecord = User & {
   status: 'active' | 'suspended';
@@ -21,6 +23,72 @@ const randomRecentTime = (maxHours = 72) => {
 
 let notificationId = 200;
 let logId = 1000;
+let skillId = 50;
+
+export const mockJobs: Record<string, BackgroundJob<any>> = {};
+
+export const mockSkills: AgentSkillItem[] = [
+  {
+    skillId: String(skillId++),
+    skillKey: 'builtin:organizeByType',
+    name: 'Organize By Type',
+    description: 'Organize files into folders by mime/type.',
+    triggersText: 'organize, classify, sort by type',
+    toolWhitelist: ['files.list', 'folders.create', 'files.move'],
+    planTemplate: {},
+    inputsSchema: {},
+    outputsSchema: {},
+    visibility: 'global',
+    ownerUserId: null,
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  {
+    skillId: String(skillId++),
+    skillKey: 'builtin:cleanupDownloads',
+    name: 'Cleanup Downloads',
+    description: 'Find and cleanup old downloads.',
+    triggersText: 'cleanup, downloads, remove old files',
+    toolWhitelist: ['files.list', 'files.delete'],
+    planTemplate: {},
+    inputsSchema: {},
+    outputsSchema: {},
+    visibility: 'global',
+    ownerUserId: null,
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  {
+    skillId: String(skillId++),
+    skillKey: 'user:user1:my-cleanup-000001',
+    name: 'My Cleanup',
+    description: 'Private cleanup helper',
+    triggersText: 'cleanup, tidy',
+    toolWhitelist: [],
+    planTemplate: {},
+    inputsSchema: {},
+    outputsSchema: {},
+    visibility: 'private',
+    ownerUserId: 'user1',
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  {
+    skillId: String(skillId++),
+    skillKey: 'user:user2:my-skill-000002',
+    name: 'My Skill',
+    description: 'Demo private skill',
+    triggersText: null,
+    toolWhitelist: [],
+    planTemplate: {},
+    inputsSchema: {},
+    outputsSchema: {},
+    visibility: 'private',
+    ownerUserId: 'user2',
+    createdAt: now(),
+    updatedAt: now(),
+  },
+];
 
 export const mockUsers: MockUserRecord[] = [
   {

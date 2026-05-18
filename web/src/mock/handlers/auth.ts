@@ -63,7 +63,7 @@ export const setupAuthMocks = () => {
       data: {
         token: `mock-access-${createMockId('token')}`,
         tokenType: 'Bearer',
-        expiresIn: 900,
+        expiresIn: 259200,
         user: buildUserPayload(targetUser),
       },
     };
@@ -183,7 +183,7 @@ export const setupAuthMocks = () => {
       data: {
         token: `mock-access-${createMockId('token')}`,
         tokenType: 'Bearer',
-        expiresIn: 900,
+        expiresIn: 259200,
         user: buildUserPayload(user),
       },
     };

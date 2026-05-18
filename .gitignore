@@ -25,3 +25,17 @@
 # Local agent / test caches
 /.tmp/
 /.uv-cache/
+.superpowers/
+
+docs/design
+.sandbox_*
+.test_*
+
+app/artifacts/
+
+*design_backup*
+
+.playwright*
+.snow/
+
+/node_modules/

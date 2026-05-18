@@ -1,0 +1,82 @@
+/* web/src/styles/legacy-compat.css
+ * Bridges legacy CSS variable names (used by existing components) to
+ * the new token system. Lets P0 land without modifying any component.
+ *
+ * This file is REMOVED in P8 (cleanup) after every legacy reference is
+ * migrated. Until then, every var() in pages/components that starts with
+ * --color-*, --spacing-*, --font-*, --shadow-*, --transition-*,
+ * --border-radius-* is resolved here.
+ */
+
+:root,
+[data-theme="dark"],
+body.dark-theme {
+  /* Color aliases — accent */
+  --color-primary:        var(--ac);
+  --color-primary-rgb:    var(--ac-rgb);
+  --color-primary-hover:  var(--ac);
+  --color-primary-light:  rgba(var(--ac-rgb), 0.15);
+  --color-primary-dark:   var(--ac);
+  --color-text-on-primary: var(--ac-fg);
+
+  /* Color aliases — surfaces */
+  --color-bg-base:        var(--surface-base);
+  --color-bg-primary:     var(--surface-raised);
+  --color-bg-secondary:   var(--surface-raised);
+  --color-bg-tertiary:    var(--surface-inset);
+  --color-bg-quaternary:  var(--surface-inset);
+
+  /* Color aliases — borders */
+  --color-border:         var(--border-default);
+  --color-border-hover:   var(--border-strong);
+  --color-divider:        var(--border-subtle);
+
+  /* Color aliases — text */
+  --color-text-primary:    var(--text-primary);
+  --color-text-secondary:  var(--text-secondary);
+  --color-text-tertiary:   var(--text-tertiary);
+  --color-text-quaternary: var(--text-dim);
+
+  /* Color aliases — semantic */
+  --color-success:        var(--status-success);
+  --color-warning:        var(--status-warning);
+  --color-danger:         var(--status-error);
+  --color-danger-dark:    var(--status-error);
+  --color-danger-light:   rgba(var(--status-error-rgb), 0.15);
+
+  /* Font aliases */
+  --font-family-sans:  var(--font-sans);
+  --font-family-mono:  var(--font-mono);
+  --font-size-base:    var(--text-body);
+  --font-size-lg:      var(--text-h2);
+  --font-size-xl:      var(--text-h1);
+  --font-weight-normal:    var(--weight-regular);
+  --font-weight-medium:    var(--weight-medium);
+  --font-weight-semibold:  var(--weight-semibold);
+  --font-weight-bold:      var(--weight-bold);
+  --line-height-base:      var(--leading-normal);
+
+  /* Spacing aliases */
+  --spacing-unit: 8px;
+  --spacing-xs:   var(--sp-xs);
+  --spacing-sm:   var(--sp-sm);
+  --spacing-md:   var(--sp-md);
+  --spacing-lg:   var(--sp-lg);
+  --spacing-xl:   var(--sp-xl);
+
+  /* Radius aliases (legacy used 6/10/14 — map to new 0/2/4 conservatively) */
+  --border-radius-sm:  var(--radius-sm);
+  --border-radius-md:  var(--radius-sm);
+  --border-radius-lg:  var(--radius-md);
+
+  /* Transition alias */
+  --transition-base:  all var(--mo-duration-mid) var(--mo-easing);
+
+  /* Shadow aliases — legacy expected layered shadows; B uses minimal shadow.
+     Map them all to a single overlay shadow for dialog-class elements;
+     other usages get hairline-only feel. */
+  --shadow-sm:  none;
+  --shadow-md:  var(--shadow-overlay);
+  --shadow-lg:  var(--shadow-overlay);
+  --shadow-xl:  var(--shadow-overlay);
+}

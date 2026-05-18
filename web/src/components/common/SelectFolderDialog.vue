@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { getFolderContents } from '../../api/folder';
+import { useLocaleStore } from '../../store/locale';
 import type { FolderItem } from '../../types/file';
 import FolderTreeNode from './FolderTreeNode.vue';
+import { ui } from '../../utils/ui';
 
 interface Props {
   isVisible: boolean;
@@ -12,6 +14,8 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits(['close', 'confirm']);
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const rootFolders = ref<FolderItem[]>([]);
 const isLoading = ref(false);
@@ -52,7 +56,7 @@ const handleSelectFolder = (folderId: string) => {
 
 const handleConfirm = () => {
   if (!selectedFolderId.value) {
-    alert('Please select a destination folder.');
+    ui.toast({ type: 'warning', message: t('move.dialog.selectDestinationWarning') });
     return;
   }
   emit('confirm', selectedFolderId.value);
@@ -64,21 +68,21 @@ const handleConfirm = () => {
     <div v-if="isVisible" class="modal-overlay" @click.self="$emit('close')">
       <div class="modal-dialog">
         <header class="modal-header">
-          <h3 class="modal-title">{{ title || 'Select destination folder' }}</h3>
+          <h3 class="modal-title">{{ title || t('move.dialog.title.default') }}</h3>
           <button class="modal-close" @click="$emit('close')">&times;</button>
         </header>
         <div class="modal-body">
-          <p class="prompt">Choose a folder:</p>
+          <p class="prompt">{{ t('move.dialog.prompt') }}</p>
           <div class="folder-tree-container">
-            <div v-if="isLoading" class="loading-indicator">Loading...</div>
-            <div v-else-if="rootFolders.length === 0" class="empty-state">No folders available.</div>
+            <div v-if="isLoading" class="loading-indicator">{{ t('move.dialog.loading') }}</div>
+            <div v-else-if="rootFolders.length === 0" class="empty-state">{{ t('move.dialog.empty') }}</div>
             <div v-else>
               <div
                 class="root-folder-item"
                 :class="{ 'selected': selectedFolderId === 'root' }"
                 @click="handleSelectFolder('root')"
               >
-                My Files (Root)
+                {{ t('move.dialog.root') }}
               </div>
               <FolderTreeNode
                 v-for="folder in rootFolders"
@@ -91,9 +95,9 @@ const handleConfirm = () => {
           </div>
         </div>
         <footer class="modal-footer">
-          <button class="btn btn-secondary" @click="$emit('close')">Cancel</button>
+          <button class="btn btn-secondary" @click="$emit('close')">{{ t('move.dialog.cancel') }}</button>
           <button class="btn btn-primary" @click="handleConfirm" :disabled="!selectedFolderId">
-            {{ confirmText || 'Save Here' }}
+            {{ confirmText || t('move.dialog.confirm') }}
           </button>
         </footer>
       </div>

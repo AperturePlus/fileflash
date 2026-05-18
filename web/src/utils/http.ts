@@ -8,7 +8,14 @@ declare module 'axios' {
   export interface AxiosRequestConfig {
     useUrlencoded?: boolean;
     skipAuth?: boolean;
+    _retry?: boolean;
   }
+}
+
+let refreshPromise: Promise<any> | null = null;
+
+function isAuthEndpoint(url: string) {
+  return url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh');
 }
 
 const instance: AxiosInstance = axios.create({
@@ -104,20 +111,58 @@ instance.interceptors.response.use(
   /**
    * 失败的响应（HTTP状态码非2xx）会进入这里。
    */
-  (error) => {
+  async (error) => {
     if (error.response) {
       const { status, data } = error.response;
       const errorMessage = data?.message || error.message;
 
       switch (status) {
         case 401:
-          console.error(`[401] 认证失败: ${errorMessage}`);
-          const userStore = useUserStore();
-          userStore.logout();
-          // 此处可以添加重定向到登录页的逻辑
-          // import router from '../router';
-          // router.push('/login');
-          break;
+          {
+            const userStore = useUserStore();
+            const originalRequest = error.config as AxiosRequestConfig;
+            const requestUrl = String(originalRequest?.url || '');
+
+            const canAttemptRefresh =
+              !!userStore.token &&
+              !!originalRequest &&
+              !originalRequest.skipAuth &&
+              !originalRequest._retry &&
+              !isAuthEndpoint(requestUrl);
+
+            if (canAttemptRefresh) {
+              originalRequest._retry = true;
+              try {
+                refreshPromise =
+                  refreshPromise || instance.post('/auth/refresh', undefined, { skipAuth: true });
+                const refreshed = await refreshPromise;
+                refreshPromise = null;
+
+                userStore.setToken(refreshed.token);
+                userStore.setUser(refreshed.user);
+
+                originalRequest.headers = originalRequest.headers || {};
+                if (!originalRequest.headers.Authorization) {
+                  originalRequest.headers.Authorization = `Bearer ${refreshed.token}`;
+                } else {
+                  originalRequest.headers.Authorization = `Bearer ${refreshed.token}`;
+                }
+
+                return instance(originalRequest);
+              } catch (refreshError) {
+                refreshPromise = null;
+                console.error(`[401] 刷新 Token 失败: ${errorMessage}`);
+                userStore.logout();
+                return Promise.reject(refreshError);
+              }
+            }
+
+            console.error(`[401] 认证失败: ${errorMessage}`);
+            if (userStore.token) {
+              userStore.logout();
+            }
+            break;
+          }
         case 403:
           console.error(`[403] 禁止访问: ${errorMessage}`);
           break;

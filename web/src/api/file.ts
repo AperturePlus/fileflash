@@ -9,8 +9,11 @@ import type {
   GetFilesRequest,
   RenameFileRequest,
   MoveFileRequest,
+  MoveFileResponse,
   CopyFileRequest,
   BatchFilesRequest,
+  BatchFilesResponse,
+  BatchDownloadRequest,
   UploadPreflightRequest,
   UploadPreflightResponse,
   BatchUploadPreflightRequest,
@@ -22,6 +25,10 @@ import type {
   MergeChunksResponse,
   AdminFileAuditItem,
   GetAdminFilesRequest,
+  ArchiveExtractRequest,
+  BackgroundJob,
+  JobResultArchiveExtract,
+  JobResultArchivePreview,
 } from '../types/file';
 
 // 上传相关API
@@ -80,7 +87,16 @@ export const uploadChunk = (uploadId: string, chunk: File, chunkIndex: number) =
  * @returns 合并后的文件信息
  */
 export const mergeChunks = (uploadId: string, data: MergeChunksRequest) => {
-  return http.post<MergeChunksResponse>(`/uploads/${uploadId}/merge`, data);
+  return http.post<BackgroundJob<MergeChunksResponse>>(`/uploads/${uploadId}/merge`, data);
+};
+
+// Archive preview/extract APIs
+export const requestArchivePreview = (fileId: string) => {
+  return http.post<BackgroundJob<JobResultArchivePreview>>(`/files/${fileId}/archive/preview`);
+};
+
+export const requestArchiveExtract = (fileId: string, data: ArchiveExtractRequest) => {
+  return http.post<BackgroundJob<JobResultArchiveExtract>>(`/files/${fileId}/archive/extract`, data);
 };
 
 // 文件管理API
@@ -151,7 +167,7 @@ export const renameFile = (fileId: string, data: RenameFileRequest) => {
  * @returns 移动后的文件信息
  */
 export const moveFile = (fileId: string, data: MoveFileRequest) => {
-  return http.patch<{ fileId: string; targetFolderId: string; movedAt: string }>(`/files/${fileId}/move`, data);
+  return http.patch<MoveFileResponse>(`/files/${fileId}/move`, data);
 };
 
 /**
@@ -187,8 +203,8 @@ export const deleteFile = (fileId: string) => {
  * @param fileIds 要下载的文件ID列表
  * @returns zip文件流
  */
-export const batchDownloadFiles = (fileIds: string[]) => {
-  return http.post<Blob>('/files/batch-download', { fileIds }, { responseType: 'blob' });
+export const batchDownloadFiles = (data: BatchDownloadRequest) => {
+  return http.post<Blob>('/files/batch-download', data, { responseType: 'blob' });
 };
 
 /**
@@ -197,14 +213,8 @@ export const batchDownloadFiles = (fileIds: string[]) => {
  * @returns 操作后的文件信息
  */
 export const batchFiles = (data: BatchFilesRequest) => {
-  return http.post<ResponseData>('/files/batch', data);
+  return http.post<BatchFilesResponse>('/files/batch', data);
 };
-
-interface ResponseData {
-  processed: number;
-  action: string; 
-  succeeded: number;
-}
 
 export const getAdminFiles = (params: GetAdminFilesRequest) => {
   return http.get<PaginatedData<AdminFileAuditItem>>('/admin/files', params);

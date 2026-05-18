@@ -1,16 +1,32 @@
 <script setup lang="ts">
 import { useUserStore } from '../../store/user';
 import { storeToRefs } from 'pinia';
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import StorageStatus from '../../components/layout/StorageStatus.vue';
-import { getActivityLog } from '../../api/user';
+import { changePassword, getActivityLog, updateProfile } from '../../api/user';
 import type { ActivityItem } from '../../types/user';
+import { ui } from '../../utils/ui';
 
 const userStore = useUserStore();
 const { user, storageStats } = storeToRefs(userStore);
 
 const activityLog = ref<ActivityItem[]>([]);
 const isLoadingActivity = ref(false);
+const isSavingProfile = ref(false);
+const profileError = ref('');
+const isChangingPassword = ref(false);
+const passwordError = ref('');
+
+const profileForm = ref({
+  username: '',
+  email: '',
+});
+
+const passwordForm = ref({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+});
 
 // Fetch data on mount
 onMounted(async () => {
@@ -20,6 +36,16 @@ onMounted(async () => {
     fetchActivityLog()
   ]);
 });
+
+watch(
+  () => user.value,
+  (nextUser) => {
+    if (!nextUser) return;
+    profileForm.value.username = nextUser.username || '';
+    profileForm.value.email = nextUser.email || '';
+  },
+  { immediate: true },
+);
 
 const fetchActivityLog = async () => {
   try {
@@ -93,6 +119,60 @@ const getActivityUserAgent = (activity: ActivityItem) => {
   const value = activity.details.user_agent;
   return typeof value === 'string' ? value : '';
 };
+
+const saveProfile = async () => {
+  if (!profileForm.value.username.trim() || !profileForm.value.email.trim()) {
+    profileError.value = '用户名和邮箱不能为空';
+    return;
+  }
+
+  profileError.value = '';
+  isSavingProfile.value = true;
+  try {
+    const updated = await updateProfile({
+      username: profileForm.value.username.trim(),
+      email: profileForm.value.email.trim(),
+    });
+    userStore.setUser(updated);
+    ui.toast({ type: 'success', message: '个人资料已更新' });
+  } catch (error) {
+    profileError.value = error instanceof Error ? error.message : '个人资料更新失败';
+  } finally {
+    isSavingProfile.value = false;
+  }
+};
+
+const submitPassword = async () => {
+  if (!passwordForm.value.oldPassword || !passwordForm.value.newPassword) {
+    passwordError.value = '请填写旧密码和新密码';
+    return;
+  }
+  if (passwordForm.value.newPassword.length < 6) {
+    passwordError.value = '新密码至少 6 位';
+    return;
+  }
+  if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+    passwordError.value = '两次输入的新密码不一致';
+    return;
+  }
+
+  passwordError.value = '';
+  isChangingPassword.value = true;
+  try {
+    await changePassword({
+      oldPassword: passwordForm.value.oldPassword,
+      newPassword: passwordForm.value.newPassword,
+    });
+    passwordForm.value.oldPassword = '';
+    passwordForm.value.newPassword = '';
+    passwordForm.value.confirmPassword = '';
+    ui.toast({ type: 'success', message: '密码已修改' });
+  } catch (error) {
+    passwordError.value = error instanceof Error ? error.message : '密码修改失败';
+  } finally {
+    isChangingPassword.value = false;
+  }
+};
 </script>
 
 <template>
@@ -128,6 +208,56 @@ const getActivityUserAgent = (activity: ActivityItem) => {
               </span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="profile-edit-card card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 0 0 0-1.41L18.37 3.29a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"/></svg>
+            编辑资料
+          </h3>
+        </div>
+        <div class="card-body profile-form">
+          <label>
+            <span>用户名</span>
+            <input v-model="profileForm.username" type="text" autocomplete="username">
+          </label>
+          <label>
+            <span>邮箱</span>
+            <input v-model="profileForm.email" type="email" autocomplete="email">
+          </label>
+          <p v-if="profileError" class="error-text">{{ profileError }}</p>
+          <button class="primary-btn" :disabled="isSavingProfile" @click="saveProfile">
+            {{ isSavingProfile ? '保存中...' : '保存资料' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="password-card card">
+        <div class="card-header">
+          <h3 class="card-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 17a2 2 0 0 0 2-2v-3a2 2 0 0 0-4 0v3a2 2 0 0 0 2 2m6-7h-1V8a5 5 0 1 0-10 0v2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2m-9-2a3 3 0 0 1 6 0v2H9z"/></svg>
+            修改密码
+          </h3>
+        </div>
+        <div class="card-body profile-form">
+          <label>
+            <span>旧密码</span>
+            <input v-model="passwordForm.oldPassword" type="password" autocomplete="current-password">
+          </label>
+          <label>
+            <span>新密码</span>
+            <input v-model="passwordForm.newPassword" type="password" autocomplete="new-password">
+          </label>
+          <label>
+            <span>确认新密码</span>
+            <input v-model="passwordForm.confirmPassword" type="password" autocomplete="new-password">
+          </label>
+          <p v-if="passwordError" class="error-text">{{ passwordError }}</p>
+          <button class="primary-btn" :disabled="isChangingPassword" @click="submitPassword">
+            {{ isChangingPassword ? '提交中...' : '更新密码' }}
+          </button>
         </div>
       </div>
 
@@ -284,6 +414,53 @@ const getActivityUserAgent = (activity: ActivityItem) => {
 
 .card:hover {
   box-shadow: var(--shadow-md);
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.profile-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.profile-form input {
+  height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  padding: 0 var(--spacing-md);
+}
+
+.profile-form input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.primary-btn {
+  height: 36px;
+  border: none;
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-primary);
+  color: var(--color-text-on-primary);
+  cursor: pointer;
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-text {
+  color: var(--color-danger, #dc2626);
+  font-size: 0.875rem;
 }
 
 .card-header {

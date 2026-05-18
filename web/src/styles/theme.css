@@ -1,0 +1,17 @@
+/* web/src/styles/theme.css
+ * Single entry that imports the entire token system.
+ * Import order is significant:
+ *   1. Tokens (color, accent, type, space, motion, edge, shadow) define variables
+ *   2. Legacy compat aliases legacy names to new tokens
+ *   3. Reset uses the variables to style the root document
+ */
+
+@import './tokens/color.css';
+@import './tokens/color.accent.css';
+@import './tokens/type.css';
+@import './tokens/space.css';
+@import './tokens/motion.css';
+@import './tokens/edge.css';
+@import './tokens/shadow.css';
+@import './legacy-compat.css';
+@import './reset.css';

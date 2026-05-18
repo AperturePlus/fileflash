@@ -12,14 +12,23 @@ export interface UploadProgressData {
 
 export type UploadProgressCallback = (data: UploadProgressData) => void;
 
+import axios from 'axios';
 import http from './http';
 import { calculateFileHash, type HashProgressCallback } from './hash';
 import type { 
+  BackgroundJob,
   UploadPreflightRequest, 
   UploadPreflightResponse, 
   MergeChunksRequest, 
   MergeChunksResponse 
 } from '../types/file';
+
+const PREFLIGHT_TIMEOUT_MS = 45_000;
+const CHUNK_TIMEOUT_MS = 120_000;
+const MERGE_TIMEOUT_MS = 300_000;
+const MERGE_RETRY_TIMEOUT_MS = 120_000;
+const MERGE_JOB_POLL_INTERVAL_MS = 900;
+const MERGE_JOB_POLL_TIMEOUT_MS = 300_000;
 
 
 /**
@@ -90,7 +99,9 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
 
   let preflightResponse: UploadPreflightResponse;
   try {
-    preflightResponse = await http.post<UploadPreflightResponse>('/uploads/preflight', preflightRequest);
+    preflightResponse = await http.post<UploadPreflightResponse>('/uploads/preflight', preflightRequest, {
+      timeout: PREFLIGHT_TIMEOUT_MS,
+    });
   } catch (error) {
     console.error('上传预检阶段失败:', error);
     throw new Error('无法开始上传，请检查网络连接或与管理员联系。');
@@ -150,7 +161,7 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
   };
 
   try {
-    const mergeResponse = await http.post<MergeChunksResponse>(`/uploads/${uploadId}/merge`, mergeRequest);
+    const mergeResponse = await requestMergeAndWait(uploadId, mergeRequest, MERGE_TIMEOUT_MS);
     console.log('文件合并成功，上传完成！', mergeResponse);
      // 最终进度更新，确保是100%
     if (onUploadProgress) {
@@ -162,8 +173,27 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
     }
     return mergeResponse;
   } catch (error) {
+    if (isTimeoutOrNetworkError(error)) {
+      const reconciled = await reconcileMergeResult({
+        uploadId,
+        mergeRequest,
+        preflightRequest,
+        file,
+      });
+      if (reconciled) {
+        if (onUploadProgress) {
+          onUploadProgress({
+            percentage: 100,
+            uploadedSize: file.size,
+            totalSize: file.size,
+          });
+        }
+        return reconciled;
+      }
+    }
+    const backendMessage = extractApiErrorMessage(error);
     console.error('合并分片失败:', error);
-    throw new Error('文件分片合并失败，请重试或联系管理员。');
+    throw new Error(backendMessage || '文件分片合并失败，请重试或联系管理员。');
   }
 }
 
@@ -229,7 +259,9 @@ export async function uploadChunks(options: UploadChunkOptions): Promise<void> {
       // 执行上传，并包含重试逻辑  
       for (let attempt = 1; attempt <= maxRetries; attempt++) {  
         try {  
-          await http.post(`/uploads/${uploadId}/chunk`, formData);  
+          await http.post(`/uploads/${uploadId}/chunk`, formData, {
+            timeout: CHUNK_TIMEOUT_MS,
+          });  
           
           // 上传成功，更新进度  
           uploadedSize += chunk.size;  
@@ -258,6 +290,148 @@ export async function uploadChunks(options: UploadChunkOptions): Promise<void> {
 
   // 3. 所有分片上传成功后，发送合并请求  
 
+}
+
+interface ReconcileMergeOptions {
+  uploadId: string;
+  mergeRequest: MergeChunksRequest;
+  preflightRequest: UploadPreflightRequest;
+  file: File;
+}
+
+function isTimeoutOrNetworkError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+  return error.code === 'ECONNABORTED' || !error.response;
+}
+
+function extractApiErrorMessage(error: unknown): string | null {
+  if (axios.isAxiosError(error)) {
+    const responseData = error.response?.data as { message?: unknown } | undefined;
+    if (typeof responseData?.message === 'string' && responseData.message.trim()) {
+      return responseData.message.trim();
+    }
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return null;
+}
+
+function buildCompleteResponse(
+  params: {
+    fileId: string;
+    mergeRequest: MergeChunksRequest;
+    file: File;
+  },
+): MergeChunksResponse {
+  const { fileId, mergeRequest, file } = params;
+  return {
+    fileId,
+    fileName: mergeRequest.fileName,
+    fileSize: file.size,
+    mimeType: mergeRequest.mimeType,
+    folderId: mergeRequest.parentId,
+    objectHash: mergeRequest.fileHash,
+    createdAt: new Date().toISOString(),
+    downloadUrl: `/api/v1/files/${fileId}/download`,
+  };
+}
+
+async function reconcileMergeResult(options: ReconcileMergeOptions): Promise<MergeChunksResponse | null> {
+  const { uploadId, mergeRequest, preflightRequest, file } = options;
+
+  try {
+    const preflight = await http.post<UploadPreflightResponse>('/uploads/preflight', preflightRequest, {
+      timeout: PREFLIGHT_TIMEOUT_MS,
+    });
+    if (preflight.status === 'COMPLETE' && preflight.fileId) {
+      return buildCompleteResponse({ fileId: preflight.fileId, mergeRequest, file });
+    }
+
+    const targetUploadId = preflight.uploadId || uploadId;
+    try {
+      return await requestMergeAndWait(targetUploadId, mergeRequest, MERGE_RETRY_TIMEOUT_MS);
+    } catch (retryError) {
+      if (!isTimeoutOrNetworkError(retryError)) {
+        throw retryError;
+      }
+
+      const finalPreflight = await http.post<UploadPreflightResponse>('/uploads/preflight', preflightRequest, {
+        timeout: PREFLIGHT_TIMEOUT_MS,
+      });
+      if (finalPreflight.status === 'COMPLETE' && finalPreflight.fileId) {
+        return buildCompleteResponse({ fileId: finalPreflight.fileId, mergeRequest, file });
+      }
+    }
+  } catch (error) {
+    console.warn('merge reconcile failed', error);
+  }
+
+  return null;
+}
+
+function isTerminalJobStatus(status: string | undefined): boolean {
+  return status === 'succeeded' || status === 'failed' || status === 'canceled';
+}
+
+function extractMergeResult(job: BackgroundJob<MergeChunksResponse>): MergeChunksResponse | null {
+  if (job.status === 'succeeded') {
+    const result = job.result;
+    if (
+      result &&
+      typeof result.fileId === 'string' &&
+      typeof result.fileName === 'string' &&
+      typeof result.downloadUrl === 'string'
+    ) {
+      return result;
+    }
+    throw new Error('Merge job succeeded but result is missing.');
+  }
+
+  if (job.status === 'failed' || job.status === 'canceled') {
+    throw new Error(job.errorMessage || `Merge job ${job.status}.`);
+  }
+  return null;
+}
+
+async function requestMergeAndWait(
+  uploadId: string,
+  mergeRequest: MergeChunksRequest,
+  timeoutMs: number,
+): Promise<MergeChunksResponse> {
+  const mergeJob = await http.post<BackgroundJob<MergeChunksResponse>>(`/uploads/${uploadId}/merge`, mergeRequest, {
+    timeout: timeoutMs,
+  });
+
+  const immediate = extractMergeResult(mergeJob);
+  if (immediate) {
+    return immediate;
+  }
+  return await pollMergeJob(mergeJob.jobId, MERGE_JOB_POLL_TIMEOUT_MS);
+}
+
+async function pollMergeJob(jobId: string, timeoutMs: number): Promise<MergeChunksResponse> {
+  const startedAt = Date.now();
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('Merge job polling timeout.');
+    }
+    const job = await http.get<BackgroundJob<MergeChunksResponse>>(`/jobs/${jobId}`, undefined, {
+      timeout: MERGE_RETRY_TIMEOUT_MS,
+    });
+    const result = extractMergeResult(job);
+    if (result) {
+      return result;
+    }
+    if (isTerminalJobStatus(job.status)) {
+      throw new Error(job.errorMessage || `Merge job ${job.status}.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, MERGE_JOB_POLL_INTERVAL_MS));
+  }
 }
 
 /**  

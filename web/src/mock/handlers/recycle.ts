@@ -88,6 +88,8 @@ export const setupRecycleMocks = () => {
 
   Mock.mock(/\/api\/v1\/recycle-bin\/([^/]+)$/, 'delete', (options) => {
     const itemId = (options.url.match(/\/api\/v1\/recycle-bin\/([^/?]+)/) || [])[1];
+    const url = new URL(options.url, 'http://localhost');
+    const itemType = url.searchParams.get('itemType');
     const node = vfsApi.get(itemId);
 
     if (!node) {
@@ -95,6 +97,14 @@ export const setupRecycleMocks = () => {
         success: false,
         code: 404,
         message: 'Item not found',
+        data: null,
+      };
+    }
+    if (itemType && itemType !== node.type) {
+      return {
+        success: false,
+        code: 400,
+        message: 'itemType does not match target item',
         data: null,
       };
     }
