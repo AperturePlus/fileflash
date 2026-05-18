@@ -6,9 +6,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.core.deps import get_agent_execute_service, get_agent_plan_service, require_verified_user
-from src.routers.agent import router as agent_router
-from src.schemas.agent import ExecuteAgentRequest, PlanAgentRequest, PlanAgentResponse
+from fileflash.core.deps import get_agent_execute_service, get_agent_plan_service, require_verified_user
+from fileflash.routers.agent import router as agent_router
+from fileflash.schemas.agent import ExecuteAgentRequest, PlanAgentRequest, PlanAgentResponse
 
 
 class StubUser:

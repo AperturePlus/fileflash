@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     upload_chunk_size_min: int = Field(default=1 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_MIN")
     upload_chunk_size_max: int = Field(default=16 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_MAX")
     upload_single_file_size_max: int = Field(default=5 * 1024 * 1024 * 1024, alias="UPLOAD_SINGLE_FILE_SIZE_MAX")
+    starred_items_limit: int = Field(default=20, alias="STARRED_ITEMS_LIMIT")
     upload_session_ttl_hours: int = Field(default=24, alias="UPLOAD_SESSION_TTL_HOURS")
     upload_temp_prefix: str = Field(default="tmp", alias="UPLOAD_TEMP_PREFIX")
     upload_object_prefix: str = Field(default="objects", alias="UPLOAD_OBJECT_PREFIX")
@@ -94,6 +95,7 @@ class Settings(BaseSettings):
         default_factory=_default_worker_concurrency,
         alias="WORKER_CONCURRENCY",
     )
+    worker_process_count: int = Field(default=1, alias="WORKER_PROCESS_COUNT")
     worker_task_timeout_seconds: int = Field(default=900, alias="WORKER_TASK_TIMEOUT_SECONDS")
     worker_default_max_attempts: int = Field(default=5, alias="WORKER_DEFAULT_MAX_ATTEMPTS")
     worker_retry_backoff_seconds: str = Field(

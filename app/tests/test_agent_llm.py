@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.core.settings import Settings
+from fileflash.core.settings import Settings
 
 
 def test_settings_deepseek_defaults() -> None:

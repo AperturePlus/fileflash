@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from src.agents.processor import process_agent_job
-from src.workers.contracts import WorkerJobMessage
+from fileflash.agents.processor import process_agent_job
+from fileflash.workers.contracts import WorkerJobMessage
 
 
 @pytest.mark.asyncio

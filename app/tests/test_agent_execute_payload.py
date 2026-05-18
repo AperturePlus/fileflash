@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
-from src.schemas.agent import ExecuteAgentRequest, ExecuteApproval
+from fileflash.schemas.agent import ExecuteAgentRequest, ExecuteApproval
 
 
 def test_execute_request_dump_json_serializes_confirmed_at() -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.core.security import normalize_access_token
+from fileflash.core.security import normalize_access_token
 
 
 def test_normalize_accepts_raw_jwt() -> None:
