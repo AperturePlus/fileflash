@@ -16,7 +16,7 @@ from .core.errors import ApiError, api_success
 from .core.agent_middleware import AgentAccessLogMiddleware
 from .core.middleware import EmailVerificationGateMiddleware
 from .core.settings import _settings_env_files
-from .db.engine import verify_database_connection
+from .db.engine import verify_database_connection, verify_schema_compatibility
 from .db.session import SessionLocal
 from .services.agent.startup import log_agent_database_readiness
 from .routers import api_router
@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await verify_database_connection()
+    await verify_schema_compatibility()
     try:
         await get_object_storage().ensure_bucket()
     except ObjectStorageError:

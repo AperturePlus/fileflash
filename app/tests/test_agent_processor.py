@@ -27,13 +27,13 @@ async def test_process_agent_job_plan_success() -> None:
     )
 
     with (
-        patch("src.agents.processor.mark_job_running", AsyncMock(return_value=message)),
+        patch("fileflash.agents.processor.mark_job_running", AsyncMock(return_value=message)),
         patch(
-            "src.agents.processor._run_plan",
+            "fileflash.agents.processor._run_plan",
             AsyncMock(return_value=({"planHash": "sha256:x"}, "awaiting_confirm")),
         ),
-        patch("src.agents.processor.mark_agent_job_succeeded", AsyncMock()) as mark_ok,
-        patch("src.agents.processor.mark_agent_job_failed", AsyncMock()) as mark_fail,
+        patch("fileflash.agents.processor.mark_agent_job_succeeded", AsyncMock()) as mark_ok,
+        patch("fileflash.agents.processor.mark_agent_job_failed", AsyncMock()) as mark_fail,
     ):
         session_factory = Mock()
         session = AsyncMock()
