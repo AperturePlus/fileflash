@@ -8,7 +8,7 @@ from starlette.requests import Request
 from ..db.session import SessionLocal
 from ..models.tables_identity import User
 from .errors import build_api_payload
-from .security import decode_access_token
+from .security import decode_access_token, normalize_access_token
 from .settings import Settings
 
 
@@ -29,11 +29,12 @@ class EmailVerificationGateMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(prefix) for prefix in self.allow_prefixes):
             return await call_next(request)
 
-        authorization = request.headers.get("authorization", "")
-        if not authorization.lower().startswith("bearer "):
+        token = normalize_access_token(request.headers.get("authorization"))
+        if token is None:
+            token = normalize_access_token(request.headers.get("x-access-token"))
+        if not token:
             return await call_next(request)
 
-        token = authorization.split(" ", 1)[1].strip()
         try:
             payload = decode_access_token(token, self.settings)
             user_id = int(payload["sub"])

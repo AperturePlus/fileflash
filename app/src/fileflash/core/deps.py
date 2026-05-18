@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi import Depends, Request
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +19,7 @@ from ..repositories import (
 from ..services.archive import ArchiveService
 from ..services.agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from ..services.auth import AuthService
+from ..services.agent.job_enqueue import AgentBackgroundJobService
 from ..services.background_jobs import BackgroundJobService
 from ..services.file import FileService
 from ..services.folder import FolderService
@@ -30,10 +30,9 @@ from ..services.share import ShareService
 from ..services.upload import UploadService
 from ..s3 import MinioObjectStorageClient
 from .errors import ApiError
-from .security import decode_access_token
+from .security import decode_access_token, normalize_access_token
 from .settings import Settings, get_settings
 
-http_bearer = HTTPBearer(auto_error=False)
 _settings = get_settings()
 _rate_limiter = RedisRateLimiter(_settings.redis_url)
 _event_publisher = InProcessAuthEventPublisher()
@@ -76,8 +75,8 @@ def get_background_job_service(
 
 def get_agent_background_job_service(
     queue_publisher: RedisStreamJobQueue = Depends(get_agent_job_queue_publisher),
-) -> BackgroundJobService:
-    return BackgroundJobService(queue_publisher=queue_publisher)
+) -> AgentBackgroundJobService:
+    return AgentBackgroundJobService(queue_publisher=queue_publisher)
 
 
 def get_settings_dep() -> Settings:
@@ -249,16 +248,26 @@ def get_agent_session_service(
     return SessionService(action_logs=action_logs, work_sessions=work_sessions)
 
 
+def _extract_access_token_from_request(request: Request) -> str | None:
+    """Authorization: <jwt> or Bearer <jwt>; also X-Access-Token for simple Apifox setup."""
+    for header_name in ("authorization", "x-access-token"):
+        token = normalize_access_token(request.headers.get(header_name))
+        if token:
+            return token
+    return None
+
+
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
+    request: Request,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ) -> User:
-    if credentials is None or credentials.scheme.lower() != "bearer":
+    token = _extract_access_token_from_request(request)
+    if not token:
         raise ApiError(status_code=401, code=401, message="Missing authorization token")
 
     try:
-        payload = decode_access_token(credentials.credentials, settings)
+        payload = decode_access_token(token, settings)
         user_id = int(payload["sub"])
     except (InvalidTokenError, KeyError, ValueError):
         raise ApiError(status_code=401, code=401, message="Invalid access token") from None

@@ -34,7 +34,7 @@ class AgentSkillRepository:
                 search_text
             FROM v_agent_skill_catalog
             WHERE visibility = 'global'
-               OR (:user_id IS NOT NULL AND owner_user_id = :user_id)
+               OR owner_user_id = CAST(:user_id AS BIGINT)
             ORDER BY CASE WHEN visibility = 'global' THEN 0 ELSE 1 END, created_at DESC
             LIMIT :limit
             """
@@ -61,7 +61,7 @@ class AgentSkillRepository:
                 updated_at,
                 search_text
             FROM v_agent_skill_catalog
-            WHERE (visibility = 'global' OR (:user_id IS NOT NULL AND owner_user_id = :user_id))
+            WHERE (visibility = 'global' OR owner_user_id = CAST(:user_id AS BIGINT))
               AND (
                     :query_text = ''
                  OR search_text ILIKE '%' || :query_text || '%'
@@ -114,11 +114,22 @@ class AgentSkillRepository:
         query_text = (query_text or "").strip()
         visibility = (visibility or "all").strip() or "all"
 
+        # CAST user_id — asyncpg 无法在「$n IS NOT NULL」分支里推断参数类型
         where_clause = """
             (
                 (:visibility = 'global' AND visibility = 'global')
-                OR (:visibility = 'private' AND :user_id IS NOT NULL AND visibility = 'private' AND owner_user_id = :user_id)
-                OR (:visibility = 'all' AND (visibility = 'global' OR (:user_id IS NOT NULL AND owner_user_id = :user_id)))
+                OR (
+                    :visibility = 'private'
+                    AND visibility = 'private'
+                    AND owner_user_id = CAST(:user_id AS BIGINT)
+                )
+                OR (
+                    :visibility = 'all'
+                    AND (
+                        visibility = 'global'
+                        OR owner_user_id = CAST(:user_id AS BIGINT)
+                    )
+                )
             )
             AND (
                 :query_text = ''
