@@ -19,14 +19,20 @@ dependencies = [
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.42.0",
     "python-multipart>=0.0.24",
+    "langchain-core>=0.3.0",
+    "langchain>=0.3.0",
+    "langchain-anthropic>=0.3.0",
+    "langchain-openai>=0.3.0",
 ]
 [project.scripts]
 fileflash = "main:main"
+fileflash-agent-worker = "src.workers.agent_consumer:main"
 
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
     "hypothesis>=6.151.9",
+    "psycopg2-binary>=2.9.10",
     "pytest-asyncio>=1.2.0",
     "pytest>=9.0.2",
     "ruff>=0.15.6",

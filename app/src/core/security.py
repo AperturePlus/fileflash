@@ -42,8 +42,26 @@ def create_access_token(user_id: int, settings: Settings) -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def normalize_access_token(raw: str | None) -> str | None:
+    """Accept raw JWT or `Bearer <jwt>`; strip whitespace/newlines from Apifox paste mistakes."""
+    if raw is None:
+        return None
+    value = raw.strip().replace("\r", "").replace("\n", "").replace("\t", "")
+    if not value:
+        return None
+    lower = value.lower()
+    if lower.startswith("bearer "):
+        return value[7:].strip() or None
+    if lower == "bearer":
+        return None
+    return value
+
+
 def decode_access_token(token: str, settings: Settings) -> dict[str, Any]:
-    payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    normalized = normalize_access_token(token)
+    if not normalized:
+        raise jwt.InvalidTokenError("Missing token")
+    payload = jwt.decode(normalized, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
     token_type = payload.get("typ")
     if token_type != "access":
         raise jwt.InvalidTokenError("Invalid token type")

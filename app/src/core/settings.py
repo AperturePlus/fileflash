@@ -13,9 +13,21 @@ def _default_worker_concurrency() -> int:
     return max(1, cpu_total - 1)
 
 
+def _settings_env_files() -> tuple[str, ...]:
+    base_dir = Path(__file__).resolve().parents[1]
+    files: list[str] = []
+    for name in (".env", ".env.local"):
+        path = base_dir / name
+        if path.is_file():
+            files.append(str(path))
+    if not files:
+        files.append(str(base_dir / ".env"))
+    return tuple(files)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).resolve().parents[1] / ".env"),
+        env_file=_settings_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -93,6 +105,8 @@ class Settings(BaseSettings):
     worker_queue_block_ms: int = Field(default=5000, alias="WORKER_QUEUE_BLOCK_MS")
 
     agent_enabled: bool = Field(default=False, alias="AGENT_ENABLED")
+    agent_inline_processing: bool = Field(default=True, alias="AGENT_INLINE_PROCESSING")
+    agent_allow_write_tools: bool = Field(default=False, alias="AGENT_ALLOW_WRITE_TOOLS")
     agent_queue_stream: str = Field(default="fileflash:agents", alias="AGENT_QUEUE_STREAM")
     agent_queue_group: str = Field(default="fileflash-agents", alias="AGENT_QUEUE_GROUP")
     agent_queue_block_ms: int = Field(default=5000, alias="AGENT_QUEUE_BLOCK_MS")
@@ -106,9 +120,13 @@ class Settings(BaseSettings):
     agent_user_concurrent_limit: int = Field(default=2, alias="AGENT_USER_CONCURRENT_LIMIT")
     agent_staging_ttl_sec: int = Field(default=86400, alias="AGENT_STAGING_TTL_SEC")
     agent_sse_enabled: bool = Field(default=False, alias="AGENT_SSE_ENABLED")
-    agent_llm_provider: str = Field(default="anthropic", alias="AGENT_LLM_PROVIDER")
-    agent_llm_model: str = Field(default="claude-sonnet-4-6", alias="AGENT_LLM_MODEL")
+    agent_llm_provider: str = Field(default="deepseek", alias="AGENT_LLM_PROVIDER")
+    agent_llm_model: str = Field(default="deepseek-chat", alias="AGENT_LLM_MODEL")
     agent_llm_api_key: str | None = Field(default=None, alias="AGENT_LLM_API_KEY")
+    agent_llm_base_url: str = Field(
+        default="https://api.deepseek.com",
+        alias="AGENT_LLM_BASE_URL",
+    )
     agent_mcp_endpoints_raw: str = Field(default="[]", alias="AGENT_MCP_ENDPOINTS")
 
     ffmpeg_binary: str = Field(default="ffmpeg", alias="FFMPEG_BINARY")
@@ -183,6 +201,15 @@ class Settings(BaseSettings):
     @property
     def is_production_env(self) -> bool:
         return self.normalized_app_env in {"prod", "production"}
+
+    @property
+    def agent_is_api_active(self) -> bool:
+        """Agent HTTP API is on when explicitly enabled or running in a non-production app env."""
+        if self.agent_enabled:
+            return True
+        if self.is_development_env:
+            return True
+        return False
 
     @property
     def agent_mcp_endpoints(self) -> tuple[str, ...]:

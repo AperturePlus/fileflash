@@ -1,4 +1,12 @@
 *.env
+.env
+.env.*
+**/.env
+**/.env.local
+**/.env.secrets
+app/src/.env
+app/src/.env.local
+app/src/.env.secrets
 
 */node_modules/
 .vscode/
