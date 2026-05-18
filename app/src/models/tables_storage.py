@@ -7,7 +7,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CHAR,
-    DateTime,
     ForeignKey,
     Identity,
     Index,
@@ -33,6 +32,7 @@ from .enums import (
     UploadTaskStatus,
 )
 from .pg import pg_enum
+from .types import UTCDateTime as DateTime
 
 
 class StorageObject(Base):

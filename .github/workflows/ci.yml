@@ -25,6 +25,7 @@ jobs:
     env:
       FF_DB_URI: postgresql://admin:psgl-ff-db@localhost:5432/fileflash
       JWT_SECRET_KEY: unit-test-secret-key-1234567890abcd
+      REDIS_URL: redis://localhost:6379/0
       OBJECT_STORAGE_ENDPOINT: localhost:9000
       OBJECT_STORAGE_ACCESS_KEY: admin
       OBJECT_STORAGE_SECRET_KEY: minio-admin
@@ -68,6 +69,20 @@ jobs:
           done
           curl -fsS http://localhost:9000/minio/health/live > /dev/null || (docker compose -f docker/minio/docker-compose.yaml logs minio && exit 1)
 
+      - name: Start Redis
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker compose -f docker/redis/docker-compose.yaml up -d redis
+          for i in {1..30}; do
+            status=$(docker inspect --format='{{json .State.Health.Status}}' redis 2>/dev/null || echo '"starting"')
+            if [ "$status" = "\"healthy\"" ]; then
+              echo "Redis is healthy"
+              break
+            fi
+            sleep 2
+          done
+          docker inspect --format='{{json .State.Health.Status}}' redis | grep healthy > /dev/null || (docker compose -f docker/redis/docker-compose.yaml logs redis && exit 1)
+
       - name: Run tests
         run: uv run pytest
 
@@ -75,6 +90,7 @@ jobs:
         if: ${{ always() }}
         working-directory: ${{ github.workspace }}
         run: |
+          docker compose -f docker/redis/docker-compose.yaml down -v --remove-orphans
           docker compose -f docker/minio/docker-compose.yaml down -v --remove-orphans
           docker compose -f docker/postgresql-16/docker-compose.yaml down -v --remove-orphans
 

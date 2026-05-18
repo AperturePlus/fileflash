@@ -6,8 +6,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from sqlalchemy import and_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..db.transaction import is_unique_violation_error
 from ..models import File, FileMediaMetadata, Folder, ObjectScanResult, StorageObject
 from ..models.enums import FileStatus, FolderStatus, FolderType, ScanResult
 
@@ -241,7 +243,8 @@ async def _apply_archive_extract_effects(
             .limit(1)
         )
         if storage is None:
-            storage = StorageObject(
+            storage = await _get_or_create_storage_object(
+                db,
                 bucket_name=bucket_name,
                 object_key=object_key,
                 object_size=file_size,
@@ -251,22 +254,21 @@ async def _apply_archive_extract_effects(
                 version_id=version_id,
                 content_type=content_type,
             )
-            db.add(storage)
-            await db.flush()
 
-        file_row = File(
-            uploader_id=requested_by,
-            owner_id=requested_by,
+        inserted = await _insert_file_with_conflict_retry(
+            db,
+            user_id=requested_by,
             folder_id=parent_folder_id,
             file_name=file_name,
-            file_ext=_extract_ext(file_name),
-            mime_type=content_type,
-            storage_object_id=storage.object_id,
+            content_type=content_type,
+            storage_object_id=int(storage.object_id),
             file_size=file_size,
-            status=FileStatus.ACTIVE,
+            conflict_strategy=conflict_strategy,
         )
-        db.add(file_row)
-        inserted_files += 1
+        if inserted:
+            inserted_files += 1
+        else:
+            skipped_entries += 1
 
     try:
         manifest.unlink(missing_ok=True)
@@ -398,31 +400,37 @@ async def _create_unique_child_folder(
     desired_name: str,
 ) -> Folder:
     name = (desired_name or "Extracted").strip()[:255]
-    candidate = name
+    candidate = name or "Extracted"
     suffix = 1
-    while await db.scalar(
-        select(Folder.folder_id).where(
-            and_(
-                Folder.owner_id == user_id,
-                Folder.parent_folder_id == parent_folder_id,
-                Folder.folder_name == candidate,
-                Folder.status == FolderStatus.ACTIVE,
+    while True:
+        while await db.scalar(
+            select(Folder.folder_id).where(
+                and_(
+                    Folder.owner_id == user_id,
+                    Folder.parent_folder_id == parent_folder_id,
+                    Folder.folder_name == candidate,
+                    Folder.status == FolderStatus.ACTIVE,
+                )
             )
-        )
-    ):
-        suffix += 1
-        candidate = f"{name} ({suffix})"
+        ):
+            suffix += 1
+            candidate = f"{name} ({suffix})"
 
-    folder = Folder(
-        owner_id=user_id,
-        folder_name=candidate,
-        parent_folder_id=parent_folder_id,
-        status=FolderStatus.ACTIVE,
-        folder_type=FolderType.NORMAL,
-    )
-    db.add(folder)
-    await db.flush()
-    return folder
+        folder = Folder(
+            owner_id=user_id,
+            folder_name=candidate,
+            parent_folder_id=parent_folder_id,
+            status=FolderStatus.ACTIVE,
+            folder_type=FolderType.NORMAL,
+        )
+        try:
+            await _flush_with_optional_savepoint(db, folder)
+            return folder
+        except IntegrityError as exc:
+            if not is_unique_violation_error(exc):
+                raise
+            suffix += 1
+            candidate = f"{name} ({suffix})"
 
 
 async def _ensure_folder_path(
@@ -460,13 +468,144 @@ async def _ensure_folder_path(
                 status=FolderStatus.ACTIVE,
                 folder_type=FolderType.NORMAL,
             )
-            db.add(existing)
-            await db.flush()
+            try:
+                await _flush_with_optional_savepoint(db, existing)
+            except IntegrityError as exc:
+                if not is_unique_violation_error(exc):
+                    raise
+                existing = await db.scalar(
+                    select(Folder).where(
+                        and_(
+                            Folder.owner_id == user_id,
+                            Folder.parent_folder_id == current_id,
+                            Folder.folder_name == part,
+                            Folder.status == FolderStatus.ACTIVE,
+                        )
+                    )
+                )
+                if existing is None:
+                    raise
 
         current_id = int(existing.folder_id)
         cache[key] = current_id
 
     return current_id
+
+
+async def _flush_with_optional_savepoint(db: AsyncSession, entity: Any) -> None:
+    begin_nested = getattr(db, "begin_nested", None)
+    if callable(begin_nested):
+        async with begin_nested():
+            db.add(entity)
+            await db.flush()
+        return
+
+    db.add(entity)
+    await db.flush()
+
+
+async def _get_or_create_storage_object(
+    db: AsyncSession,
+    *,
+    bucket_name: str,
+    object_key: str,
+    object_size: int,
+    object_hash: str | None,
+    hash_algorithm: str,
+    etag: str | None,
+    version_id: str | None,
+    content_type: str | None,
+) -> StorageObject:
+    while True:
+        created = StorageObject(
+            bucket_name=bucket_name,
+            object_key=object_key,
+            object_size=object_size,
+            object_hash=object_hash,
+            hash_algorithm=hash_algorithm,
+            etag=etag,
+            version_id=version_id,
+            content_type=content_type,
+        )
+        try:
+            await _flush_with_optional_savepoint(db, created)
+            return created
+        except IntegrityError as exc:
+            if not is_unique_violation_error(exc):
+                raise
+            existing = await db.scalar(
+                select(StorageObject)
+                .where(
+                    and_(
+                        StorageObject.bucket_name == bucket_name,
+                        StorageObject.object_key == object_key,
+                    )
+                )
+                .limit(1)
+            )
+            if existing is not None:
+                return existing
+
+
+async def _insert_file_with_conflict_retry(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    folder_id: int,
+    file_name: str,
+    content_type: str | None,
+    storage_object_id: int,
+    file_size: int,
+    conflict_strategy: str,
+) -> File | None:
+    candidate = file_name
+    while True:
+        row = File(
+            uploader_id=user_id,
+            owner_id=user_id,
+            folder_id=folder_id,
+            file_name=candidate,
+            file_ext=_extract_ext(candidate),
+            mime_type=content_type,
+            storage_object_id=storage_object_id,
+            file_size=file_size,
+            status=FileStatus.ACTIVE,
+        )
+        try:
+            await _flush_with_optional_savepoint(db, row)
+            return row
+        except IntegrityError as exc:
+            if not is_unique_violation_error(exc):
+                raise
+
+            existing = await db.scalar(
+                select(File)
+                .where(
+                    and_(
+                        File.owner_id == user_id,
+                        File.folder_id == folder_id,
+                        File.file_name == candidate,
+                        File.status == FileStatus.ACTIVE,
+                    )
+                )
+                .limit(1)
+            )
+            if conflict_strategy == "skip":
+                return None
+            if conflict_strategy == "overwrite":
+                if existing is None:
+                    continue
+                existing.status = FileStatus.DELETED
+                existing.deleted_at = datetime.now(UTC)
+                existing.deleted_by = user_id
+                continue
+
+            candidate = await _next_available_file_name(
+                db,
+                user_id=user_id,
+                folder_id=folder_id,
+                original_name=candidate,
+            )
 
 
 async def _next_available_file_name(

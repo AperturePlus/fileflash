@@ -1,10 +1,52 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-accent="lime" data-motion="spring">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FileFlash Cloud Drive</title>
+
+    <!-- Hydrate <html> data-* attributes BEFORE Vue mounts to avoid FOUC -->
+    <script>
+      (function () {
+        // Theme: read existing localStorage 'theme' key (used by current themeStore)
+        var savedTheme = localStorage.getItem('theme');
+        var theme =
+          savedTheme === 'dark' || savedTheme === 'light'
+            ? savedTheme
+            : matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+
+        // Accent + motion: new ff.pref key. P0 has no UI to change these yet.
+        var pref;
+        try {
+          pref = JSON.parse(localStorage.getItem('ff.pref') || '{}');
+        } catch (e) {
+          pref = {};
+        }
+        var accent =
+          pref.accent === 'amber' || pref.accent === 'oxide' ? pref.accent : 'lime';
+        var motion = matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'reduced'
+          : pref.motion === 'tight'
+          ? 'tight'
+          : 'spring';
+
+        var html = document.documentElement;
+        html.dataset.theme = theme;
+        html.dataset.accent = accent;
+        html.dataset.motion = motion;
+      })();
+    </script>
+
+    <!-- Fonts: preconnect first, then load CSS in parallel with the JS bundle -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    />
   </head>
   <body>
     <div id="app"></div>

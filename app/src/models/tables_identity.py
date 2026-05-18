@@ -6,7 +6,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CHAR,
-    DateTime,
     ForeignKey,
     Identity,
     Index,
@@ -20,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 from .enums import UiLanguage, UserRole, UserStatus
 from .pg import pg_enum
+from .types import UTCDateTime as DateTime
 
 
 class User(Base):
@@ -62,6 +62,7 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime)
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    avatar: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

@@ -1,0 +1,2 @@
+- [Frontend aesthetic direction](frontend_aesthetic.md) — FileFlash 前端定调"Industrial Dashboard"单一身份，主色 Electric Lime（Amber/Oxide 可切换），深色+等宽数字+直角硬边
+- [Frontend redesign progress](frontend_redesign_progress.md) — 8 阶段重塑的当前进度（P0 已完成 2026-05-11）

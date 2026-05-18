@@ -6,9 +6,19 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.core.errors import ApiError
-from src.models.enums import FileStatus, FolderStatus, FolderType
+from src.models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
+from src.models.tables_access_share import FavoriteItem
+from src.models.tables_identity import User
 from src.models.tables_storage import File, Folder
-from src.schemas.file import BatchFilesRequest, MoveFileRequest, MoveFolderRequest
+from src.schemas.file import (
+    BatchFilesRequest,
+    CreateFolderRequest,
+    FileDetails,
+    MoveFileRequest,
+    MoveFolderRequest,
+    RenameFileRequest,
+    RenameFolderRequest,
+)
 from src.services.file import FileService
 from src.services.folder import FolderService
 
@@ -19,6 +29,15 @@ class DummySession:
         self.execute = AsyncMock()
         self.scalar = AsyncMock()
         self.scalars = AsyncMock(return_value=[])
+        self.get = AsyncMock()
+        self.added: list[object] = []
+        self.deleted: list[object] = []
+
+    def add(self, obj: object) -> None:
+        self.added.append(obj)
+
+    async def delete(self, obj: object) -> None:
+        self.deleted.append(obj)
 
 
 def make_file_row() -> File:
@@ -268,4 +287,274 @@ async def test_folder_service_move_folder_delegates_to_file_service(monkeypatch:
     assert result.target_parent_id == "9"
     assert result.share_handling == "revoke"
     assert result.revoked_share_count == 3
+    session.commit.assert_awaited_once()
+
+
+class DummyFolderSession:
+    def __init__(self) -> None:
+        self.commit = AsyncMock()
+        self.scalar = AsyncMock()
+        self.get = AsyncMock()
+        self.refresh = AsyncMock()
+        self.added: list[object] = []
+        self.deleted: list[object] = []
+
+    def add(self, obj: object) -> None:
+        self.added.append(obj)
+
+    async def delete(self, obj: object) -> None:
+        self.deleted.append(obj)
+
+
+@pytest.mark.asyncio
+async def test_folder_service_create_folder_supports_root_parent(monkeypatch: pytest.MonkeyPatch):
+    session = DummyFolderSession()
+    service = FolderService(db=session)
+
+    root = Folder(
+        folder_id=100,
+        owner_id=1,
+        parent_folder_id=None,
+        folder_name="My Files",
+        cached_size=0,
+        status=FolderStatus.ACTIVE,
+        folder_type=FolderType.ROOT,
+    )
+    owner = User(user_id=1, username="owner", email="owner@example.com", password_hash="hash")
+
+    session.scalar = AsyncMock(side_effect=[root, None])
+    session.get = AsyncMock(return_value=owner)
+
+    response = await service.create_folder(
+        user_id=1,
+        payload=CreateFolderRequest(folderName="Design", parentFolderId="root"),
+    )
+
+    assert response.name == "Design"
+    assert response.parent_folder_id == "100"
+    session.commit.assert_awaited_once()
+    assert any(isinstance(obj, Folder) and obj.folder_name == "Design" for obj in session.added)
+
+
+@pytest.mark.asyncio
+async def test_folder_service_rename_folder_auto_suffix(monkeypatch: pytest.MonkeyPatch):
+    session = DummyFolderSession()
+    service = FolderService(db=session)
+    folder = Folder(
+        folder_id=200,
+        owner_id=1,
+        parent_folder_id=100,
+        folder_name="Design",
+        cached_size=0,
+        status=FolderStatus.ACTIVE,
+        folder_type=FolderType.NORMAL,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    conflict = Folder(
+        folder_id=201,
+        owner_id=1,
+        parent_folder_id=100,
+        folder_name="Docs",
+        cached_size=0,
+        status=FolderStatus.ACTIVE,
+        folder_type=FolderType.NORMAL,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    owner = User(user_id=1, username="owner", email="owner@example.com", password_hash="hash")
+
+    session.scalar = AsyncMock(side_effect=[folder, conflict, None])
+    session.get = AsyncMock(return_value=owner)
+    monkeypatch.setattr(service, "_starred_folder_ids", AsyncMock(return_value=set()))
+
+    response = await service.rename_folder(
+        user_id=1,
+        folder_id="200",
+        payload=RenameFolderRequest(folderName="Docs"),
+    )
+
+    assert response.name == "Docs (1)"
+    assert folder.folder_name == "Docs (1)"
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_service_rename_file_auto_suffix(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = FileService(db=session)
+    file_row = make_file_row()
+
+    next_name = AsyncMock(return_value="demo (1).txt")
+    expected = FileDetails(
+        id="1",
+        name="demo (1).txt",
+        size=256,
+        mimeType="text/plain",
+        ownerName="owner",
+        updatedAt=datetime.now(UTC),
+        createdAt=datetime.now(UTC),
+        folderId="10",
+        permission="owner",
+        isStarred=False,
+        status=True,
+    )
+    get_file_mock = AsyncMock(return_value=expected)
+
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    monkeypatch.setattr(service, "_next_available_file_name", next_name)
+    monkeypatch.setattr(service, "get_file", get_file_mock)
+
+    result = await service.rename_file(
+        user_id=1,
+        file_id="1",
+        payload=RenameFileRequest(fileName="  demo.txt  "),
+    )
+
+    assert result is expected
+    assert file_row.file_name == "demo (1).txt"
+    next_name.assert_awaited_once()
+    assert next_name.await_args.kwargs["original_name"] == "demo.txt"
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_service_rename_file_rejects_blank_name(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = FileService(db=session)
+
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=make_file_row()))
+    next_name = AsyncMock(return_value="ignored")
+    monkeypatch.setattr(service, "_next_available_file_name", next_name)
+
+    with pytest.raises(ApiError) as exc:
+        await service.rename_file(
+            user_id=1,
+            file_id="1",
+            payload=RenameFileRequest.model_construct(file_name="   "),
+        )
+
+    assert exc.value.status_code == 400
+    assert "fileName cannot be empty" in exc.value.message
+    next_name.assert_not_awaited()
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_file_service_toggle_file_star_adds_favorite(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = FileService(db=session)
+    file_row = make_file_row()
+    expected = FileDetails(
+        id="1",
+        name="demo.txt",
+        size=256,
+        mimeType="text/plain",
+        ownerName="owner",
+        updatedAt=datetime.now(UTC),
+        createdAt=datetime.now(UTC),
+        folderId="10",
+        permission="owner",
+        isStarred=True,
+        status=True,
+    )
+
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    monkeypatch.setattr(service, "get_file", AsyncMock(return_value=expected))
+    session.scalar = AsyncMock(return_value=None)
+
+    result = await service.toggle_file_star(user_id=1, file_id="1", is_starred=True)
+
+    assert result is expected
+    assert len(session.added) == 1
+    added = session.added[0]
+    assert isinstance(added, FavoriteItem)
+    assert added.item_type == FavoriteItemType.FILE
+    assert added.file_id == 1
+    assert added.folder_id is None
+    assert session.deleted == []
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_service_toggle_file_star_removes_favorite(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = FileService(db=session)
+    file_row = make_file_row()
+    existing_favorite = FavoriteItem(
+        user_id=1,
+        item_type=FavoriteItemType.FILE,
+        file_id=1,
+        folder_id=None,
+    )
+
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    monkeypatch.setattr(service, "get_file", AsyncMock(return_value=FileDetails(
+        id="1",
+        name="demo.txt",
+        size=256,
+        mimeType="text/plain",
+        ownerName="owner",
+        updatedAt=datetime.now(UTC),
+        createdAt=datetime.now(UTC),
+        folderId="10",
+        permission="owner",
+        isStarred=False,
+        status=True,
+    )))
+    session.scalar = AsyncMock(return_value=existing_favorite)
+
+    await service.toggle_file_star(user_id=1, file_id="1", is_starred=False)
+
+    assert session.added == []
+    assert session.deleted == [existing_favorite]
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_folder_service_toggle_folder_star_adds_favorite():
+    session = DummyFolderSession()
+    service = FolderService(db=session)
+    folder = make_folder_row(folder_id=200)
+    owner = User(user_id=1, username="owner", email="owner@example.com", password_hash="hash")
+
+    session.scalar = AsyncMock(side_effect=[folder, None])
+    session.get = AsyncMock(return_value=owner)
+
+    response = await service.toggle_folder_star(user_id=1, folder_id="200", is_starred=True)
+
+    assert response.id == "200"
+    assert response.is_starred is True
+    assert len(session.added) == 1
+    added = session.added[0]
+    assert isinstance(added, FavoriteItem)
+    assert added.item_type == FavoriteItemType.FOLDER
+    assert added.folder_id == 200
+    assert added.file_id is None
+    assert session.deleted == []
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_folder_service_toggle_folder_star_removes_favorite():
+    session = DummyFolderSession()
+    service = FolderService(db=session)
+    folder = make_folder_row(folder_id=200)
+    owner = User(user_id=1, username="owner", email="owner@example.com", password_hash="hash")
+    existing_favorite = FavoriteItem(
+        user_id=1,
+        item_type=FavoriteItemType.FOLDER,
+        folder_id=200,
+        file_id=None,
+    )
+
+    session.scalar = AsyncMock(side_effect=[folder, existing_favorite])
+    session.get = AsyncMock(return_value=owner)
+
+    response = await service.toggle_folder_star(user_id=1, folder_id="200", is_starred=False)
+
+    assert response.id == "200"
+    assert response.is_starred is False
+    assert session.added == []
+    assert session.deleted == [existing_favorite]
     session.commit.assert_awaited_once()

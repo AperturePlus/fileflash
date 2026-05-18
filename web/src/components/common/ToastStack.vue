@@ -3,7 +3,7 @@ import { ui, uiState } from '../../utils/ui';
 </script>
 
 <template>
-  <div class="toast-stack" aria-live="polite" aria-atomic="true">
+  <div class="toast-stack" data-ui-toast aria-live="polite" aria-atomic="true">
     <transition-group name="toast-fade" tag="div" class="toast-group">
       <div
         v-for="item in uiState.toasts"

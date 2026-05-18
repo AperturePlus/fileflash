@@ -17,6 +17,19 @@ from minio.error import S3Error
 from ..core.settings import Settings
 
 logger = logging.getLogger(__name__)
+AUTH_ERROR_CODES = frozenset({"SignatureDoesNotMatch", "InvalidAccessKeyId", "AccessDenied"})
+
+
+class ObjectStorageError(RuntimeError):
+    """Base exception for object storage integration errors."""
+
+
+class ObjectStorageAuthError(ObjectStorageError):
+    """Raised when object storage credentials or signature are invalid."""
+
+
+class ObjectStorageUnavailableError(ObjectStorageError):
+    """Raised when object storage is unavailable for non-auth reasons."""
 
 
 @dataclass(slots=True)
@@ -67,15 +80,34 @@ class MinioObjectStorageClient:
 
     async def ensure_bucket(self) -> None:
         def _run() -> None:
-            if self._client.bucket_exists(self.bucket_name):
-                return
             try:
+                if self._client.bucket_exists(self.bucket_name):
+                    return
                 self._client.make_bucket(self.bucket_name, location=self.region)
             except S3Error as exc:
-                if exc.code not in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
-                    raise
+                if exc.code in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
+                    return
+                raise self._classify_s3_error(exc) from exc
+            except Exception as exc:  # noqa: BLE001
+                logger.exception(
+                    "Object storage availability check failed for bucket=%s",
+                    self.bucket_name,
+                )
+                raise ObjectStorageUnavailableError("Object storage unavailable") from exc
 
         await asyncio.to_thread(_run)
+
+    def _classify_s3_error(self, exc: S3Error) -> ObjectStorageError:
+        code = exc.code or "UnknownS3Error"
+        logger.error(
+            "Object storage S3 error bucket=%s code=%s requestId=%s",
+            self.bucket_name,
+            code,
+            getattr(exc, "request_id", None),
+        )
+        if code in AUTH_ERROR_CODES:
+            return ObjectStorageAuthError(f"Object storage authentication failed: {code}")
+        return ObjectStorageUnavailableError(f"Object storage unavailable: {code}")
 
     async def put_bytes(self, *, object_key: str, data: bytes, content_type: str) -> ObjectWriteResult:
         await self.ensure_bucket()

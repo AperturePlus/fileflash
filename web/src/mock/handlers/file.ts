@@ -3,8 +3,19 @@ import Mock from 'mockjs';
 import { addLog, addNotification, createMockId, mockJobs, mockShares } from '../state';
 import { vfsApi, type VfsNode } from '../vfs';
 
+const MINIMAL_VALID_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA0NCA+PgpzdHJlYW0KQlQKL0YxIDI0IFRmCjEwMCA3MDAgVGQKKEhlbGxvLCBQREYhKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNzAgMDAwMDAgbiAKMDAwMDAwMDM2MyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQ0MwolJUVPRgo=';
+
 function parseUrl(url: string) {
   return new URL(url, 'http://localhost');
+}
+
+function decodeBase64ToBytes(content: string) {
+  const byteCharacters = atob(content);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i += 1) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  return new Uint8Array(byteNumbers);
 }
 
 function nodeToItem(node: VfsNode) {
@@ -40,12 +51,7 @@ function nodeToItem(node: VfsNode) {
 
 function buildMockFileBlob(file: VfsNode) {
   if (file.content) {
-    const byteCharacters = atob(file.content);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i += 1) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
+    const byteArray = decodeBase64ToBytes(file.content);
     return new Blob([byteArray], { type: file.mimeType || 'application/octet-stream' });
   }
 
@@ -67,8 +73,7 @@ function buildMockFileBlob(file: VfsNode) {
   }
 
   if (file.mimeType === 'application/pdf') {
-    const text = `%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF`;
-    return new Blob([text], { type: 'application/pdf' });
+    return new Blob([decodeBase64ToBytes(MINIMAL_VALID_PDF_BASE64)], { type: 'application/pdf' });
   }
 
   return new Blob([`Binary file: ${file.name}`], { type: file.mimeType || 'application/octet-stream' });

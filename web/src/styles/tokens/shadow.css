@@ -1,0 +1,15 @@
+/* web/src/styles/tokens/shadow.css
+ * B uses shadows sparingly — visual hierarchy comes from contrast and
+ * hairline borders, not depth. Only one overlay shadow exists, used by
+ * dialogs and popovers. Light theme uses a slightly cooler overlay tint.
+ */
+
+:root,
+[data-theme="dark"],
+body.dark-theme {
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.42);
+}
+
+[data-theme="light"] {
+  --shadow-overlay: 0 16px 48px rgba(15, 23, 42, 0.18);
+}

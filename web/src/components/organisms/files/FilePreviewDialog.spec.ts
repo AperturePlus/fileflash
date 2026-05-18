@@ -1,0 +1,74 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mount } from '../../../test/mount';
+import { nextTick } from 'vue';
+import FilePreviewDialog from './FilePreviewDialog.vue';
+
+vi.mock('../../../api/file', () => ({
+  previewFile: vi.fn(() => Promise.resolve(new Blob(['ok'], { type: 'text/plain' }))),
+  downloadFile: vi.fn(),
+}));
+
+vi.mock('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: '/mock.js' }));
+vi.mock('pdfjs-dist', () => ({
+  GlobalWorkerOptions: { workerSrc: '' },
+  getDocument: vi.fn(),
+}));
+
+const sampleFile = {
+  itemType: 'file',
+  id: 'f1',
+  name: 'a.txt',
+  size: 4,
+  mimeType: 'text/plain',
+  ownerName: 'me',
+  updatedAt: '2026-01-01T00:00:00Z',
+  createdAt: '2026-01-01T00:00:00Z',
+  folderId: 'root',
+};
+
+describe('FilePreviewDialog', () => {
+  beforeEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('renders nothing when file is null', () => {
+    const w = mount(FilePreviewDialog, { props: { file: null }, attachTo: document.body });
+    expect(document.body.querySelector('.file-preview-dialog')).toBeNull();
+    w.unmount();
+  });
+
+  it('renders overlay and FileDetailPanel when file is present', async () => {
+    const w = mount(FilePreviewDialog, { props: { file: sampleFile as any }, attachTo: document.body });
+    await nextTick();
+    const overlay = document.body.querySelector('.file-preview-dialog__overlay');
+    expect(overlay).toBeTruthy();
+    expect(document.body.querySelector('.detail')).toBeTruthy();
+    w.unmount();
+  });
+
+  it('emits close on overlay self-click', async () => {
+    const w = mount(FilePreviewDialog, { props: { file: sampleFile as any }, attachTo: document.body });
+    await nextTick();
+    const overlay = document.body.querySelector('.file-preview-dialog__overlay') as HTMLElement;
+    overlay.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(w.emitted('close')).toBeTruthy();
+    w.unmount();
+  });
+
+  it('emits close on ESC keydown', async () => {
+    const w = mount(FilePreviewDialog, { props: { file: sampleFile as any }, attachTo: document.body });
+    await nextTick();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(w.emitted('close')).toBeTruthy();
+    w.unmount();
+  });
+
+  it('emits close on × button click', async () => {
+    const w = mount(FilePreviewDialog, { props: { file: sampleFile as any }, attachTo: document.body });
+    await nextTick();
+    const x = document.body.querySelector('.file-preview-dialog__close') as HTMLButtonElement;
+    x.click();
+    expect(w.emitted('close')).toBeTruthy();
+    w.unmount();
+  });
+});

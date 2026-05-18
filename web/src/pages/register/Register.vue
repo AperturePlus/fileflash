@@ -1,30 +1,29 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { register } from '../../api/user';
-import AuthLayout from '../../components/layout/AuthLayout.vue';
+import { ref } from "vue";
+import { useRouter } from "vue-router";
+import { register } from "../../api/user";
 
 const router = useRouter();
 
-const username = ref('');
-const email = ref('');
-const password = ref('');
-const confirmPassword = ref('');
+const username = ref("");
+const email = ref("");
+const password = ref("");
+const confirmPassword = ref("");
 const showPassword = ref(false);
 const showConfirmPassword = ref(false);
 const isLoading = ref(false);
-const errorMessage = ref('');
+const errorMessage = ref("");
 
 const handleRegister = async () => {
   if (password.value !== confirmPassword.value) {
-    errorMessage.value = '两次输入的密码不一致。';
+    errorMessage.value = "两次输入的密码不一致。";
     return;
   }
 
   if (isLoading.value) return;
 
   isLoading.value = true;
-  errorMessage.value = '';
+  errorMessage.value = "";
 
   try {
     const response = await register({
@@ -34,12 +33,13 @@ const handleRegister = async () => {
     });
 
     if (response.emailVerificationRequired) {
-      router.push('/verify-email');
+      router.push("/verify-email");
     } else {
-      router.push('/login');
+      router.push("/login");
     }
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '注册失败，请稍后再试。';
+    errorMessage.value =
+      error instanceof Error ? error.message : "注册失败，请稍后再试。";
   } finally {
     isLoading.value = false;
   }
@@ -47,62 +47,60 @@ const handleRegister = async () => {
 </script>
 
 <template>
-  <AuthLayout>
-    <div class="auth-card">
-      <header class="auth-header">
-        <h1>创建 FileFlash 账号</h1>
-        <p>注册后即可上传、共享、恢复与管理你的文件</p>
-      </header>
+  <div class="auth-card">
+    <header class="auth-header">
+      <h1>创建 FileFlash 账号</h1>
+      <p>注册后即可上传、共享、恢复与管理你的文件</p>
+    </header>
 
-      <form class="auth-form" @submit.prevent="handleRegister">
-        <label class="field">
-          <span>用户名</span>
-          <input v-model="username" type="text" placeholder="请输入用户名" required />
-        </label>
+    <form class="auth-form" @submit.prevent="handleRegister">
+      <label class="field">
+        <span>用户名</span>
+        <input v-model="username" type="text" placeholder="请输入用户名" required />
+      </label>
 
-        <label class="field">
-          <span>邮箱</span>
-          <input v-model="email" type="email" placeholder="请输入邮箱地址" required />
-        </label>
+      <label class="field">
+        <span>邮箱</span>
+        <input v-model="email" type="email" placeholder="请输入邮箱地址" required />
+      </label>
 
-        <label class="field">
-          <span>密码</span>
-          <div class="password-wrap">
-            <input v-model="password" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" required />
-            <button type="button" class="password-toggle" @click="showPassword = !showPassword">
-              {{ showPassword ? '隐藏' : '显示' }}
-            </button>
-          </div>
-        </label>
+      <label class="field">
+        <span>密码</span>
+        <div class="password-wrap">
+          <input v-model="password" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" required />
+          <button type="button" class="password-toggle" @click="showPassword = !showPassword">
+            {{ showPassword ? "隐藏" : "显示" }}
+          </button>
+        </div>
+      </label>
 
-        <label class="field">
-          <span>确认密码</span>
-          <div class="password-wrap">
-            <input
-              v-model="confirmPassword"
-              :type="showConfirmPassword ? 'text' : 'password'"
-              placeholder="请再次输入密码"
-              required
-            />
-            <button type="button" class="password-toggle" @click="showConfirmPassword = !showConfirmPassword">
-              {{ showConfirmPassword ? '隐藏' : '显示' }}
-            </button>
-          </div>
-        </label>
+      <label class="field">
+        <span>确认密码</span>
+        <div class="password-wrap">
+          <input
+            v-model="confirmPassword"
+            :type="showConfirmPassword ? 'text' : 'password'"
+            placeholder="请再次输入密码"
+            required
+          />
+          <button type="button" class="password-toggle" @click="showConfirmPassword = !showConfirmPassword">
+            {{ showConfirmPassword ? "隐藏" : "显示" }}
+          </button>
+        </div>
+      </label>
 
-        <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
+      <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
 
-        <button class="submit-btn" type="submit" :disabled="isLoading">
-          {{ isLoading ? '注册中...' : '注册' }}
-        </button>
-      </form>
+      <button class="submit-btn" type="submit" :disabled="isLoading">
+        {{ isLoading ? "注册中..." : "注册" }}
+      </button>
+    </form>
 
-      <footer class="auth-footer">
-        <span>已有账号？</span>
-        <router-link to="/login">前往登录</router-link>
-      </footer>
-    </div>
-  </AuthLayout>
+    <footer class="auth-footer">
+      <span>已有账号？</span>
+      <router-link to="/login">前往登录</router-link>
+    </footer>
+  </div>
 </template>
 
 <style scoped>
