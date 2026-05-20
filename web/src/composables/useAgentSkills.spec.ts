@@ -17,7 +17,15 @@ import * as skillApi from '../api/skill';
 
 const fakePage = (items: any[]) => ({
   items,
-  pagination: { totalItems: items.length, page: 1, perPage: 20 },
+  pagination: {
+    totalItems: items.length,
+    page: 1,
+    perPage: 20,
+    totalPages: 1,
+    currentPage: 1,
+    hasPrev: false,
+    hasNext: false,
+  },
 });
 
 const skill = (k: string, v: 'global' | 'private' = 'global') => ({
