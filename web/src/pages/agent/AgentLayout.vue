@@ -1,80 +1,48 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { NButton, NSpace } from 'naive-ui';
-import { useLocaleStore } from '../../store/locale';
+import SegmentedControl from '../../components/molecules/SegmentedControl.vue';
 
 const router = useRouter();
 const route = useRoute();
-const localeStore = useLocaleStore();
-const t = localeStore.t;
 
-const isSkills = computed(() => route.path.startsWith('/agent/skills'));
+const TABS = [
+  { value: 'workspace', label: 'WORKSPACE' },
+  { value: 'skills', label: 'SKILLS' },
+];
 
-const goWorkspace = () => {
-  router.push('/agent');
-};
+const currentTab = computed(() =>
+  route.path.startsWith('/agent/skills') ? 'skills' : 'workspace',
+);
 
-const goSkills = () => {
-  router.push('/agent/skills');
-};
+const onTab = (v: string | number) =>
+  router.push(v === 'skills' ? '/agent/skills' : '/agent');
 </script>
 
 <template>
   <div class="agent-layout">
-    <header class="agent-header">
-      <div class="heading">
-        <h1>{{ t('agent.pageTitle') }}</h1>
-        <p>{{ t('agent.pageDescription') }}</p>
-      </div>
-      <NSpace size="small">
-        <NButton :type="isSkills ? 'default' : 'primary'" secondary strong @click="goWorkspace">
-          {{ t('agent.nav.workspace') }}
-        </NButton>
-        <NButton :type="isSkills ? 'primary' : 'default'" secondary strong @click="goSkills">
-          {{ t('agent.nav.skills') }}
-        </NButton>
-      </NSpace>
+    <header class="agent-layout__head">
+      <span class="agent-layout__brand">[ FILEFLASH · AGENT ]</span>
+      <SegmentedControl :model-value="currentTab" :options="TABS" @update:model-value="onTab" />
     </header>
-
-    <router-view />
+    <router-view v-slot="{ Component }">
+      <Transition name="page-fade" mode="out-in"><component :is="Component" /></Transition>
+    </router-view>
   </div>
 </template>
 
 <style scoped>
-.agent-layout {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-lg);
+.agent-layout { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.agent-layout__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-md); height: 48px; padding: 0 var(--sp-lg);
+  border-bottom: 1px solid var(--border-default); background: var(--surface-base);
 }
-
-.agent-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background:
-    radial-gradient(720px 420px at 0% -10%, rgba(var(--color-primary-rgb), 0.14), transparent 60%),
-    var(--color-bg-secondary);
+.agent-layout__brand {
+  font-family: var(--font-mono); font-size: var(--text-label);
+  letter-spacing: var(--tracking-wide); text-transform: uppercase;
+  color: var(--text-tertiary);
 }
-
-.heading h1 {
-  margin: 0;
-  font-size: 30px;
-}
-
-.heading p {
-  margin: 8px 0 0;
-  color: var(--color-text-tertiary);
-}
-
-@media (max-width: 920px) {
-  .agent-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
+.page-fade-enter-active, .page-fade-leave-active { transition: opacity 180ms var(--mo-easing); }
+.page-fade-enter-from, .page-fade-leave-to { opacity: 0; }
 </style>
