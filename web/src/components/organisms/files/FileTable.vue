@@ -160,7 +160,7 @@ const isTempFolder = (item: ContentItem): item is FolderItem =>
         @click.stop="emit('toggleStar', item)"
         :aria-label="item.isStarred ? t('files.table.aria.unstar') : t('files.table.aria.star')"
       >
-        <Icon name="star" :size="14" />
+        <Icon name="star" :size="16" />
       </button>
       <img
         v-if="item.itemType === 'folder'"
@@ -294,9 +294,10 @@ const isTempFolder = (item: ContentItem): item is FolderItem =>
   color: var(--text-dim);
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
 }
 .card__star--on { color: var(--ac); }
-.card__icon { width: 48px; height: 48px; }
+.card__icon { width: 48px; height: 48px; flex-shrink: 0; }
 .card__name {
   width: 100%;
   text-align: center;

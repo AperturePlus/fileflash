@@ -268,6 +268,7 @@ const isArchiveFile = (file: FileItem) => {
   width: 22px;
   height: 22px;
   object-fit: contain;
+  flex-shrink: 0;
 }
 
 .star-btn {
@@ -282,6 +283,7 @@ const isArchiveFile = (file: FileItem) => {
   align-items: center;
   justify-content: center;
   padding: 0;
+  flex-shrink: 0;
   transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
@@ -350,8 +352,8 @@ const isArchiveFile = (file: FileItem) => {
 }
 
 .star-menu-btn .star-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .star-menu-btn .star-icon.active path {
@@ -409,6 +411,7 @@ const isArchiveFile = (file: FileItem) => {
   height: 62px;
   object-fit: contain;
   margin-top: 8px;
+  flex-shrink: 0;
 }
 
 .grid-name {
