@@ -6,6 +6,7 @@ import type { LogItem } from '../types/log';
 import type { User, UserPreference } from '../types/user';
 import type { BackgroundJob } from '../types/file';
 import type { AgentSkillItem } from '../types/skill';
+import type { RegistrationEmailDomainRuleItem } from '../types/registration-email-domain-rule';
 
 export type MockUserRecord = User & {
   status: 'active' | 'suspended';
@@ -326,6 +327,8 @@ export const mockLogs: LogItem[] = Array.from({ length: 40 }).map((_, index) => 
     performedAt: randomRecentTime(240),
   };
 });
+
+export const mockRegistrationEmailDomainRules: RegistrationEmailDomainRuleItem[] = [];
 
 export function createMockId(prefix: string) {
   return `${prefix}_${Mock.Random.string('number', 6)}`;
