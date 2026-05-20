@@ -21,11 +21,13 @@ from ..services.archive import ArchiveService
 from ..services.agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
+from ..services.email_delivery import VerificationEmailDeliveryService
 from ..services.file import FileService
 from ..services.folder import FolderService
 from ..services.job_queue import RedisStreamJobQueue
 from ..services.messaging import InProcessAuthEventPublisher
 from ..services.rate_limiter import RedisRateLimiter
+from ..services.registration_email_domain_rule import RegistrationEmailDomainRuleService
 from ..services.share import ShareService
 from ..services.upload import UploadService
 from ..s3 import MinioObjectStorageClient
@@ -108,7 +110,14 @@ def get_auth_service(
         settings=settings,
         rate_limiter=rate_limiter,
         event_publisher=event_publisher,
+        verification_email_delivery=VerificationEmailDeliveryService(settings=settings),
     )
+
+
+def get_registration_email_domain_rule_service(
+    db: AsyncSession = Depends(get_db),
+) -> RegistrationEmailDomainRuleService:
+    return RegistrationEmailDomainRuleService(db=db)
 
 
 def get_upload_service(

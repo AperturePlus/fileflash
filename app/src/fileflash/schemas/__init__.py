@@ -73,6 +73,12 @@ from .permission import (
     PermissionItem,
     UpdatePermissionRequest,
 )
+from .registration_email_domain_rule import (
+    CreateRegistrationEmailDomainRuleRequest,
+    ListRegistrationEmailDomainRulesQuery,
+    RegistrationEmailDomainRuleItem,
+    UpdateRegistrationEmailDomainRuleRequest,
+)
 from .recycle import (
     ClearRecycleBinResponse,
     GetRecycleBinQuery,
@@ -209,8 +215,10 @@ __all__ = [
     "PaginationMeta",
     "PermissionItem",
     "PermanentDeleteResponse",
+    "CreateRegistrationEmailDomainRuleRequest",
     "RateLimitRule",
     "RateLimitStatus",
+    "RegistrationEmailDomainRuleItem",
     "RecycleBinItem",
     "RegisterRequest",
     "RemoveGroupMemberResponse",
@@ -235,11 +243,13 @@ __all__ = [
     "StorageUserItem",
     "StorageUsersList",
     "SystemHealth",
+    "ListRegistrationEmailDomainRulesQuery",
     "ToggleFileStarRequest",
     "ToggleFolderStarRequest",
     "TokenResponse",
     "UpdatePermissionRequest",
     "UpdateProfileRequest",
+    "UpdateRegistrationEmailDomainRuleRequest",
     "UpdateShareSettingsRequest",
     "UpdateStorageQuotaRequest",
     "UpdateStorageQuotaResponse",

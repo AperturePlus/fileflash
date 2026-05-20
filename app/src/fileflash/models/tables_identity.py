@@ -215,9 +215,33 @@ class UserSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class RegistrationEmailDomainRule(Base):
+    __tablename__ = "registration_email_domain_rule"
+    __table_args__ = (
+        Index("uk_registration_email_domain_rule_name_ci", text("(LOWER(name))"), unique=True),
+        Index("idx_registration_email_domain_rule_enabled", "enabled"),
+    )
+
+    rule_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    pattern: Mapped[str] = mapped_column(String(512), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
 __all__ = [
     "EmailVerificationToken",
     "PasswordResetToken",
+    "RegistrationEmailDomainRule",
     "User",
     "UserGroup",
     "UserGroupMember",

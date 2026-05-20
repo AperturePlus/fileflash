@@ -28,6 +28,7 @@ from .tables_audit_security import (
 from .tables_identity import (
     EmailVerificationToken,
     PasswordResetToken,
+    RegistrationEmailDomainRule,
     User,
     UserGroup,
     UserGroupMember,
@@ -68,6 +69,7 @@ __all__ = [
     "Notification",
     "ObjectScanResult",
     "PasswordResetToken",
+    "RegistrationEmailDomainRule",
     "SecurityEvent",
     "Share",
     "ShareAccessLog",
