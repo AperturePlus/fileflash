@@ -108,6 +108,10 @@ export const useUserStore = defineStore('user', () => {
    */
   async function fetchStorageStats() {
     if (!isAuthenticated.value) return;
+    if (user.value?.emailVerified === false) {
+      storageStats.value = null;
+      return;
+    }
     try {
       const stats = await getStorageStats();
       storageStats.value = stats;
@@ -162,7 +166,9 @@ export const useUserStore = defineStore('user', () => {
   applyUserLocale(user.value);
   if (isAuthenticated.value) {
     fetchUserProfile();
-    fetchStorageStats();
+    if (user.value?.emailVerified !== false) {
+      fetchStorageStats();
+    }
   }
 
   return { 

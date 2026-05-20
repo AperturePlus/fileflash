@@ -7,18 +7,30 @@ import { getStorageSummary, getStorageUsers, getUsageTrend, updateStorageQuota }
 import { getAdminUsers, getViolations, resolveViolation, updateUserStatus } from '../../api/user';
 import { getAdminFiles, rescanAdminFile } from '../../api/file';
 import { getRateLimitStatus, getSystemHealth } from '../../api/system';
+import {
+  createRegistrationEmailDomainRule,
+  deleteRegistrationEmailDomainRule,
+  getRegistrationEmailDomainRules,
+  updateRegistrationEmailDomainRule,
+} from '../../api/registration-email-domain-rule';
 import type { StorageStats } from '../../types/user';
 import type { Share } from '../../types/share';
 import type { LogItem } from '../../types/log';
 import type { NotificationItem } from '../../types/notification';
 import type { AdminFileAuditItem } from '../../types/file';
 import type { SystemHealth, RateLimitStatus } from '../../types/system';
+import type { RegistrationEmailDomainRuleItem } from '../../types/registration-email-domain-rule';
 import { ui } from '../../utils/ui';
 
 const isLoading = ref(false);
 const noticeText = ref('');
 const auditSearch = ref('');
 const auditStatus = ref<'all' | 'clean' | 'pending' | 'flagged'>('all');
+const domainRuleSearch = ref('');
+const domainRuleEnabledFilter = ref<'all' | 'enabled' | 'disabled'>('all');
+const domainRuleName = ref('');
+const domainRulePattern = ref('');
+const domainRuleEnabled = ref(true);
 
 const storageSummary = ref<StorageStats | null>(null);
 const usageTrend = ref<Array<{ date: string; used: number }>>([]);
@@ -31,6 +43,7 @@ const notifications = ref<NotificationItem[]>([]);
 const auditFiles = ref<AdminFileAuditItem[]>([]);
 const systemHealth = ref<SystemHealth | null>(null);
 const rateLimitStatus = ref<RateLimitStatus | null>(null);
+const domainRules = ref<RegistrationEmailDomainRuleItem[]>([]);
 
 const pendingViolationCount = computed(() => violations.value.length);
 const flaggedFileCount = computed(() => auditFiles.value.filter((file) => file.virusStatus === 'flagged').length);
@@ -54,6 +67,19 @@ const loadAuditFiles = async () => {
     order: 'desc',
   });
   auditFiles.value = response.items;
+};
+
+const loadDomainRules = async () => {
+  const enabled = domainRuleEnabledFilter.value === 'all'
+    ? undefined
+    : domainRuleEnabledFilter.value === 'enabled';
+  const response = await getRegistrationEmailDomainRules({
+    page: 1,
+    perPage: 20,
+    queryText: domainRuleSearch.value.trim() || undefined,
+    enabled,
+  });
+  domainRules.value = response.items;
 };
 
 const loadDashboardData = async () => {
@@ -95,7 +121,7 @@ const loadDashboardData = async () => {
     systemHealth.value = health;
     rateLimitStatus.value = rateLimit;
 
-    await loadAuditFiles();
+    await Promise.all([loadAuditFiles(), loadDomainRules()]);
   } finally {
     isLoading.value = false;
   }
@@ -145,6 +171,57 @@ const handleRescanFile = async (fileId: string) => {
   if (target) {
     target.virusStatus = result.virusStatus;
   }
+};
+
+const handleCreateDomainRule = async () => {
+  const name = domainRuleName.value.trim();
+  const pattern = domainRulePattern.value.trim();
+  if (!name || !pattern) {
+    ui.toast({ type: 'warning', message: 'Rule name and pattern are required.' });
+    return;
+  }
+  await createRegistrationEmailDomainRule({
+    name,
+    pattern,
+    enabled: domainRuleEnabled.value,
+  });
+  domainRuleName.value = '';
+  domainRulePattern.value = '';
+  domainRuleEnabled.value = true;
+  await loadDomainRules();
+};
+
+const handleToggleDomainRule = async (item: RegistrationEmailDomainRuleItem) => {
+  await updateRegistrationEmailDomainRule(item.ruleId, { enabled: !item.enabled });
+  item.enabled = !item.enabled;
+};
+
+const handleEditDomainRule = async (item: RegistrationEmailDomainRuleItem) => {
+  const name = await ui.promptText({
+    title: 'Edit Domain Rule',
+    message: 'Rule Name',
+    defaultValue: item.name,
+    placeholder: 'Rule name',
+    confirmText: 'Save',
+  });
+  if (name === null) return;
+
+  const pattern = await ui.promptText({
+    title: 'Edit Domain Rule',
+    message: 'Regex Pattern',
+    defaultValue: item.pattern,
+    placeholder: 'e.g. .*\\.example\\.com',
+    confirmText: 'Save',
+  });
+  if (pattern === null) return;
+
+  await updateRegistrationEmailDomainRule(item.ruleId, { name: name.trim(), pattern: pattern.trim() });
+  await loadDomainRules();
+};
+
+const handleDeleteDomainRule = async (item: RegistrationEmailDomainRuleItem) => {
+  await deleteRegistrationEmailDomainRule(item.ruleId);
+  domainRules.value = domainRules.value.filter((it) => it.ruleId !== item.ruleId);
 };
 
 const sendNotice = async () => {
@@ -317,6 +394,45 @@ onMounted(loadDashboardData);
               <small>{{ rule.currentUsage }} / {{ rule.limit }} per {{ rule.windowSeconds }}s</small>
             </div>
             <span class="muted">blocked: {{ rule.blockedRequests }}</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="card span-2">
+        <div class="card-head">
+          <h3>Registration Email Domain Rules</h3>
+          <div class="audit-filters">
+            <input v-model="domainRuleSearch" type="text" placeholder="Search rule name/pattern" @change="loadDomainRules" />
+            <select v-model="domainRuleEnabledFilter" @change="loadDomainRules">
+              <option value="all">All</option>
+              <option value="enabled">Enabled</option>
+              <option value="disabled">Disabled</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="notice-form">
+          <input v-model="domainRuleName" type="text" placeholder="Rule name" />
+          <input v-model="domainRulePattern" type="text" placeholder="Regex for domain, e.g. .*\\.example\\.com" />
+          <label class="inline-switch">
+            <input v-model="domainRuleEnabled" type="checkbox" />
+            <span>Enabled</span>
+          </label>
+          <button class="refresh-btn" @click="handleCreateDomainRule">Add Rule</button>
+        </div>
+
+        <div class="table-list">
+          <div v-for="rule in domainRules" :key="rule.ruleId" class="table-row">
+            <div>
+              <strong>{{ rule.name }}</strong>
+              <small>{{ rule.pattern }}</small>
+            </div>
+            <div class="row-actions">
+              <span class="badge" :class="rule.enabled ? 'clean' : 'pending'">{{ rule.enabled ? 'enabled' : 'disabled' }}</span>
+              <button class="status-btn" @click="handleToggleDomainRule(rule)">{{ rule.enabled ? 'Disable' : 'Enable' }}</button>
+              <button class="status-btn" @click="handleEditDomainRule(rule)">Edit</button>
+              <button class="danger-btn" @click="handleDeleteDomainRule(rule)">Delete</button>
+            </div>
           </div>
         </div>
       </article>
@@ -554,6 +670,22 @@ onMounted(loadDashboardData);
   padding: 8px;
   resize: vertical;
   min-height: 72px;
+}
+
+.notice-form input[type="text"] {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-bg-primary);
+  padding: 8px;
+  min-width: 180px;
+}
+
+.inline-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
 .badge {

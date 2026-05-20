@@ -50,7 +50,18 @@ async function onResend() {
 
 onMounted(async () => {
   if (token.value) { await runVerify(token.value); return; }
-  if (userStore.user?.emailVerified) { status.value = 'success'; message.value = 'Your email has already been verified.'; }
+  if (!userStore.isAuthenticated) {
+    status.value = 'error';
+    message.value = 'Please log in first, then verify your email.';
+    return;
+  }
+  if (userStore.user?.emailVerified) {
+    status.value = 'success';
+    message.value = 'Your email has already been verified.';
+    return;
+  }
+  status.value = 'idle';
+  message.value = 'You are logged in but email is not verified yet. You can resend verification email.';
 });
 </script>
 

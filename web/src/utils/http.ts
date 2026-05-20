@@ -2,6 +2,8 @@ import axios from 'axios';
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import qs from 'qs';
 import { useUserStore } from '../store/user';
+import router from '../router';
+import { ui } from './ui';
 
 // 通过模块扩展为 AxiosRequestConfig 添加自定义属性
 declare module 'axios' {
@@ -16,6 +18,12 @@ let refreshPromise: Promise<any> | null = null;
 
 function isAuthEndpoint(url: string) {
   return url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh');
+}
+
+function isEmailVerificationRequired(status: number, data: any): boolean {
+  if (status !== 403) return false;
+  const message = String(data?.message || '').trim().toLowerCase();
+  return message === 'email verification required';
 }
 
 const instance: AxiosInstance = axios.create({
@@ -165,6 +173,15 @@ instance.interceptors.response.use(
           }
         case 403:
           console.error(`[403] 禁止访问: ${errorMessage}`);
+          if (isEmailVerificationRequired(status, data)) {
+            ui.toast({
+              type: 'warning',
+              message: 'Please verify your email to continue.',
+            });
+            if (router.currentRoute.value.name !== 'VerifyEmail') {
+              router.push('/verify-email').catch(() => undefined);
+            }
+          }
           break;
         case 404:
           console.error(`[404] 资源未找到: ${errorMessage}`);
