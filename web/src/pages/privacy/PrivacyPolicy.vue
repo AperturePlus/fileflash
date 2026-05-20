@@ -9,7 +9,7 @@ const { locale } = storeToRefs(localeStore);
 
 const isZh = computed(() => locale.value === 'zh-CN');
 
-const LAST_UPDATED = '2026-05-11';
+const LAST_UPDATED = '2026-05-20';
 </script>
 
 <template>
@@ -114,6 +114,17 @@ const LAST_UPDATED = '2026-05-11';
             <h2>12. 联系我们</h2>
             <p>如你对本隐私政策有任何疑问或请求，请通过本服务内提供的支持/反馈渠道与我们联系。</p>
           </section>
+
+          <section>
+            <h2>13. Agent 自动化处理（专项）</h2>
+            <p>本服务可能提供 Agent / 自动化任务能力。本节作为对前述条款的补充，说明 Agent 功能涉及的数据处理。</p>
+            <ul>
+              <li><strong>13.1 处理数据范围：</strong>为生成与执行 Agent 任务，我们可能处理你的指令文本、当前所在路径与所选条目的元数据、Skill 配置、以及在你的 dataPolicy 允许范围内被读取的文件内容。元数据示例：文件名、大小、类型、时间戳、目录结构。</li>
+              <li><strong>13.2 AI 服务提供方：</strong>本服务的 Agent 实现可能由部署方配置使用第三方 AI 服务（例如大型语言模型 API）。若启用，第 13.1 项所述的部分数据可能被传输至该 AI 服务方进行处理。具体提供方、所在地区与该方的数据使用条款取决于部署，请向部署方索取相应说明。如部署方未启用第三方 AI 服务，则相关处理在本服务边界内完成。</li>
+              <li><strong>13.3 Agent 任务日志与可审计性：</strong>为支持审计、故障排查与计费/配额核算，我们会在合理期限内保留 planHash、提议动作（proposedActions）、已应用动作（appliedActions）、warnings、token 与工具调用次数等任务元数据。这些日志通常不包含完整的文件内容。</li>
+              <li><strong>13.4 你的控制：</strong>你可在每次任务中选择执行策略（planOnly / confirm / autopilot）；你可以取消执行中的任务；选择 planOnly 时不会产生任何文件改动；通过 dataPolicy 你可控制是否允许 Agent 读取文件内容以及读取范围。</li>
+            </ul>
+          </section>
         </template>
 
         <template v-else>
@@ -204,6 +215,17 @@ const LAST_UPDATED = '2026-05-11';
           <section>
             <h2>12. Contact</h2>
             <p>If you have any questions or requests regarding this Privacy Policy, please contact us via the support/feedback channel available in the Service.</p>
+          </section>
+
+          <section>
+            <h2>13. Agent Automated Processing (Supplemental)</h2>
+            <p>The Service may provide Agent / automated-task capabilities. This section supplements the foregoing terms and describes the data processing involved in Agent features.</p>
+            <ul>
+              <li><strong>13.1 Data processed.</strong> To plan and execute Agent tasks, we may process your instruction text, your current path, metadata of selected items, Skill configuration, and — within the limits of your dataPolicy — file content that is read. Metadata examples: file name, size, type, timestamps, and folder structure.</li>
+              <li><strong>13.2 AI service providers.</strong> The Agent implementation may, depending on deployer configuration, use third-party AI services (for example, large language model APIs). If enabled, some of the data described in 13.1 may be transmitted to that AI service for processing. The specific provider, region, and that party's data-handling terms depend on the deployment; please request such information from the deployer. If the deployer does not enable third-party AI services, the related processing occurs within the Service's boundary.</li>
+              <li><strong>13.3 Agent task logs and auditability.</strong> To support auditing, troubleshooting, and billing/quota accounting, we retain task metadata for a reasonable period, including planHash, proposedActions, appliedActions, warnings, token counts, and tool-call counts. These logs typically do not contain full file content.</li>
+              <li><strong>13.4 Your controls.</strong> You may select the execution policy for each task (planOnly / confirm / autopilot); you may cancel a task during execution; planOnly produces no file changes; via dataPolicy you control whether and to what extent the Agent may read file content.</li>
+            </ul>
           </section>
         </template>
       </div>
