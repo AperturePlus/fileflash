@@ -15,3 +15,4 @@ export type { SegmentedOption } from './SegmentedControl.vue';
 export { default as Toolbar } from './Toolbar.vue';
 export { default as Avatar } from './Avatar.vue';
 export { default as Modal } from './Modal.vue';
+export { default as Pagination } from './Pagination.vue';
