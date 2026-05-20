@@ -123,7 +123,7 @@ const isTempRow = (item: ContentItem): item is FolderItem =>
         :aria-label="item.isStarred ? t('files.table.aria.unstar') : t('files.table.aria.star')"
         @click.stop="emit('toggleStar', item)"
       >
-        <Icon name="star" :size="14" />
+        <Icon name="star" :size="16" />
       </button>
     </div>
 
@@ -217,6 +217,7 @@ const isTempRow = (item: ContentItem): item is FolderItem =>
   color: var(--text-dim);
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
 }
 .row__star--on { color: var(--ac); }
 .row__star:hover { color: var(--ac); }

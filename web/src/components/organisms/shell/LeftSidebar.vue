@@ -242,6 +242,9 @@ onUnmounted(() => { eventBus.off('refresh-file-tree', refreshAllTrees); });
   cursor: pointer;
   text-align: left;
 }
+.starred-row > :first-child {
+  flex-shrink: 0;
+}
 .starred-row:hover {
   background: var(--surface-inset);
   color: var(--text-primary);

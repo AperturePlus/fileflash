@@ -58,6 +58,12 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
   const registerRenameInput = (itemId: string, el: HTMLInputElement | null) => {
     if (renamingItemId.value !== itemId) return;
     renameInput.value = el;
+    if (el) {
+      void nextTick().then(() => {
+        el.focus();
+        el.select();
+      });
+    }
   };
 
   const startRename = async (item: ContentItem) => {
@@ -65,8 +71,6 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     renameInputValue.value = item.name;
     renameInput.value = null;
     await nextTick();
-    renameInput.value?.focus();
-    renameInput.value?.select();
   };
 
   const cancelRename = () => {
