@@ -68,39 +68,39 @@ vi.mock('../store/locale', () => ({
 }));
 
 vi.mock('../api/folder', () => ({
-  createFolder: (...args: unknown[]) => createFolderMock(...args),
-  deleteFolder: (...args: unknown[]) => deleteFolderMock(...args),
-  renameFolder: (...args: unknown[]) => renameFolderMock(...args),
+  createFolder: createFolderMock,
+  deleteFolder: deleteFolderMock,
+  renameFolder: renameFolderMock,
 }));
 
 vi.mock('../api/file', () => ({
-  batchFiles: (...args: unknown[]) => batchFilesMock(...args),
-  deleteFile: (...args: unknown[]) => deleteFileMock(...args),
-  downloadFile: (...args: unknown[]) => downloadFileMock(...args),
-  renameFile: (...args: unknown[]) => renameFileMock(...args),
+  batchFiles: batchFilesMock,
+  deleteFile: deleteFileMock,
+  downloadFile: downloadFileMock,
+  renameFile: renameFileMock,
 }));
 
 vi.mock('../api/share', () => ({
-  getShares: (...args: unknown[]) => getSharesMock(...args),
+  getShares: getSharesMock,
 }));
 
 vi.mock('../utils/eventBus', () => ({
   eventBus: {
-    emit: (...args: unknown[]) => eventEmitMock(...args),
+    emit: eventEmitMock,
   },
 }));
 
 vi.mock('../utils/ui', () => ({
   ui: {
-    toast: (...args: unknown[]) => toastMock(...args),
-    confirm: (...args: unknown[]) => confirmMock(...args),
+    toast: toastMock,
+    confirm: confirmMock,
   },
 }));
 
 vi.mock('./useNewFolderCancel', () => ({
   useNewFolderCancel: () => ({
-    install: (...args: unknown[]) => newFolderCancelInstallMock(...args),
-    uninstall: (...args: unknown[]) => newFolderCancelUninstallMock(...args),
+    install: newFolderCancelInstallMock,
+    uninstall: newFolderCancelUninstallMock,
   }),
 }));
 
