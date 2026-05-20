@@ -19,38 +19,52 @@ from ..db.transaction import (
 )
 from ..models.enums import FileStatus, FolderStatus, FolderType, UiLanguage, UserRole, UserStatus
 from ..models.tables_audit_security import Log
-from ..models.tables_identity import EmailVerificationToken, PasswordResetToken, User, UserPreference, UserSession
+from ..models.tables_identity import (
+    EmailVerificationToken,
+    PasswordResetToken,
+    User,
+    UserPreference,
+    UserSession,
+)
 from ..models.tables_storage import File, Folder
 from ..schemas.auth import ForgotPasswordResponse, RegisterRequest, RegisterResponseData, TokenResponse
 from ..schemas.common import PaginatedData, PaginationMeta
 from ..schemas.user import (
     ActivityItem,
     BreakdownDetail,
+    ChangePasswordRequest,
+    GetActivityLogQuery,
+    StorageStats,
     UpdateAvatarRequest,
     UpdateProfileRequest,
     UpdateUserPreferenceRequest,
+    User as UserSchema,
+    UserPreference as UserPreferenceSchema,
     UserProfile,
 )
-from ..schemas.user import User as UserSchema
-from ..schemas.user import ChangePasswordRequest, GetActivityLogQuery, StorageStats
-from ..schemas.user import UserPreference as UserPreferenceSchema
-from ..schemas.user import UpdateProfileRequest, UpdateUserPreferenceRequest, UserProfile
+from .email_delivery import EmailDeliveryConfigurationError, EmailDeliveryError, VerificationEmailDeliveryService
 from .messaging import AuthEventPublisher
 from .rate_limiter import RedisRateLimiter
+from .registration_email_domain_rule import RegistrationEmailDomainRuleService
 
 
 class AuthService:
+    MIN_VERIFICATION_TOKEN_LENGTH = 16
+    MIN_RESET_TOKEN_LENGTH = 16
+
     def __init__(
         self,
         db: AsyncSession,
         settings: Settings,
         rate_limiter: RedisRateLimiter,
         event_publisher: AuthEventPublisher,
+        verification_email_delivery: VerificationEmailDeliveryService,
     ) -> None:
         self.db = db
         self.settings = settings
         self.rate_limiter = rate_limiter
         self.event_publisher = event_publisher
+        self.verification_email_delivery = verification_email_delivery
 
     async def register(
         self,
@@ -65,6 +79,7 @@ class AuthService:
             window_seconds=self.settings.register_rate_window_seconds,
             message="Too many registration attempts, please try again later",
         )
+        await RegistrationEmailDomainRuleService(self.db).assert_email_allowed(email=payload.email)
 
         existing_user = await self.db.scalar(
             select(User).where(
@@ -104,11 +119,15 @@ class AuthService:
             "auth.email_verification_requested",
             {
                 "userId": str(user.user_id),
-                "email": user.email,
-                "token": verification_token,
                 "expiresInMinutes": self.settings.email_verification_expire_minutes,
                 "userAgent": user_agent or "",
             },
+        )
+        await self._send_verification_email_or_raise(
+            event_name="auth.email_verification_requested",
+            email=user.email,
+            token=verification_token,
+            expires_in_minutes=self.settings.email_verification_expire_minutes,
         )
 
         user_schema = self._to_user_schema(user=user, preference=preference)
@@ -173,7 +192,7 @@ class AuthService:
             self.db.add(
                 UserSession(
                     user_id=user.user_id,
-                    refresh_token_hash=hash_token(refresh_token),
+                    refresh_token_hash=hash_token(refresh_token, self.settings),
                     client_type="web",
                     ip_address=client_ip,
                     user_agent=user_agent,
@@ -217,7 +236,7 @@ class AuthService:
     ) -> tuple[TokenResponse, str]:
         async def _operation() -> tuple[TokenResponse, str]:
             now = datetime.now(UTC)
-            token_hash = hash_token(refresh_token)
+            token_hash = hash_token(refresh_token, self.settings)
             await apply_local_lock_timeout(self.db)
             session = await self.db.scalar(
                 select(UserSession)
@@ -243,7 +262,7 @@ class AuthService:
             next_refresh_token = create_refresh_token()
             next_session = UserSession(
                 user_id=user.user_id,
-                refresh_token_hash=hash_token(next_refresh_token),
+                refresh_token_hash=hash_token(next_refresh_token, self.settings),
                 client_type=session.client_type,
                 device_id=session.device_id,
                 device_name=session.device_name,
@@ -277,7 +296,7 @@ class AuthService:
             return
 
         now = datetime.now(UTC)
-        token_hash = hash_token(refresh_token)
+        token_hash = hash_token(refresh_token, self.settings)
         session = await self.db.scalar(
             select(UserSession).where(
                 and_(
@@ -309,7 +328,7 @@ class AuthService:
         now = datetime.now(UTC)
         user = await self.db.scalar(select(User).where(func.lower(User.email) == email.lower()))
         if user:
-            reset_token = await self._create_password_reset_token(
+            await self._create_password_reset_token(
                 user_id=user.user_id,
                 now=now,
                 client_ip=client_ip,
@@ -321,8 +340,6 @@ class AuthService:
                 {
                     "requestId": request_id,
                     "userId": str(user.user_id),
-                    "email": user.email,
-                    "token": reset_token,
                     "expiresInMinutes": self.settings.password_reset_expire_minutes,
                 },
             )
@@ -335,7 +352,8 @@ class AuthService:
     async def reset_password(self, *, token: str, new_password: str) -> None:
         async def _operation() -> None:
             now = datetime.now(UTC)
-            token_hash_value = hash_token(token)
+            self._assert_token_length(token=token, minimum=self.MIN_RESET_TOKEN_LENGTH, message="Invalid or expired reset token")
+            token_hash_value = hash_token(token, self.settings)
             await apply_local_lock_timeout(self.db)
             reset_record = await self.db.scalar(
                 select(PasswordResetToken)
@@ -388,7 +406,12 @@ class AuthService:
     async def verify_email(self, *, token: str) -> None:
         async def _operation() -> None:
             now = datetime.now(UTC)
-            token_hash_value = hash_token(token)
+            self._assert_token_length(
+                token=token,
+                minimum=self.MIN_VERIFICATION_TOKEN_LENGTH,
+                message="Invalid or expired verification token",
+            )
+            token_hash_value = hash_token(token, self.settings)
             await apply_local_lock_timeout(self.db)
             verification_record = await self.db.scalar(
                 select(EmailVerificationToken)
@@ -451,11 +474,15 @@ class AuthService:
             "auth.email_verification_resent",
             {
                 "userId": str(user.user_id),
-                "email": user.email,
-                "token": token,
                 "expiresInMinutes": self.settings.email_verification_expire_minutes,
                 "userAgent": user_agent or "",
             },
+        )
+        await self._send_verification_email_or_raise(
+            event_name="auth.email_verification_resent",
+            email=user.email,
+            token=token,
+            expires_in_minutes=self.settings.email_verification_expire_minutes,
         )
 
     async def get_profile(self, *, user_id: int) -> UserProfile:
@@ -533,6 +560,7 @@ class AuthService:
                 if not email:
                     raise ApiError(status_code=400, code=400, message="email cannot be empty")
                 if email.lower() != user.email.lower():
+                    await RegistrationEmailDomainRuleService(self.db).assert_email_allowed(email=email)
                     email_exists = await self.db.scalar(
                         select(User.user_id).where(
                             and_(
@@ -578,11 +606,15 @@ class AuthService:
                 "auth.email_verification_requested",
                 {
                     "userId": str(profile.user_id),
-                    "email": profile.email,
-                    "token": verification_token,
                     "expiresInMinutes": self.settings.email_verification_expire_minutes,
                     "userAgent": user_agent or "",
                 },
+            )
+            await self._send_verification_email_or_raise(
+                event_name="auth.email_verification_requested",
+                email=profile.email,
+                token=verification_token,
+                expires_in_minutes=self.settings.email_verification_expire_minutes,
             )
 
         return profile
@@ -620,7 +652,7 @@ class AuthService:
         if payload.old_password == payload.new_password:
             raise ApiError(status_code=400, code=400, message="newPassword must be different from oldPassword")
 
-        token_hash = hash_token(current_refresh_token) if current_refresh_token else None
+        token_hash = hash_token(current_refresh_token, self.settings) if current_refresh_token else None
 
         async def _operation() -> None:
             await apply_local_lock_timeout(self.db)
@@ -801,10 +833,11 @@ class AuthService:
 
     async def _create_email_verification_token(self, *, user_id: int, now: datetime) -> str:
         token = secrets.token_urlsafe(32)
+        await self._invalidate_active_verification_tokens(user_id=user_id, now=now)
         self.db.add(
             EmailVerificationToken(
                 user_id=user_id,
-                token_hash=hash_token(token),
+                token_hash=hash_token(token, self.settings),
                 expire_at=now + timedelta(minutes=self.settings.email_verification_expire_minutes),
             )
         )
@@ -822,13 +855,63 @@ class AuthService:
         self.db.add(
             PasswordResetToken(
                 user_id=user_id,
-                token_hash=hash_token(token),
+                token_hash=hash_token(token, self.settings),
                 expire_at=now + timedelta(minutes=self.settings.password_reset_expire_minutes),
                 requester_ip=client_ip,
                 user_agent=user_agent,
             )
         )
         return token
+
+    async def _invalidate_active_verification_tokens(self, *, user_id: int, now: datetime) -> None:
+        rows = await self.db.scalars(
+            select(EmailVerificationToken)
+            .where(
+                and_(
+                    EmailVerificationToken.user_id == user_id,
+                    EmailVerificationToken.verified_at.is_(None),
+                    EmailVerificationToken.expire_at > now,
+                )
+            )
+            .with_for_update()
+        )
+        for row in rows:
+            row.verified_at = now
+
+    async def _send_verification_email_or_raise(
+        self,
+        *,
+        event_name: str,
+        email: str,
+        token: str,
+        expires_in_minutes: int,
+    ) -> None:
+        try:
+            await self.verification_email_delivery.send_verification_email(
+                email=email,
+                token=token,
+                expires_in_minutes=expires_in_minutes,
+            )
+        except (EmailDeliveryConfigurationError, EmailDeliveryError, ValueError) as exc:
+            await self.event_publisher.publish(
+                "auth.email_verification_delivery_failed",
+                {
+                    "eventName": event_name,
+                },
+            )
+            message = "Verification email service is unavailable"
+            if isinstance(exc, EmailDeliveryConfigurationError):
+                message = str(exc)
+            raise ApiError(
+                status_code=503,
+                code=503,
+                message=message,
+            ) from exc
+
+    @staticmethod
+    def _assert_token_length(*, token: str, minimum: int, message: str) -> None:
+        if len(token.strip()) < minimum:
+            raise ApiError(status_code=400, code=400, message=message)
 
     async def _get_user_preference(self, user_id: int) -> UserPreference | None:
         statement: Select[tuple[UserPreference]] = select(UserPreference).where(UserPreference.user_id == user_id)
