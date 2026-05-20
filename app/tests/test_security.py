@@ -32,8 +32,31 @@ def test_access_token_round_trip():
 
 
 def test_refresh_token_hash_is_deterministic():
+    settings = Settings(
+        JWT_SECRET_KEY="unit-test-secret-key-1234567890abcd",
+        FF_DB_URI="postgresql://u:p@localhost:5432/db",
+    )
     refresh_token = create_refresh_token()
-    token_hash_1 = hash_token(refresh_token)
-    token_hash_2 = hash_token(refresh_token)
+    token_hash_1 = hash_token(refresh_token, settings)
+    token_hash_2 = hash_token(refresh_token, settings)
     assert token_hash_1 == token_hash_2
     assert len(token_hash_1) == 64
+
+
+def test_refresh_token_hash_changes_with_different_secret():
+    token = "same-token-value"
+    settings_a = Settings(
+        JWT_SECRET_KEY="unit-test-secret-key-1234567890abcd",
+        TOKEN_HASH_SECRET="token-secret-A",
+        FF_DB_URI="postgresql://u:p@localhost:5432/db",
+    )
+    settings_b = Settings(
+        JWT_SECRET_KEY="unit-test-secret-key-1234567890abcd",
+        TOKEN_HASH_SECRET="token-secret-B",
+        FF_DB_URI="postgresql://u:p@localhost:5432/db",
+    )
+
+    hash_a = hash_token(token, settings_a)
+    hash_b = hash_token(token, settings_b)
+
+    assert hash_a != hash_b

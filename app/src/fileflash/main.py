@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    settings.assert_runtime_security()
+    mail_issues = list(settings.mail_configuration_issues)
+    logger.info(
+        "Mail delivery readiness: configured=%s, issues=%s",
+        settings.is_mail_configured,
+        mail_issues,
+    )
     await verify_database_connection()
     await verify_schema_compatibility()
     try:

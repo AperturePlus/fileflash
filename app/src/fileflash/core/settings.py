@@ -3,6 +3,8 @@ from __future__ import annotations
 from functools import lru_cache
 from os import cpu_count
 from pathlib import Path
+from typing import ClassVar
+from urllib.parse import urlsplit
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,6 +16,8 @@ def _default_worker_concurrency() -> int:
 
 
 class Settings(BaseSettings):
+    MIN_SECRET_LENGTH: ClassVar[int] = 32
+
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).resolve().parents[3] / ".env"),
         env_file_encoding="utf-8",
@@ -31,6 +35,7 @@ class Settings(BaseSettings):
         default="change-this-in-production-please-use-32-plus-bytes",
         alias="JWT_SECRET_KEY",
     )
+    token_hash_secret: str | None = Field(default=None, alias="TOKEN_HASH_SECRET")
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 3
     refresh_token_expire_days: int = 7
@@ -44,6 +49,17 @@ class Settings(BaseSettings):
 
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
     rabbitmq_url: str | None = Field(default=None, alias="RABBITMQ_URL")
+
+    email_verify_base_url: str = Field(default="", alias="EMAIL_VERIFY_BASE_URL")
+    mail_from: str | None = Field(default=None, alias="MAIL_FROM")
+    mail_server: str | None = Field(default=None, alias="MAIL_SERVER")
+    mail_port: int = Field(default=587, alias="MAIL_PORT")
+    mail_username: str | None = Field(default=None, alias="MAIL_USERNAME")
+    mail_password: str | None = Field(default=None, alias="MAIL_PASSWORD")
+    mail_starttls: bool = Field(default=True, alias="MAIL_STARTTLS")
+    mail_ssl_tls: bool = Field(default=False, alias="MAIL_SSL_TLS")
+    mail_use_credentials: bool = Field(default=True, alias="MAIL_USE_CREDENTIALS")
+    mail_validate_certs: bool = Field(default=True, alias="MAIL_VALIDATE_CERTS")
 
     object_storage_endpoint: str = Field(default="localhost:9000", alias="OBJECT_STORAGE_ENDPOINT")
     object_storage_access_key: str = Field(default="admin", alias="OBJECT_STORAGE_ACCESS_KEY")
@@ -154,6 +170,28 @@ class Settings(BaseSettings):
         return self.refresh_token_expire_days * 24 * 60 * 60
 
     @property
+    def effective_token_hash_secret(self) -> str:
+        secret = (self.token_hash_secret or "").strip()
+        if secret:
+            return secret
+        return self.jwt_secret_key
+
+    @property
+    def security_configuration_issues(self) -> tuple[str, ...]:
+        issues: list[str] = []
+        if len(self.jwt_secret_key.encode("utf-8")) < self.MIN_SECRET_LENGTH:
+            issues.append(f"JWT_SECRET_KEY must be at least {self.MIN_SECRET_LENGTH} bytes")
+        token_hash_secret = (self.token_hash_secret or "").strip()
+        if token_hash_secret and len(token_hash_secret.encode("utf-8")) < self.MIN_SECRET_LENGTH:
+            issues.append(f"TOKEN_HASH_SECRET must be at least {self.MIN_SECRET_LENGTH} bytes")
+        return tuple(issues)
+
+    def assert_runtime_security(self) -> None:
+        issues = self.security_configuration_issues
+        if issues:
+            raise ValueError("; ".join(issues))
+
+    @property
     def worker_retry_backoff_schedule(self) -> tuple[int, ...]:
         values: list[int] = []
         for item in self.worker_retry_backoff_seconds.split(","):
@@ -185,6 +223,45 @@ class Settings(BaseSettings):
     @property
     def is_production_env(self) -> bool:
         return self.normalized_app_env in {"prod", "production"}
+
+    @property
+    def normalized_email_verify_base_url(self) -> str:
+        base_url = self.email_verify_base_url.strip()
+        if not base_url and self.is_development_env:
+            base_url = "http://localhost:8080"
+        if base_url and "://" not in base_url:
+            base_url = f"http://{base_url}"
+        return base_url.rstrip("/")
+
+    @property
+    def mail_configuration_issues(self) -> tuple[str, ...]:
+        issues: list[str] = []
+        if self.mail_port <= 0:
+            issues.append("MAIL_PORT must be a positive integer")
+        base_url = self.normalized_email_verify_base_url
+        if not base_url:
+            issues.append("EMAIL_VERIFY_BASE_URL is required")
+        parsed_base_url = urlsplit(base_url) if base_url else None
+        if parsed_base_url and parsed_base_url.scheme not in {"http", "https"}:
+            issues.append("EMAIL_VERIFY_BASE_URL must start with http:// or https://")
+        if parsed_base_url and not parsed_base_url.netloc:
+            issues.append("EMAIL_VERIFY_BASE_URL must include host")
+        if not (self.mail_from or "").strip():
+            issues.append("MAIL_FROM is required")
+        if not (self.mail_server or "").strip():
+            issues.append("MAIL_SERVER is required")
+        if self.mail_ssl_tls and self.mail_starttls:
+            issues.append("MAIL_SSL_TLS and MAIL_STARTTLS cannot both be true")
+        if self.mail_use_credentials:
+            if not (self.mail_username or "").strip():
+                issues.append("MAIL_USERNAME is required when MAIL_USE_CREDENTIALS=true")
+            if not (self.mail_password or "").strip():
+                issues.append("MAIL_PASSWORD is required when MAIL_USE_CREDENTIALS=true")
+        return tuple(issues)
+
+    @property
+    def is_mail_configured(self) -> bool:
+        return len(self.mail_configuration_issues) == 0
 
     @property
     def agent_mcp_endpoints(self) -> tuple[str, ...]:

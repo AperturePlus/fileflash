@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -26,8 +27,9 @@ def create_refresh_token() -> str:
     return secrets.token_urlsafe(48)
 
 
-def hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+def hash_token(token: str, settings: Settings) -> str:
+    secret = settings.effective_token_hash_secret.encode("utf-8")
+    return hmac.new(secret, token.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def create_access_token(user_id: int, settings: Settings) -> str:

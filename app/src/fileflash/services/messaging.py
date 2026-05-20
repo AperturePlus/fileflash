@@ -23,5 +23,6 @@ class AuthEventPublisher(Protocol):
 class InProcessAuthEventPublisher:
     async def publish(self, event_name: str, payload: Mapping[str, object]) -> None:
         event = AuthEvent(name=event_name, payload=payload, created_at=datetime.now(UTC))
-        logger.info("Auth event published in-process: %s %s", event.name, dict(event.payload))
+        logger.info("Auth event published in-process: %s", event.name)
+        _ = event.payload
 
