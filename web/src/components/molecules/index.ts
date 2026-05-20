@@ -14,3 +14,4 @@ export { default as SegmentedControl } from './SegmentedControl.vue';
 export type { SegmentedOption } from './SegmentedControl.vue';
 export { default as Toolbar } from './Toolbar.vue';
 export { default as Avatar } from './Avatar.vue';
+export { default as Modal } from './Modal.vue';
