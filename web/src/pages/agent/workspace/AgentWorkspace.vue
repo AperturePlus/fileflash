@@ -65,17 +65,22 @@ const onHint = (text: string) => { taskInput.value = text; sendMessage(); };
 .aw {
   display: grid;
   grid-template-columns: 240px 1fr 320px;
+  width: 100%;
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   background: var(--surface-base);
 }
-.aw__left { min-height: 0; }
+.aw__left { min-height: 0; min-width: 0; }
 .aw__center {
   display: flex; flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   border-right: 1px solid var(--border-default);
 }
-.aw__right { min-height: 0; }
+.aw__right { min-height: 0; min-width: 0; }
 
 @media (max-width: 1280px) {
   .aw { grid-template-columns: 240px 1fr; }

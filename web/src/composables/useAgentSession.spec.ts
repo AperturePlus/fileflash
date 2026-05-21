@@ -66,6 +66,48 @@ describe('useAgentSession', () => {
     expect(JSON.parse(stored!).length).toBe(1);
   });
 
+  it('createSession reuses existing empty session and does not grow list', async () => {
+    const { default: useAgentSession } = await loadComposable();
+    const { sessions, activeSessionId, createSession } = useAgentSession();
+    const first = createSession();
+    const second = createSession();
+
+    expect(sessions.value.length).toBe(1);
+    expect(second.id).toBe(first.id);
+    expect(activeSessionId.value).toBe(first.id);
+  });
+
+  it('createSession creates new only when there is no empty session', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'succeeded',
+      result: planResult,
+    } as any);
+
+    const { default: useAgentSession } = await loadComposable();
+    const { sessions, taskInput, sendMessage, createSession } = useAgentSession();
+
+    createSession();
+    taskInput.value = 'hello';
+    await sendMessage();
+
+    expect(sessions.value.length).toBe(1);
+    const firstId = sessions.value[0].id;
+
+    const created = createSession();
+    expect(sessions.value.length).toBe(2);
+    expect(created.id).not.toBe(firstId);
+
+    const reused = createSession();
+    expect(sessions.value.length).toBe(2);
+    expect(reused.id).toBe(created.id);
+  });
+
   it('sendMessage plans and polls to succeeded', async () => {
     vi.mocked(agentApi.planAgentTask).mockResolvedValue({
       jobId: 'job-1',
@@ -163,5 +205,24 @@ describe('useAgentSession', () => {
     const b = useAgentSession();
     expect(b.sessions.value.length).toBe(1);
     expect(b.sessions.value[0].title).toBe('TestRun');
+  });
+
+  it('reload deduplicates multiple empty sessions from localStorage', async () => {
+    const now = '2026-05-20T00:00:00Z';
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        { id: 's-1', title: 'New session', messages: [], createdAt: now, updatedAt: now },
+        { id: 's-2', title: 'New session', messages: [], createdAt: now, updatedAt: now },
+      ]),
+    );
+
+    const { default: useAgentSession } = await loadComposable();
+    const { sessions, activeSessionId } = useAgentSession();
+
+    expect(sessions.value.length).toBe(1);
+    expect(sessions.value[0].id).toBe('s-1');
+    expect(activeSessionId.value).toBe('s-1');
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')).toHaveLength(1);
   });
 });

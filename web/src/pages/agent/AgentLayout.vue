@@ -25,9 +25,11 @@ const onTab = (v: string | number) =>
       <span class="agent-layout__brand">[ FILEFLASH · AGENT ]</span>
       <SegmentedControl :model-value="currentTab" :options="TABS" @update:model-value="onTab" />
     </header>
-    <router-view v-slot="{ Component }">
-      <Transition name="page-fade" mode="out-in"><component :is="Component" /></Transition>
-    </router-view>
+    <div class="agent-layout__body">
+      <router-view v-slot="{ Component }">
+        <Transition name="page-fade" mode="out-in"><component :is="Component" class="agent-layout__page" /></Transition>
+      </router-view>
+    </div>
   </div>
 </template>
 
@@ -43,6 +45,8 @@ const onTab = (v: string | number) =>
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }
+.agent-layout__body { flex: 1; min-height: 0; display: flex; }
+.agent-layout__page { flex: 1; min-height: 0; }
 .page-fade-enter-active, .page-fade-leave-active { transition: opacity 180ms var(--mo-easing); }
 .page-fade-enter-from, .page-fade-leave-to { opacity: 0; }
 </style>

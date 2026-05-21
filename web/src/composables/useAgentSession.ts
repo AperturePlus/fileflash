@@ -47,6 +47,8 @@ const STORAGE_KEY = 'fileflash.agent.sessions.v1';
 const isTerminalStatus = (s?: string | null) =>
   s === 'succeeded' || s === 'failed' || s === 'canceled';
 
+const isEmptySession = (session: Session) => session.messages.length === 0;
+
 const toTurns = (messages: ChatMessage[]): AgentTurn[] => {
   const out: AgentTurn[] = [];
   let i = 0;
@@ -63,15 +65,44 @@ const toTurns = (messages: ChatMessage[]): AgentTurn[] => {
   return out;
 };
 
-const loadSessions = (): Session[] => {
+const normalizeSessions = (value: unknown): Session[] => {
+  if (!Array.isArray(value)) return [];
+  const out: Session[] = [];
+  let keptEmpty = false;
+
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const record = raw as Record<string, unknown>;
+    if (typeof record.id !== 'string' || !Array.isArray(record.messages)) continue;
+
+    const now = new Date().toISOString();
+    const session: Session = {
+      id: record.id,
+      title: typeof record.title === 'string' ? record.title : 'New session',
+      messages: record.messages as ChatMessage[],
+      createdAt: typeof record.createdAt === 'string' ? record.createdAt : now,
+      updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : now,
+    };
+
+    if (isEmptySession(session)) {
+      if (keptEmpty) continue;
+      keptEmpty = true;
+    }
+    out.push(session);
+  }
+  return out;
+};
+
+const loadSessions = (): { sessions: Session[]; shouldPersist: boolean } => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return { sessions: [], shouldPersist: false };
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((s) => s && typeof s.id === 'string' && Array.isArray(s.messages));
+    const sessions = normalizeSessions(parsed);
+    const shouldPersist = JSON.stringify(parsed) !== JSON.stringify(sessions);
+    return { sessions, shouldPersist };
   } catch {
-    return [];
+    return { sessions: [], shouldPersist: false };
   }
 };
 
@@ -101,7 +132,8 @@ let _state: SessionState | null = null;
 
 const getState = (): SessionState => {
   if (_state) return _state;
-  const sessions = ref<Session[]>(loadSessions());
+  const loaded = loadSessions();
+  const sessions = ref<Session[]>(loaded.sessions);
   const activeSessionId = ref<string | null>(sessions.value[0]?.id ?? null);
   const policy = ref<AgentExecutionPolicy>('confirm');
   const taskInput = ref<string>('');
@@ -109,6 +141,7 @@ const getState = (): SessionState => {
   const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
 
   watch(sessions, (v) => persistSessions(v), { deep: true });
+  if (loaded.shouldPersist) persistSessions(sessions.value);
 
   _state = { sessions, activeSessionId, policy, taskInput, isSending, pollTimers };
   return _state;
@@ -164,6 +197,14 @@ export default function useAgentSession() {
   };
 
   const createSession = () => {
+    const empty = s.sessions.value.find(isEmptySession);
+    if (empty) {
+      stopAllPolling();
+      s.activeSessionId.value = empty.id;
+      s.taskInput.value = '';
+      return empty;
+    }
+
     const id = nextSessionId();
     const now = new Date().toISOString();
     const session: Session = {
