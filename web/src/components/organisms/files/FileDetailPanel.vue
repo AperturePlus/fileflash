@@ -14,7 +14,6 @@ import type { FileItem } from '../../../types/file';
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const props = defineProps<{ file: FileItem | null }>();
-const emit = defineEmits<{ (e: 'close'): void }>();
 
 const isLoading = ref(false);
 const isPdfRendering = ref(false);
@@ -373,7 +372,6 @@ onUnmounted(() => {
           <h3 class="detail__filename" :title="file.name">{{ file.name }}</h3>
           <p class="detail__meta">{{ selectedMime || 'unknown type' }} | {{ formatBytes(file.size) }}</p>
         </div>
-        <button class="detail__close" @click="emit('close')" aria-label="Close preview panel">x</button>
       </header>
 
       <div class="detail__actions">
@@ -471,7 +469,6 @@ onUnmounted(() => {
   font-size: var(--text-small);
 }
 
-.detail__close,
 .detail__action,
 .detail__pdf-btn {
   height: var(--row-h);
@@ -485,12 +482,6 @@ onUnmounted(() => {
   transition: background-color var(--mo-duration-fast) var(--mo-easing), color var(--mo-duration-fast) var(--mo-easing);
 }
 
-.detail__close {
-  width: var(--row-h);
-  padding: 0;
-}
-
-.detail__close:hover,
 .detail__action:hover,
 .detail__pdf-btn:hover:not(:disabled) {
   background: var(--surface-inset);

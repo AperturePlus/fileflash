@@ -54,7 +54,7 @@ const onOverlayClick = (ev: MouseEvent) => {
           &times;
         </button>
         <div class="file-preview-dialog__body">
-          <FileDetailPanel :file="file" @close="emit('close')" />
+          <FileDetailPanel :file="file" />
         </div>
       </div>
     </div>

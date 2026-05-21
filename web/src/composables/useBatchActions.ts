@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 import { batchDownloadFiles, batchFiles } from '../api/file';
 import { useFileStore } from '../store/file';
+import { useLocaleStore } from '../store/locale';
 import { useSettingsStore } from '../store/settings';
 import { ui } from '../utils/ui';
 
@@ -10,6 +11,8 @@ export function useBatchActions(
 ) {
   const fileStore = useFileStore();
   const settingsStore = useSettingsStore();
+  const localeStore = useLocaleStore();
+  const t = localeStore.t;
 
   const handleBatchDownload = async () => {
     if (selectedItems.value.size === 0) return;
@@ -37,12 +40,15 @@ export function useBatchActions(
       a.remove();
       window.URL.revokeObjectURL(url);
       clearSelection();
-      ui.toast({ type: 'success', message: `Downloaded ${selected.length} item(s).` });
+      ui.toast({
+        type: 'success',
+        message: t('files.batch.download.toast.success').replace('{count}', String(selected.length)),
+      });
     } catch (error) {
       console.error('Batch download failed:', error);
       ui.toast({
         type: 'error',
-        message: 'Failed to download selected files.',
+        message: t('files.batch.download.toast.failed'),
         duration: 4200,
       });
     }
@@ -53,9 +59,9 @@ export function useBatchActions(
 
     if (settingsStore.settings.confirmDelete) {
       const confirmed = await ui.confirm({
-        title: 'Move To Trash',
-        message: `Move ${selectedItems.value.size} selected item(s) to trash?`,
-        confirmText: 'Move',
+        title: t('files.batch.delete.confirm.title'),
+        message: t('files.batch.delete.confirm.message').replace('{count}', String(selectedItems.value.size)),
+        confirmText: t('files.batch.delete.confirm.confirmText'),
         danger: true,
       });
       if (!confirmed) return;
@@ -71,13 +77,16 @@ export function useBatchActions(
       const result = await batchFiles({ action: 'delete', fileIds, folderIds });
       if (!result) throw new Error('Delete failed');
       clearSelection();
-      await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root');
-      ui.toast({ type: 'success', message: `Moved ${idsToDelete.length} item(s) to trash.` });
+      await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root', { silent: true });
+      ui.toast({
+        type: 'success',
+        message: t('files.batch.delete.toast.success').replace('{count}', String(idsToDelete.length)),
+      });
     } catch (error) {
       console.error('Batch delete failed:', error);
       ui.toast({
         type: 'error',
-        message: 'Failed to move selected items to trash.',
+        message: t('files.batch.delete.toast.failed'),
         duration: 4200,
       });
     }

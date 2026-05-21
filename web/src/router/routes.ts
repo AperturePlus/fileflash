@@ -127,24 +127,24 @@ export const routes: Array<RouteRecordRaw> = [
         component: () => import("../pages/dashboard/index.ts"),
         meta: { navId: "dashboard", requiresAdmin: true },
       },
-    ],
-  },
-  {
-    path: "/agent",
-    component: AgentLayout,
-    meta: { requiresAuth: true, navId: "agent" },
-    children: [
       {
-        path: "",
-        name: "AgentWorkspace",
-        component: () => import("../pages/agent/workspace/index.ts"),
+        path: "agent",
+        component: AgentLayout,
         meta: { navId: "agent" },
-      },
-      {
-        path: "skills",
-        name: "AgentSkills",
-        component: () => import("../pages/agent/skills/index.ts"),
-        meta: { navId: "agent" },
+        children: [
+          {
+            path: "",
+            name: "AgentWorkspace",
+            component: () => import("../pages/agent/workspace/index.ts"),
+            meta: { navId: "agent" },
+          },
+          {
+            path: "skills",
+            name: "AgentSkills",
+            component: () => import("../pages/agent/skills/index.ts"),
+            meta: { navId: "agent" },
+          },
+        ],
       },
     ],
   },

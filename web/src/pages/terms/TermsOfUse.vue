@@ -9,7 +9,7 @@ const { locale } = storeToRefs(localeStore);
 
 const isZh = computed(() => locale.value === 'zh-CN');
 
-const LAST_UPDATED = '2026-05-11';
+const LAST_UPDATED = '2026-05-20';
 </script>
 
 <template>
@@ -128,6 +128,20 @@ const LAST_UPDATED = '2026-05-11';
             <h2>16. 联系我们</h2>
             <p>如你对本条款有任何疑问，请通过本服务内提供的支持/反馈渠道与我们联系。</p>
           </section>
+
+          <section>
+            <h2>17. Agent / 自动化任务（专项）</h2>
+            <p>本服务可能提供 Agent / 自动化任务能力，由你通过自然语言或预置技能（Skill）发起，并由本服务在你授权范围内代为执行一系列动作（例如读取/移动/重命名/删除文件等）。本节作为对前述条款的补充，规定 Agent 功能的使用规则。</p>
+            <ul>
+              <li><strong>17.1 执行策略。</strong>每次任务你可选择以下执行策略之一：<em>planOnly</em>（仅生成计划，不执行任何写动作）、<em>confirm</em>（生成计划后由你确认再执行）、<em>autopilot</em>（生成后自动执行）。在 autopilot 下，事先泛化授权的所有后果（包括不可逆操作）由你承担。</li>
+              <li><strong>17.2 计划的不可改性（plan hash）。</strong>每个计划在生成时附带不可改的 planHash；执行时本服务校验 planHash 一致才会执行——即"你批准的就是被执行的"。任何在确认与执行之间对计划的修改都会导致执行被拒绝。</li>
+              <li><strong>17.3 工具白名单与数据策略。</strong>Agent 只能调用对应 Skill 声明的工具白名单内的工具；可访问的数据范围受你在任务中传入的 dataPolicy 限制（例如是否允许读取文件内容、最大读取字节、允许的 MIME 类型等）。你理解上述限制可能影响任务结果质量。</li>
+              <li><strong>17.4 资源消耗。</strong>Agent 任务可能消耗 token、调用次数、存储与计算资源，并可能受套餐或系统配额限制。任务可在执行中被你取消，但已发生的资源消耗不可撤销。</li>
+              <li><strong>17.5 Skills 市场与自定义 Skill。</strong>全局 Skill 由部署方或管理员发布并审核；私有 Skill 由你自行创建、编辑、导入，其行为与合规性由你负责。请不要在 Skill 配置或 plan template 中包含敏感凭据、密钥或他人数据。导入他人提供的 Skill 前，请审阅其工具白名单与计划模板。</li>
+              <li><strong>17.6 AI 服务提供方。</strong>本服务的 Agent 实现可能由部署方配置使用第三方 AI 服务（例如大型语言模型 API）。若启用，你的任务指令、相关上下文及（在你的 dataPolicy 允许范围内的）文件内容可能被传输至该 AI 服务方进行处理。具体提供方、所在地区与数据使用条款取决于部署，详见隐私政策第 13 节。</li>
+              <li><strong>17.7 你对你批准的计划负责。</strong>Agent 执行的所有写动作均视为经你授权的操作。我们对因你批准的计划在你的内容上造成的结果（包括不可恢复的删除/移动/覆盖）不承担超出本条款责任限制范围的责任。对不可逆操作建议优先使用 confirm 策略。</li>
+            </ul>
+          </section>
         </template>
 
         <template v-else>
@@ -232,6 +246,20 @@ const LAST_UPDATED = '2026-05-11';
           <section>
             <h2>16. Contact</h2>
             <p>If you have any questions about these Terms, please contact us via the support/feedback channel available in the Service.</p>
+          </section>
+
+          <section>
+            <h2>17. Agent / Automated Tasks (Supplemental)</h2>
+            <p>The Service may provide Agent / automated-task capabilities, which you initiate via natural language or a preconfigured Skill and which the Service then executes on your behalf within the scope you authorize (for example: reading, moving, renaming, or deleting files). This section supplements the foregoing Terms and governs the use of Agent features.</p>
+            <ul>
+              <li><strong>17.1 Execution policy.</strong> For each task you may select one of the following execution policies: <em>planOnly</em> (generate a plan only, no write actions), <em>confirm</em> (generate a plan and execute only after you confirm), or <em>autopilot</em> (generate and execute automatically). Under autopilot, all consequences of pre-generalized authorization — including irreversible operations — are your responsibility.</li>
+              <li><strong>17.2 Plan immutability (planHash).</strong> Each plan carries an immutable planHash at generation time. At execution, the Service verifies that the planHash matches — i.e., "what you approved is what gets executed." Any modification to a plan between approval and execution will cause execution to be rejected.</li>
+              <li><strong>17.3 Tool whitelist and data policy.</strong> The Agent may only invoke tools listed in the corresponding Skill's tool whitelist. The data it can access is constrained by the dataPolicy you supply with each task (for example, whether file content may be read, the maximum read size in bytes, and allowed MIME types). You understand these constraints may affect task result quality.</li>
+              <li><strong>17.4 Resource consumption.</strong> Agent tasks may consume tokens, tool-call counts, storage, and compute resources, and may be subject to plan or system quotas. A task can be canceled during execution, but resources already consumed are not refundable.</li>
+              <li><strong>17.5 Skill marketplace and custom skills.</strong> Global Skills are published and reviewed by the deployer or administrators; private Skills are created, edited, and imported by you and you are responsible for their behavior and compliance. Do not include sensitive credentials, keys, or other parties' data in Skill configuration or plan templates. Review the tool whitelist and plan template of any third-party Skill before importing it.</li>
+              <li><strong>17.6 AI service providers.</strong> The Agent implementation may, depending on deployer configuration, use third-party AI services (for example, large language model APIs). If enabled, your task instructions, related context, and (within your dataPolicy limits) file content may be transmitted to that AI service for processing. The specific provider, region, and data-handling terms depend on the deployment; see Privacy Policy §13 for details.</li>
+              <li><strong>17.7 You are responsible for plans you approve.</strong> All write actions executed by the Agent are deemed authorized by you. We are not liable, beyond the limits in these Terms, for outcomes on Your Content resulting from plans you approved (including unrecoverable deletion, movement, or overwrite). For irreversible operations we recommend using the confirm policy.</li>
+            </ul>
           </section>
         </template>
       </div>

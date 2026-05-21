@@ -9,6 +9,7 @@ import { createShare, getShares, updateShareSettings } from '../../api/share';
 import { getUsers } from '../../api/user';
 import { getUserGroups } from '../../api/usergroup';
 import { createPermission, deletePermission, getPermissions, updatePermission } from '../../api/permission';
+import { useLocaleStore } from '../../store/locale';
 import { ui } from '../../utils/ui';
 
 interface Props {
@@ -18,6 +19,8 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits(['close']);
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const searchKeyword = ref('');
 const searchResults = ref<Collaborator[]>([]);
@@ -239,17 +242,17 @@ const saveShareSettings = async () => {
 	    hydrateShareSettings(updated);
 	    if (updated.settings.password) {
 	      shareSettings.value.password = updated.settings.password;
-	      settingsMessage.value = 'Password updated. Copy it now.';
+	      settingsMessage.value = t('share.dialog.settings.passwordUpdated');
 	    } else {
-	      settingsMessage.value = 'Share settings saved.';
+	      settingsMessage.value = t('share.dialog.settings.saved');
 	    }
 	  } catch (error) {
 	    console.error('Failed to save share settings', error);
-	    settingsMessage.value = 'Failed to save settings.';
+	    settingsMessage.value = t('share.dialog.settings.saveFailed');
 	  } finally {
 	    isSavingSettings.value = false;
 	  }
-	};
+		};
 
 const regeneratePassword = async () => {
   if (!currentShareLink.value) return;
@@ -264,27 +267,27 @@ const regeneratePassword = async () => {
     });
 
     hydrateShareSettings(updated);
-    if (updated.settings.password) {
-      shareSettings.value.password = updated.settings.password;
-    }
-    settingsMessage.value = 'New password generated. Copy it now.';
-  } catch (error) {
-    console.error('Failed to regenerate password', error);
-    settingsMessage.value = 'Failed to regenerate password.';
-  } finally {
-    isSavingSettings.value = false;
-  }
+	    if (updated.settings.password) {
+	      shareSettings.value.password = updated.settings.password;
+	    }
+	    settingsMessage.value = t('share.dialog.settings.regenerated');
+	  } catch (error) {
+	    console.error('Failed to regenerate password', error);
+	    settingsMessage.value = t('share.dialog.settings.regenerateFailed');
+	  } finally {
+	    isSavingSettings.value = false;
+	  }
 };
 
 const copyPassword = async () => {
   if (!shareSettings.value.password) return;
   try {
     await navigator.clipboard.writeText(shareSettings.value.password);
-    settingsMessage.value = 'Password copied.';
+    settingsMessage.value = t('share.dialog.settings.passwordCopied');
   } catch {
     await ui.copyText({
-      title: 'Copy Password',
-      message: 'Clipboard is unavailable. Copy this password manually:',
+      title: t('share.dialog.copyPassword.title'),
+      message: t('share.dialog.copyPassword.message'),
       text: shareSettings.value.password,
     });
   }
@@ -299,11 +302,11 @@ const copyLink = async () => {
 
   try {
     await navigator.clipboard.writeText(publicLink.value);
-    settingsMessage.value = 'Link copied.';
+    settingsMessage.value = t('share.dialog.settings.linkCopied');
   } catch {
     await ui.copyText({
-      title: 'Copy Link',
-      message: 'Clipboard is unavailable. Copy this link manually:',
+      title: t('share.dialog.copyLink.title'),
+      message: t('share.dialog.copyLink.message'),
       text: publicLink.value,
     });
   }
@@ -328,7 +331,7 @@ watch(publicLinkEnabled, (enabled) => {
   }
 
   if (!enabled) {
-    settingsMessage.value = 'Public link hidden in this dialog. Existing links are kept.';
+    settingsMessage.value = t('share.dialog.publicHiddenNotice');
   }
 });
 
@@ -348,52 +351,52 @@ watch(
       <div class="modal-dialog">
         <header class="modal-header">
           <div>
-            <h3 class="modal-title">Share: {{ itemToShare?.name }}</h3>
-            <p class="subtitle">Manage collaborator permissions and public link access.</p>
+            <h3 class="modal-title">{{ t('share.dialog.title').replace('{itemName}', itemToShare?.name || '') }}</h3>
+            <p class="subtitle">{{ t('share.dialog.subtitle') }}</p>
           </div>
-          <button class="modal-close" @click="$emit('close')" aria-label="Close dialog">x</button>
+          <button class="modal-close" @click="$emit('close')" :aria-label="t('share.dialog.close')">x</button>
         </header>
 
         <div class="modal-body">
           <section class="section">
-            <h4>Collaborator Permissions</h4>
+            <h4>{{ t('share.dialog.section.collaborators') }}</h4>
 
             <div class="search-box">
               <input
                 v-model="searchKeyword"
                 type="text"
-                placeholder="Search users or groups"
+                :placeholder="t('share.dialog.searchPlaceholder')"
                 @input="debouncedSearch(searchKeyword)"
               />
-              <div v-if="isSearching" class="hint">Searching...</div>
+              <div v-if="isSearching" class="hint">{{ t('share.dialog.searching') }}</div>
             </div>
 
             <div v-if="searchResults.length" class="search-list">
               <button v-for="result in searchResults" :key="`${result.type}-${result.id}`" class="search-item" @click="addCollaborator(result)">
                 <span>{{ result.name }}</span>
-                <small>{{ result.type === 'user' ? result.email : 'User group' }}</small>
+                <small>{{ result.type === 'user' ? result.email : t('share.dialog.result.userGroup') }}</small>
               </button>
             </div>
 
-            <div v-if="!collaborators.length" class="empty-hint">No collaborators configured.</div>
+            <div v-if="!collaborators.length" class="empty-hint">{{ t('share.dialog.emptyCollaborators') }}</div>
 
             <div v-else class="collaborator-list">
               <div v-for="collaborator in collaborators" :key="collaborator.permissionId || `${collaborator.type}-${collaborator.id}`" class="collaborator-item">
                 <div class="collaborator-meta">
                   <strong>{{ collaborator.name }}</strong>
-                  <small>{{ collaborator.type === 'user' ? collaborator.email || 'User' : 'Group' }}</small>
+                  <small>{{ collaborator.type === 'user' ? collaborator.email || t('share.dialog.collaborator.user') : t('share.dialog.collaborator.group') }}</small>
                 </div>
 
                 <select
                   :value="collaborator.permission"
                   @change="changePermission(collaborator, ($event.target as HTMLSelectElement).value as 'read' | 'write' | 'admin')"
                 >
-                  <option value="read">Read</option>
-                  <option value="write">Write</option>
-                  <option value="admin">Admin</option>
+                  <option value="read">{{ t('share.dialog.permission.read') }}</option>
+                  <option value="write">{{ t('share.dialog.permission.write') }}</option>
+                  <option value="admin">{{ t('share.dialog.permission.admin') }}</option>
                 </select>
 
-                <button class="remove-btn" @click="removeCollaborator(collaborator)">Remove</button>
+                <button class="remove-btn" @click="removeCollaborator(collaborator)">{{ t('share.dialog.remove') }}</button>
               </div>
             </div>
           </section>
@@ -401,8 +404,8 @@ watch(
           <section class="section public-share">
             <div class="public-head">
               <div>
-                <h4>Public Link</h4>
-                <p>Configure password, expiry date, and download/preview permissions.</p>
+                <h4>{{ t('share.dialog.section.publicLink') }}</h4>
+                <p>{{ t('share.dialog.publicDescription') }}</p>
               </div>
 
               <label class="switch">
@@ -412,56 +415,56 @@ watch(
             </div>
 
             <div v-if="publicLinkEnabled" class="public-content">
-              <div v-if="isCreatingShare" class="hint">Generating link...</div>
+              <div v-if="isCreatingShare" class="hint">{{ t('share.dialog.generatingLink') }}</div>
               <template v-else>
                 <div class="link-row">
                   <input type="text" :value="publicLink" readonly />
-                  <button @click="copyLink">Copy</button>
+                  <button @click="copyLink">{{ t('share.dialog.copy') }}</button>
                 </div>
 
-	                <div class="settings-grid">
-	                  <label class="setting-check">
-	                    <input v-model="shareSettings.passwordProtected" type="checkbox" />
-	                    <span>Password protected</span>
+		                <div class="settings-grid">
+		                  <label class="setting-check">
+		                    <input v-model="shareSettings.passwordProtected" type="checkbox" />
+		                    <span>{{ t('share.dialog.passwordProtected') }}</span>
+		                  </label>
+		                  <div v-if="shareSettings.passwordProtected" class="password-row">
+		                    <input v-model="shareSettings.password" type="text" :placeholder="t('share.dialog.passwordPlaceholder')" />
+		                    <button type="button" class="ghost-btn" :disabled="isSavingSettings" @click="regeneratePassword">
+		                      {{ t('share.dialog.regenerate') }}
+		                    </button>
+		                    <button v-if="shareSettings.password" type="button" class="ghost-btn" @click="copyPassword">{{ t('share.dialog.copy') }}</button>
+		                  </div>
+		                  <label class="setting-check">
+		                    <input v-model="shareSettings.allowDownload" type="checkbox" />
+		                    <span>{{ t('share.dialog.allowDownload') }}</span>
+		                  </label>
+		                  <label class="setting-check">
+	                    <input v-model="shareSettings.allowPreview" type="checkbox" />
+	                    <span>{{ t('share.dialog.allowPreview') }}</span>
 	                  </label>
-	                  <div v-if="shareSettings.passwordProtected" class="password-row">
-	                    <input v-model="shareSettings.password" type="text" placeholder="Leave blank to auto-generate" />
-	                    <button type="button" class="ghost-btn" :disabled="isSavingSettings" @click="regeneratePassword">
-	                      Regenerate
-	                    </button>
-	                    <button v-if="shareSettings.password" type="button" class="ghost-btn" @click="copyPassword">Copy</button>
+
+	                  <div class="setting-date-row">
+	                    <label for="share-expire-date">{{ t('share.dialog.expireDate') }}</label>
+	                    <div class="date-input-wrap">
+	                      <input id="share-expire-date" v-model="shareSettings.expireAt" type="date" />
+	                      <button type="button" class="ghost-btn" @click="clearExpireDate">{{ t('share.dialog.clear') }}</button>
+	                    </div>
 	                  </div>
-	                  <label class="setting-check">
-	                    <input v-model="shareSettings.allowDownload" type="checkbox" />
-	                    <span>Allow download</span>
-	                  </label>
-	                  <label class="setting-check">
-                    <input v-model="shareSettings.allowPreview" type="checkbox" />
-                    <span>Allow preview</span>
-                  </label>
+	                </div>
 
-                  <div class="setting-date-row">
-                    <label for="share-expire-date">Expire date</label>
-                    <div class="date-input-wrap">
-                      <input id="share-expire-date" v-model="shareSettings.expireAt" type="date" />
-                      <button type="button" class="ghost-btn" @click="clearExpireDate">Clear</button>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="settings-actions">
-                  <button class="save-btn" :disabled="isSavingSettings" @click="saveShareSettings">
-                    {{ isSavingSettings ? 'Saving...' : 'Save settings' }}
-                  </button>
-                  <span v-if="settingsMessage" class="hint">{{ settingsMessage }}</span>
-                </div>
+	                <div class="settings-actions">
+	                  <button class="save-btn" :disabled="isSavingSettings" @click="saveShareSettings">
+	                    {{ isSavingSettings ? t('share.dialog.saving') : t('share.dialog.saveSettings') }}
+	                  </button>
+	                  <span v-if="settingsMessage" class="hint">{{ settingsMessage }}</span>
+	                </div>
               </template>
             </div>
           </section>
         </div>
 
         <footer class="modal-footer">
-          <button class="done-btn" @click="$emit('close')">Done</button>
+          <button class="done-btn" @click="$emit('close')">{{ t('share.dialog.done') }}</button>
         </footer>
       </div>
     </div>

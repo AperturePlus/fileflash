@@ -111,7 +111,7 @@ export function useUpload(currentFolderId: Ref<string | null>) {
       } else {
         // If upload completes but no file data is returned (e.g. second upload),
         // refresh the folder to ensure consistency.
-        await fileStore.fetchFolderContents(currentFolderId.value || 'root');
+        await fileStore.fetchFolderContents(currentFolderId.value || 'root', { silent: true });
         if (settingsStore.settings.uploadCompleteNotification) {
           ui.toast({
             type: 'success',

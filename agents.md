@@ -12,13 +12,13 @@
 - 前端类型定义: `web/src/types`
 - 前端 mock: `web/src/mock/handlers` + `web/src/mock/state.ts`
 - 前端鉴权状态: `web/src/store/user.ts`
-- 后端入口: `app/src/main.py`
-- 后端路由: `app/src/routers`
-- 后端服务层: `app/src/services`
-- 后端依赖/鉴权: `app/src/core/deps.py`
-- 后端 schema: `app/src/schemas`
-- 后端模型: `app/src/models/tables_*.py`
-- 数据库会话: `app/src/db`
+- 后端入口: `app/src/fileflash/main.py`
+- 后端路由: `app/src/fileflash/routers`
+- 后端服务层: `app/src/fileflash/services`
+- 后端依赖/鉴权: `app/src/fileflash/core/deps.py`
+- 后端 schema: `app/src/fileflash/schemas`
+- 后端模型: `app/src/fileflash/models/tables_*.py`
+- 数据库会话: `app/src/fileflash/db`
 
 ## 3. 全局接口契约
 
@@ -75,7 +75,7 @@
   2. `web/src/api`
   3. `web/src/mock/handlers` + `web/src/mock/state.ts`
   4. 对应页面/store
-  5. 后端 `app/src/schemas` + `app/src/routers/services`
+  5. 后端 `app/src/fileflash/schemas` + `app/src/fileflash/routers/services`
 - 鉴权状态规则:
   - 仅持久化 `accessToken`（当前策略）
   - 刷新流程依赖 Cookie（`axios.withCredentials = true`）
@@ -103,7 +103,7 @@
 - 前端类型检查: `bun run check`（`web` 目录）
 - 前端构建: `bun run build`（`web` 目录）
 - 后端测试: `uv run pytest`（`app` 目录）
-- 后端启动冒烟: `uv run python -c "from src.main import app; print(app.title)"`（`app` 目录）
+- 后端启动冒烟: `uv run python -c "from fileflash.main import app; print(app.title)"`（`app` 目录）
 
 ## 10. 安全与配置要求
 

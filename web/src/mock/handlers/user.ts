@@ -1,5 +1,13 @@
 import Mock from 'mockjs';
-import { addLog, addNotification, getCurrentUser, mockLogs, mockUsers, paginate } from '../state';
+import {
+  addLog,
+  addNotification,
+  getCurrentUser,
+  mockLogs,
+  mockRegistrationEmailDomainRules,
+  mockUsers,
+  paginate,
+} from '../state';
 
 const profileGroups = [
   {
@@ -13,6 +21,27 @@ const profileGroups = [
     role: 'member' as const,
   },
 ];
+
+function extractDomain(email: string) {
+  const at = email.lastIndexOf('@');
+  if (at < 0) return '';
+  return email.slice(at + 1).trim().toLowerCase();
+}
+
+function isAllowedEmailDomain(email: string) {
+  const enabledRules = mockRegistrationEmailDomainRules.filter((item) => item.enabled);
+  if (!enabledRules.length) return false;
+  const domain = extractDomain(email);
+  if (!domain) return false;
+  return enabledRules.some((item) => {
+    try {
+      const regex = new RegExp(`^${item.pattern}$`);
+      return regex.test(domain);
+    } catch {
+      return false;
+    }
+  });
+}
 
 export const setupUserMocks = () => {
   Mock.mock(/\/api\/v1\/users(?:\?.*)?$/, 'get', (options) => {
@@ -151,6 +180,144 @@ export const setupUserMocks = () => {
     };
   });
 
+  Mock.mock(/\/api\/v1\/admin\/registration-email-domain-rules(?:\?.*)?$/, 'get', (options) => {
+    const url = new URL(options.url, 'http://localhost');
+    const page = Number(url.searchParams.get('page') || 1);
+    const perPage = Number(url.searchParams.get('perPage') || 20);
+    const queryText = (url.searchParams.get('queryText') || '').trim().toLowerCase();
+    const enabledRaw = url.searchParams.get('enabled');
+
+    let filtered = mockRegistrationEmailDomainRules.slice();
+    if (enabledRaw === 'true' || enabledRaw === 'false') {
+      const enabledValue = enabledRaw === 'true';
+      filtered = filtered.filter((item) => item.enabled === enabledValue);
+    }
+    if (queryText) {
+      filtered = filtered.filter((item) =>
+        item.name.toLowerCase().includes(queryText) || item.pattern.toLowerCase().includes(queryText),
+      );
+    }
+
+    return {
+      success: true,
+      code: 200,
+      data: paginate(filtered, page, perPage),
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/registration-email-domain-rules$/, 'post', (options) => {
+    const { name, pattern, enabled } = JSON.parse(options.body || '{}');
+    if (!name || !pattern) {
+      return {
+        success: false,
+        code: 400,
+        message: 'name and pattern are required',
+        data: null,
+      };
+    }
+
+    const duplicate = mockRegistrationEmailDomainRules.find(
+      (item) => item.name.toLowerCase() === String(name).toLowerCase(),
+    );
+    if (duplicate) {
+      return {
+        success: false,
+        code: 409,
+        message: 'Rule name already exists',
+        data: null,
+      };
+    }
+    try {
+      new RegExp(`^${String(pattern)}$`);
+    } catch {
+      return {
+        success: false,
+        code: 400,
+        message: 'Invalid regex pattern',
+        data: null,
+      };
+    }
+
+    const item = {
+      ruleId: String(Date.now()),
+      name: String(name),
+      pattern: String(pattern),
+      enabled: enabled !== false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockRegistrationEmailDomainRules.unshift(item);
+    addLog('admin_registration_email_domain_rule_create', { ruleId: item.ruleId });
+    return {
+      success: true,
+      code: 201,
+      data: item,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/registration-email-domain-rules\/([^/]+)$/, 'patch', (options) => {
+    const ruleId = (options.url.match(/\/api\/v1\/admin\/registration-email-domain-rules\/([^/]+)/) || [])[1];
+    const payload = JSON.parse(options.body || '{}');
+    const target = mockRegistrationEmailDomainRules.find((item) => item.ruleId === ruleId);
+    if (!target) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Rule not found',
+        data: null,
+      };
+    }
+    if (typeof payload.name === 'string' && payload.name.trim()) {
+      target.name = payload.name.trim();
+    }
+    if (typeof payload.pattern === 'string' && payload.pattern.trim()) {
+      try {
+        new RegExp(`^${payload.pattern.trim()}$`);
+      } catch {
+        return {
+          success: false,
+          code: 400,
+          message: 'Invalid regex pattern',
+          data: null,
+        };
+      }
+      target.pattern = payload.pattern.trim();
+    }
+    if (typeof payload.enabled === 'boolean') {
+      target.enabled = payload.enabled;
+    }
+    target.updatedAt = new Date().toISOString();
+    addLog('admin_registration_email_domain_rule_update', { ruleId: target.ruleId });
+    return {
+      success: true,
+      code: 200,
+      data: target,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/registration-email-domain-rules\/([^/]+)$/, 'delete', (options) => {
+    const ruleId = (options.url.match(/\/api\/v1\/admin\/registration-email-domain-rules\/([^/]+)/) || [])[1];
+    const index = mockRegistrationEmailDomainRules.findIndex((item) => item.ruleId === ruleId);
+    if (index < 0) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Rule not found',
+        data: null,
+      };
+    }
+    mockRegistrationEmailDomainRules.splice(index, 1);
+    addLog('admin_registration_email_domain_rule_delete', { ruleId });
+    return {
+      success: true,
+      code: 200,
+      data: {
+        ruleId,
+        deletedAt: new Date().toISOString(),
+      },
+    };
+  });
+
   Mock.mock(/\/api\/v1\/me\/profile$/, 'get', () => {
     const user = getCurrentUser();
 
@@ -181,7 +348,19 @@ export const setupUserMocks = () => {
     const user = getCurrentUser();
 
     if (username) user.username = username;
-    if (email) user.email = email;
+    if (email) {
+      if (!isAllowedEmailDomain(String(email))) {
+        return {
+          success: false,
+          code: 400,
+          message: '邮箱后缀不被允许，请更换邮箱',
+          data: null,
+        };
+      }
+      user.email = email;
+      user.emailVerified = false;
+      user.emailVerifiedAt = null;
+    }
 
     return {
       success: true,

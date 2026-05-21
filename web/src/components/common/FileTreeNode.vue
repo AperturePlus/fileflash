@@ -8,9 +8,11 @@ import folderIcon from '../../assets/generic/folder.svg';
 const props = defineProps<{
   node: ContentItem;
   level: number;
+  selectFolders?: boolean;
+  selectedNodeId?: string | null;
 }>();
 
-const emit = defineEmits(['drop-on-folder', 'navigate']);
+const emit = defineEmits(['drop-on-folder', 'navigate', 'select-folder']);
 
 const isExpanded = ref(false);
 const isLoading = ref(false);
@@ -18,6 +20,7 @@ const children = ref<ContentItem[]>([]);
 const isDragOver = ref(false);
 
 const isFolder = computed(() => props.node.itemType === 'folder');
+const isSelected = computed(() => props.selectedNodeId === props.node.id);
 
 const toggleExpand = async () => {
   if (!isFolder.value) return;
@@ -86,6 +89,10 @@ const handleDragOver = (e: DragEvent) => {
 
 const handleClick = () => {
   if (isFolder.value) {
+    if (props.selectFolders) {
+      emit('select-folder', props.node.id);
+      return;
+    }
     toggleExpand();
   } else {
     emit('navigate', props.node.id)
@@ -97,7 +104,7 @@ const handleClick = () => {
   <div class="tree-node">
     <div 
       class="node-content"
-      :class="{ 'drag-over': isDragOver, 'folder': isFolder }"
+      :class="{ 'drag-over': isDragOver, 'folder': isFolder, 'selected': isSelected }"
       :style="{ 'padding-left': `${level * 20}px` }"
       @click.stop="handleClick"
       @drop="handleDrop"
@@ -107,7 +114,12 @@ const handleClick = () => {
       @dragenter="isFolder && (isDragOver = true)"
       @dragleave="isDragOver = false"
     >
-      <span v-if="isFolder" class="arrow" :class="{ expanded: isExpanded }">
+      <span
+        v-if="isFolder"
+        class="arrow"
+        :class="{ expanded: isExpanded }"
+        @click.stop="toggleExpand"
+      >
         <svg viewBox="0 0 24 24"><path fill="currentColor" d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
       </span>
       <span v-else class="arrow-placeholder"></span>
@@ -121,8 +133,11 @@ const handleClick = () => {
         :key="childNode.id"
         :node="childNode"
         :level="level + 1"
+        :select-folders="selectFolders"
+        :selected-node-id="selectedNodeId"
         @drop-on-folder="(data) => emit('drop-on-folder', data)"
         @navigate="(fileId) => emit('navigate', fileId)"
+        @select-folder="(folderId) => emit('select-folder', folderId)"
       />
     </div>
   </div>
@@ -149,6 +164,10 @@ const handleClick = () => {
 }
 .node-content:hover {
   background-color: var(--color-bg-tertiary);
+}
+.node-content.selected {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
 }
 .node-content.drag-over {
     background-color: var(--color-primary-light);

@@ -87,7 +87,7 @@ export const uploadChunk = (uploadId: string, chunk: File, chunkIndex: number) =
  * @returns 合并后的文件信息
  */
 export const mergeChunks = (uploadId: string, data: MergeChunksRequest) => {
-  return http.post<MergeChunksResponse>(`/uploads/${uploadId}/merge`, data);
+  return http.post<BackgroundJob<MergeChunksResponse>>(`/uploads/${uploadId}/merge`, data);
 };
 
 // Archive preview/extract APIs

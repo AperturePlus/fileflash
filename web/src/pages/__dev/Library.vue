@@ -3,13 +3,24 @@ import { ref } from 'vue';
 import * as A from '../../components/atoms';
 import * as M from '../../components/molecules';
 import * as F from '../../components/organisms/files';
+import * as Sh from '../../components/organisms/sharing';
+import * as Tr from '../../components/organisms/trash';
+import * as Sa from '../../components/organisms/share';
+import * as Ag from '../../components/organisms/agent';
+import { AuthForm } from '../../components/organisms/auth';
+import type { AuthSubmitPayload } from '../../components/organisms/auth';
 import { useFilePreview } from '../../composables/useFilePreview';
 import type { FileItem } from '../../types/file';
+import type { AgentTurn, Session } from '../../composables/useAgentSession';
+import type { AgentSkillItem, ImportAgentSkillResult } from '../../types/skill';
 
 const sections = [
   'Tokens', 'Atoms · Text', 'Atoms · Numbers', 'Atoms · Visual', 'Atoms · Form',
   'Molecules · Action', 'Molecules · Input', 'Molecules · Display', 'Molecules · Nav',
-  'Organisms · Files',
+  'Molecules · Forms',
+  'Organisms · Files', 'Organisms · Sharing', 'Organisms · Trash', 'Organisms · Share',
+  'Organisms · Auth',
+  'Organisms · Agent',
 ] as const;
 type Section = typeof sections[number];
 
@@ -45,6 +56,56 @@ const filesSearch = ref('');
 const filesSelection = ref(new Set<string>(['demo-a']));
 const filesRenamingId = ref<string | null>(null);
 const filesRenameValue = ref('');
+
+// Sharing / Trash / Share demo state
+const sharedSelection = ref(new Set<string>());
+const sharedDemoItems = [
+  { itemType: 'file' as const, id: 's1', name: 'plan.docx', size: 4096, sharedBy: 'alice', permission: 'read' as const, sharedAt: '2026-05-09T10:00:00Z' },
+  { itemType: 'folder' as const, id: 's2', name: 'designs', size: 0, sharedBy: 'bob', permission: 'write' as const, sharedAt: '2026-05-08T12:30:00Z' },
+];
+const linksDemoItems = [
+  { shareId: 'l1', shareLink: 'abc123', itemType: 'file' as const, itemInfo: { id: 'f1', name: 'report.pdf', size: 1024, mimeType: 'application/pdf' }, settings: { passwordProtected: false, expireAt: null, allowDownload: true, allowPreview: true }, createdAt: '2026-05-01T00:00:00Z', visitCount: 12, downloadCount: 4 },
+];
+const trashDemoItems = [
+  { itemType: 'file' as const, id: 't1', name: 'draft.md', originalPath: '/notes', size: 200, deletedAt: '2026-05-09T18:00:00Z', autoDeleteAt: '2026-06-08T18:00:00Z', daysUntilPermanentDelete: 27, canRestore: true, restoreConflicts: false },
+  { itemType: 'file' as const, id: 't2', name: 'expired.zip', originalPath: '/archives', size: 1024, deletedAt: '2026-05-05T08:00:00Z', autoDeleteAt: '2026-05-15T08:00:00Z', daysUntilPermanentDelete: 3, canRestore: false, restoreConflicts: true },
+];
+const shareDemo = { shareId: 's', shareLink: 'xyz789', itemType: 'file' as const, itemInfo: { id: 'f', name: 'big-report.pdf', size: 1_245_184, mimeType: 'application/pdf' }, settings: { passwordProtected: true, expireAt: '2026-12-01', allowDownload: true, allowPreview: true }, createdAt: '2026-05-01T00:00:00Z' };
+const sharePassword = ref('');
+
+// Auth organism demo
+const authMode = ref<'login' | 'register' | 'forgot'>('login');
+const authError = ref('');
+const authSuccess = ref('');
+const lastAuthSubmit = ref('');
+const authLabelsByMode = {
+  login: {
+    identifier: 'Username or Email', identifierPlaceholder: 'Enter username or email',
+    password: 'Password', passwordPlaceholder: 'Enter password',
+    rememberMe: 'Remember me',
+  },
+  register: {
+    username: 'Username', usernamePlaceholder: 'Enter username',
+    email: 'Email', emailPlaceholder: 'Enter email',
+    password: 'Password', passwordPlaceholder: 'Enter password',
+    confirmPassword: 'Confirm', confirmPasswordPlaceholder: 'Re-enter password',
+  },
+  forgot: {
+    email: 'Email', emailPlaceholder: 'Enter email',
+  },
+} as const;
+const authTitleByMode = { login: 'Sign in to FileFlash', register: 'Create account', forgot: 'Reset password' } as const;
+const authSubmitLabelByMode = { login: 'SIGN IN', register: 'REGISTER', forgot: 'SEND LINK' } as const;
+const authModeOpts = [
+  { value: 'login', label: 'LOGIN' },
+  { value: 'register', label: 'REGISTER' },
+  { value: 'forgot', label: 'FORGOT' },
+];
+function onAuthSubmit(payload: AuthSubmitPayload) {
+  lastAuthSubmit.value = JSON.stringify(payload, null, 2);
+  authSuccess.value = 'Demo: payload captured';
+  authError.value = '';
+}
 
 const demoItems = [
   {
@@ -131,6 +192,79 @@ const swatches = [
   '--status-warning',
   '--status-error',
   '--status-info',
+];
+
+// — P7 demo state: Molecules · Forms —
+const modalOpen = ref(false);
+const pgPage = ref(2);
+const selectVal = ref<string | number>('confirm');
+const selectOpts = [
+  { value: 'planOnly', label: 'PLAN ONLY' },
+  { value: 'confirm', label: 'CONFIRM' },
+  { value: 'autopilot', label: 'AUTOPILOT' },
+];
+
+// — P7 demo state: Organisms · Agent —
+const agSessions: Session[] = [
+  { id: 's1', title: 'Organize my screenshots', messages: [], createdAt: '2026-05-19T08:00:00Z', updatedAt: '2026-05-19T08:00:00Z' },
+  { id: 's2', title: 'Find duplicates in /photos', messages: [], createdAt: '2026-05-18T08:00:00Z', updatedAt: '2026-05-18T08:00:00Z' },
+  { id: 's3', title: 'Tag invoices', messages: [], createdAt: '2026-05-15T08:00:00Z', updatedAt: '2026-05-15T08:00:00Z' },
+];
+const agActiveId = ref<string | null>('s1');
+
+const agTaskInput = ref('Sort by year then month');
+const agPolicy = ref<'planOnly' | 'confirm' | 'autopilot'>('confirm');
+
+const makeTurn = (status: 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled', withPlan = true): AgentTurn => ({
+  user: { id: `u-${status}`, role: 'user', content: 'Sort by year then month', status: 'succeeded', timestamp: '2026-05-20T00:00:00Z' },
+  agent: {
+    id: `a-${status}`, role: 'agent', content: '', status,
+    timestamp: '2026-05-20T00:00:00Z',
+    planHash: withPlan && status !== 'pending' ? 'h-' + status : undefined,
+    planResult: withPlan && status !== 'pending' ? {
+      planJobId: 'job-' + status, planHash: 'h-' + status,
+      chosenSkill: { id: 'sk', name: 'Tidy Photos' },
+      proposedActions: [
+        { step: 1, tool: 'list', input: { path: '/photos' }, sideEffect: 'read' },
+        { step: 2, tool: 'move', input: { from: '/photos', to: '/photos/2026/05' }, sideEffect: 'write' },
+      ],
+      summary: 'Group photos by year/month under /photos/YYYY/MM',
+      requiresConfirmation: true,
+      costEstimate: { tokens: 320, toolCalls: 4, durationSecEstimate: 8 },
+    } : undefined,
+    executeResult: status === 'succeeded' ? {
+      planJobId: 'job-' + status, executeJobId: 'exec-' + status,
+      summary: 'Moved 24 files into 3 folders.',
+      appliedActions: 24, skippedActions: 0,
+      warnings: ['Skipped 2 files (read-only)'], finishedAt: '2026-05-20T00:00:00Z',
+    } : undefined,
+    errorMessage: status === 'failed' ? 'Plan failed: tool not allowed.' : undefined,
+  },
+});
+
+const agTurns: AgentTurn[] = [
+  makeTurn('pending', false),
+  makeTurn('running'),
+  makeTurn('succeeded'),
+  makeTurn('failed'),
+  makeTurn('canceled'),
+];
+const agFocusedId = ref<string | null>('a-succeeded');
+const agFocusedTurn = agTurns.find((t) => t.agent.id === agFocusedId.value) ?? null;
+
+const agSkill = (visibility: 'global' | 'private', name: string, key: string): AgentSkillItem => ({
+  skillId: 'id-' + key, skillKey: key, name, description: 'Move and tag files by simple rules.',
+  triggersText: 'organize, tidy', toolWhitelist: ['list', 'move', 'tag'],
+  planTemplate: {}, inputsSchema: {}, outputsSchema: {},
+  visibility, ownerUserId: 'u-1', createdAt: '', updatedAt: '',
+});
+const agSkillGlobal = agSkill('global', 'Tidy Photos', 'tidy.photos');
+const agSkillPrivate = agSkill('private', 'My Invoice Sorter', 'me.invoices');
+
+const agEditorOpen = ref(false);
+const agImportResults: ImportAgentSkillResult[] = [
+  { skillKey: 'tidy.photos', action: 'updated' },
+  { skillKey: 'classify.invoices', action: 'created' },
 ];
 </script>
 
@@ -289,6 +423,36 @@ const swatches = [
           </div>
         </div>
       </section>
+
+      <section v-if="activeSection === 'Molecules · Forms'">
+        <A.Text as="h1" variant="h1">Molecules · Forms</A.Text>
+
+        <A.Text variant="label">Modal</A.Text>
+        <div class="row">
+          <M.Button variant="primary" @click="modalOpen = true">Open modal</M.Button>
+        </div>
+        <M.Modal :open="modalOpen" size="md" @close="modalOpen = false">
+          <template #header>EXAMPLE DIALOG</template>
+          <p>This is the modal body — Teleport-rendered, scrim-dismissable, Esc closes.</p>
+          <template #footer>
+            <M.Button variant="ghost" @click="modalOpen = false">Cancel</M.Button>
+            <M.Button variant="primary" @click="modalOpen = false">Confirm</M.Button>
+          </template>
+        </M.Modal>
+
+        <A.Text variant="label">Pagination · 50 items, page-size 10</A.Text>
+        <M.Pagination v-model:page="pgPage" :page-size="10" :total="50" />
+
+        <A.Text variant="label">FileDrop</A.Text>
+        <div class="grid">
+          <M.FileDrop accept=".json,application/json">Drop JSON or click to browse</M.FileDrop>
+          <M.FileDrop disabled>Disabled state</M.FileDrop>
+        </div>
+
+        <A.Text variant="label">Select</A.Text>
+        <M.Select v-model="selectVal" :options="selectOpts" />
+      </section>
+
       <section v-if="activeSection === 'Organisms · Files'">
         <A.Text as="h1" variant="h1">Organisms · Files</A.Text>
 
@@ -342,6 +506,160 @@ const swatches = [
         <A.Text variant="data">Last interaction: {{ filesLastInteraction || '—' }}</A.Text>
         <F.FilePreviewDialog :file="filesPreviewFile" @close="closeFilesPreview" />
       </section>
+
+      <section v-if="activeSection === 'Organisms · Sharing'">
+        <A.Text as="h1" variant="h1">Organisms · Sharing</A.Text>
+
+        <A.Text variant="label">SharedReceivedTable</A.Text>
+        <Sh.SharedReceivedTable :items="sharedDemoItems" :selection="sharedSelection"
+          @toggle="(id) => { const next = new Set(sharedSelection); next.has(id) ? next.delete(id) : next.add(id); sharedSelection = next; }"
+          @toggle-all="(n) => sharedSelection = n ? new Set(sharedDemoItems.map((i) => i.id)) : new Set()"
+          @accept="() => {}" />
+
+        <A.Text variant="label">SharedReceivedTable · empty</A.Text>
+        <F.EmptyState variant="empty" message="No files shared with you." />
+
+        <A.Text variant="label">SharedLinksTable</A.Text>
+        <Sh.SharedLinksTable :items="linksDemoItems" @copy="() => {}" @delete="() => {}" />
+
+        <A.Text variant="label">SharedBatchBar · count = 2</A.Text>
+        <Sh.SharedBatchBar :count="2" @accept="() => {}" @clear="() => {}" />
+      </section>
+
+      <section v-if="activeSection === 'Organisms · Trash'">
+        <A.Text as="h1" variant="h1">Organisms · Trash</A.Text>
+
+        <A.Text variant="label">TrashTable</A.Text>
+        <Tr.TrashTable :items="trashDemoItems" @restore="() => {}" @permanent-delete="() => {}" />
+
+        <A.Text variant="label">TrashTable · empty</A.Text>
+        <F.EmptyState variant="empty" message="Recycle bin is empty." />
+      </section>
+
+      <section v-if="activeSection === 'Organisms · Share'">
+        <A.Text as="h1" variant="h1">Organisms · Share</A.Text>
+
+        <A.Text variant="label">ShareInfoCard</A.Text>
+        <Sa.ShareInfoCard :share="shareDemo" />
+
+        <A.Text variant="label">ShareAccessPanel · password mode</A.Text>
+        <Sa.ShareAccessPanel
+          :password-protected="true" :password="sharePassword" :is-accessing="false"
+          status-message="Awaiting password."
+          @update:password="sharePassword = $event" @request-access="() => {}" />
+
+        <A.Text variant="label">ShareAccessPanel · open mode</A.Text>
+        <Sa.ShareAccessPanel
+          :password-protected="false" password="" :is-accessing="false"
+          @update:password="() => {}" @request-access="() => {}" />
+
+        <A.Text variant="label">ShareActionsPanel · file</A.Text>
+        <Sa.ShareActionsPanel
+          :is-file="true" :is-folder="false" :can-preview="true" :can-download="true"
+          :is-previewing="false" :is-downloading="false" :is-saving="false"
+          @preview="() => {}" @download="() => {}" @save="() => {}" />
+
+        <A.Text variant="label">ShareActionsPanel · folder</A.Text>
+        <Sa.ShareActionsPanel
+          :is-file="false" :is-folder="true" :can-preview="false" :can-download="false"
+          :is-previewing="false" :is-downloading="false" :is-saving="false"
+          @preview="() => {}" @download="() => {}" @save="() => {}" />
+      </section>
+
+      <section v-if="activeSection === 'Organisms · Auth'">
+        <A.Text as="h1" variant="h1">Organisms · Auth</A.Text>
+
+        <A.Text variant="label">Mode</A.Text>
+        <M.SegmentedControl
+          :model-value="authMode"
+          :options="authModeOpts"
+          @update:model-value="(v) => (authMode = v as 'login' | 'register' | 'forgot')"
+        />
+
+        <div class="auth-demo">
+          <AuthForm
+            :mode="authMode"
+            :title="authTitleByMode[authMode]"
+            :submit-label="authSubmitLabelByMode[authMode]"
+            :error-message="authError"
+            :success-message="authSuccess"
+            :labels="authLabelsByMode[authMode]"
+            @submit="onAuthSubmit"
+          >
+            <template v-if="authMode === 'login'" #hint>
+              <div class="auth-demo-hint">
+                <strong>Mock</strong>
+                <small>admin / admin123</small>
+              </div>
+            </template>
+            <template v-if="authMode === 'login'" #secondary>
+              <span class="auth-demo-link">Forgot password</span>
+            </template>
+            <template #footer>
+              <span>Demo footer</span>
+            </template>
+          </AuthForm>
+        </div>
+
+        <A.Text variant="label">Last payload</A.Text>
+        <pre v-if="lastAuthSubmit" class="auth-demo-pre">{{ lastAuthSubmit }}</pre>
+        <A.Text v-else variant="small">Submit the form above to see the typed payload.</A.Text>
+      </section>
+
+      <section v-if="activeSection === 'Organisms · Agent'">
+        <A.Text as="h1" variant="h1">Organisms · Agent</A.Text>
+
+        <A.Text variant="label">SessionList — empty</A.Text>
+        <div class="agent-demo">
+          <Ag.SessionList :sessions="[]" :active-id="null" />
+        </div>
+
+        <A.Text variant="label">SessionList — 3 items</A.Text>
+        <div class="agent-demo">
+          <Ag.SessionList
+            :sessions="agSessions"
+            :active-id="agActiveId"
+            @select="(id: string) => (agActiveId = id)"
+          />
+        </div>
+
+        <A.Text variant="label">TurnEntry — all 5 status variants</A.Text>
+        <div class="agent-demo agent-demo--col">
+          <Ag.TurnEntry v-for="t in agTurns" :key="t.agent.id" :turn="t" :policy="agPolicy" :focused="false" />
+        </div>
+
+        <A.Text variant="label">PlanInspector — empty + populated</A.Text>
+        <div class="agent-demo agent-demo--row">
+          <Ag.PlanInspector :turn="null" />
+          <Ag.PlanInspector :turn="agFocusedTurn" />
+        </div>
+
+        <A.Text variant="label">TaskInputDock — idle + disabled</A.Text>
+        <div class="agent-demo agent-demo--col">
+          <Ag.TaskInputDock v-model="agTaskInput" :policy="agPolicy" @update:policy="agPolicy = $event" />
+          <Ag.TaskInputDock v-model="agTaskInput" :policy="agPolicy" disabled />
+        </div>
+
+        <A.Text variant="label">SkillCard — global + private (editable)</A.Text>
+        <div class="grid">
+          <Ag.SkillCard :skill="agSkillGlobal" />
+          <Ag.SkillCard :skill="agSkillPrivate" editable />
+        </div>
+
+        <A.Text variant="label">SkillEditorPanel</A.Text>
+        <div class="row">
+          <M.Button variant="primary" @click="agEditorOpen = true">Open editor</M.Button>
+        </div>
+        <Ag.SkillEditorPanel
+          :open="agEditorOpen"
+          :editing-key="null"
+          @close="agEditorOpen = false"
+          @submit="agEditorOpen = false"
+        />
+
+        <A.Text variant="label">SkillImportPanel — with results</A.Text>
+        <Ag.SkillImportPanel :results="agImportResults" />
+      </section>
     </main>
   </div>
 </template>
@@ -359,4 +677,47 @@ const swatches = [
 .sw { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border-subtle); }
 .sw-block { width: 28px; height: 28px; border: 1px solid var(--border-subtle); flex-shrink: 0; }
 code { font-family: var(--font-mono); font-size: var(--text-data); color: var(--ac); }
+.auth-demo {
+  max-width: 420px;
+  padding: var(--sp-xl);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  margin-top: 16px;
+}
+.auth-demo-hint {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-sm) var(--sp-md);
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+  margin-top: var(--sp-sm);
+}
+.auth-demo-hint strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-label);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+}
+.auth-demo-link { color: var(--ac); font-size: var(--text-small); cursor: pointer; }
+.auth-demo-pre {
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-data);
+  color: var(--text-secondary);
+  max-width: 420px;
+  white-space: pre-wrap;
+}
+.agent-demo {
+  padding: var(--sp-md);
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  display: block;
+}
+.agent-demo--col { display: flex; flex-direction: column; gap: var(--sp-md); }
+.agent-demo--row { display: flex; gap: var(--sp-md); align-items: flex-start; }
 </style>

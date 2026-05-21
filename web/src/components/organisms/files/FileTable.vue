@@ -18,6 +18,7 @@ const props = defineProps<{
   renameValue: string;
   sortKey: SortKey;
   sortDirection: 'asc' | 'desc';
+  registerRenameInput?: (itemId: string, el: HTMLInputElement | null) => void;
 }>();
 
 const localeStore = useLocaleStore();
@@ -68,6 +69,22 @@ const isArchiveFile = (f: FileItem) => {
   return n.endsWith('.zip') || n.endsWith('.7z') || n.endsWith('.tar')
       || n.endsWith('.tar.gz') || n.endsWith('.tgz') || n.endsWith('.gz');
 };
+const mediaOptimizationLabel = (item: ContentItem): string | null => {
+  if (item.itemType !== 'file' || !item.mediaOptimization) {
+    return null;
+  }
+  const status = item.mediaOptimization.status;
+  if (status === 'queued' || status === 'running') return t('files.mediaOptimization.processing');
+  if (status === 'ready') return t('files.mediaOptimization.ready');
+  return t('files.mediaOptimization.failedFallback');
+};
+const mediaOptimizationStatus = (item: ContentItem): string | null => {
+  if (item.itemType !== 'file' || !item.mediaOptimization) return null;
+  return item.mediaOptimization.status;
+};
+
+const isTempFolder = (item: ContentItem): item is FolderItem =>
+  item.itemType === 'folder' && item.id.startsWith('temp-new-folder');
 </script>
 
 <template>
@@ -101,6 +118,7 @@ const isArchiveFile = (f: FileItem) => {
       :selected="isSelected(item.id)"
       :renaming="renamingId === item.id"
       :rename-value="renameValue"
+      :register-rename-input="registerRenameInput"
       @update:rename-value="emit('update:renameValue', $event)"
       @toggle-select="emit('toggleSelect', $event)"
       @select="emit('select', $event)"
@@ -125,6 +143,7 @@ const isArchiveFile = (f: FileItem) => {
       :key="item.id"
       class="card"
       :class="{ 'card--selected': isSelected(item.id) }"
+      :data-temp-folder-row="renamingId === item.id && isTempFolder(item) ? item.id : null"
       draggable="true"
       @click.stop="emit('select', { item, modifiers: { shift: $event.shiftKey } })"
       @dblclick="renamingId === item.id ? null : emit('activate', item)"
@@ -141,7 +160,7 @@ const isArchiveFile = (f: FileItem) => {
         @click.stop="emit('toggleStar', item)"
         :aria-label="item.isStarred ? t('files.table.aria.unstar') : t('files.table.aria.star')"
       >
-        <Icon name="star" :size="14" />
+        <Icon name="star" :size="16" />
       </button>
       <img
         v-if="item.itemType === 'folder'"
@@ -153,6 +172,7 @@ const isArchiveFile = (f: FileItem) => {
       <div class="card__name">
         <input
           v-if="renamingId === item.id"
+          :ref="(el) => registerRenameInput?.(item.id, el as HTMLInputElement | null)"
           :value="renameValue"
           class="card__rename"
           @input="emit('update:renameValue', ($event.target as HTMLInputElement).value)"
@@ -161,6 +181,13 @@ const isArchiveFile = (f: FileItem) => {
           @keydown.esc.prevent="emit('cancel-rename')"
         />
         <span v-else>{{ item.name }}</span>
+      </div>
+      <div
+        v-if="mediaOptimizationLabel(item)"
+        class="card__media-opt"
+        :class="`card__media-opt--${mediaOptimizationStatus(item)}`"
+      >
+        {{ mediaOptimizationLabel(item) }}
       </div>
       <div class="card__actions" @click.stop>
         <DropdownMenu>
@@ -267,9 +294,10 @@ const isArchiveFile = (f: FileItem) => {
   color: var(--text-dim);
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
 }
 .card__star--on { color: var(--ac); }
-.card__icon { width: 48px; height: 48px; }
+.card__icon { width: 48px; height: 48px; flex-shrink: 0; }
 .card__name {
   width: 100%;
   text-align: center;
@@ -277,6 +305,14 @@ const isArchiveFile = (f: FileItem) => {
   color: var(--text-primary);
   word-break: break-all;
 }
+.card__media-opt {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.card__media-opt--ready { color: #10b981; }
+.card__media-opt--failed { color: #f59e0b; }
 .card__rename {
   width: 100%;
   background: var(--surface-inset);

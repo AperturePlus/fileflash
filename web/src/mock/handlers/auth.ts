@@ -1,8 +1,37 @@
 import Mock from 'mockjs';
-import { addLog, addNotification, createMockId, getCurrentUser, mockUsers, setCurrentUser } from '../state';
+import {
+  addLog,
+  addNotification,
+  createMockId,
+  getCurrentUser,
+  mockRegistrationEmailDomainRules,
+  mockUsers,
+  setCurrentUser,
+} from '../state';
 
 let activeRefreshSessionUserId: string | null = null;
 const verificationTokenMap = new Map<string, string>();
+
+function extractDomain(email: string) {
+  const at = email.lastIndexOf('@');
+  if (at < 0) return '';
+  return email.slice(at + 1).trim().toLowerCase();
+}
+
+function isAllowedEmailDomain(email: string) {
+  const enabledRules = mockRegistrationEmailDomainRules.filter((item) => item.enabled);
+  if (!enabledRules.length) return false;
+  const domain = extractDomain(email);
+  if (!domain) return false;
+  return enabledRules.some((item) => {
+    try {
+      const regex = new RegExp(`^${item.pattern}$`);
+      return regex.test(domain);
+    } catch {
+      return false;
+    }
+  });
+}
 
 function buildUserPayload(user: (typeof mockUsers)[number]) {
   return {
@@ -77,6 +106,15 @@ export const setupAuthMocks = () => {
         success: false,
         code: 400,
         message: 'Username, email and password are required',
+        data: null,
+      };
+    }
+
+    if (!isAllowedEmailDomain(String(email))) {
+      return {
+        success: false,
+        code: 400,
+        message: '邮箱后缀不被允许，请更换邮箱',
         data: null,
       };
     }

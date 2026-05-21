@@ -16,6 +16,17 @@ function makeRow(tempId: string) {
   return row;
 }
 
+function makeGridCard(tempId: string) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.setAttribute('data-temp-folder-row', tempId);
+  const input = document.createElement('input');
+  input.className = 'card__rename';
+  card.appendChild(input);
+  document.body.appendChild(card);
+  return card;
+}
+
 function makeMarker(attr: 'data-ui-toast' | 'data-dropdown-menu') {
   const el = document.createElement('div');
   el.setAttribute(attr, '');
@@ -56,6 +67,19 @@ describe('useNewFolderCancel', () => {
 
     c.install('temp-2');
     const input = row.querySelector('input') as HTMLInputElement;
+    input.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('pointerdown inside a temp grid card input does NOT cancel', () => {
+    const renameInputValue = ref('');
+    const onCancel = vi.fn();
+    const c = useNewFolderCancel({ renameInputValue, onCancel });
+    const card = makeGridCard('temp-2-grid');
+
+    c.install('temp-2-grid');
+    const input = card.querySelector('input') as HTMLInputElement;
     input.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
 
     expect(onCancel).not.toHaveBeenCalled();

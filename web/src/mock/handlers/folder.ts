@@ -1,9 +1,23 @@
 import Mock from 'mockjs';
 import { addLog, mockShares } from '../state';
-import { vfsApi, type VfsNode } from '../vfs';
+import { STARRED_ITEMS_LIMIT, vfsApi, type VfsNode } from '../vfs';
 
 function parseUrl(url: string) {
   return new URL(url, 'http://localhost');
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function mockError(code: number, message: string) {
+  return {
+    success: false,
+    code,
+    message,
+    data: null,
+    timestamp: nowIso(),
+  };
 }
 
 function nodeToItem(node: VfsNode) {
@@ -34,6 +48,7 @@ function nodeToItem(node: VfsNode) {
     folderId: node.parent || 'root',
     permission: node.permission || 'owner',
     isStarred: node.isStarred || false,
+    mediaOptimization: node.mediaOptimization,
   };
 }
 
@@ -213,7 +228,16 @@ export const setupFolderMocks = () => {
   Mock.mock(/\/api\/v1\/folders\/([^/]+)\/star$/, 'patch', (options) => {
     const folderId = (options.url.match(/\/api\/v1\/folders\/([^/]+)\/star/) || [])[1];
     const { isStarred } = JSON.parse(options.body || '{}');
-    const updated = vfsApi.setStarred(folderId, Boolean(isStarred));
+    const node = vfsApi.get(folderId);
+    if (!node || node.type !== 'folder' || node.isTrashed) {
+      return mockError(404, 'Folder not found');
+    }
+
+    const next = Boolean(isStarred);
+    if (next && !node.isStarred && vfsApi.getStarred().length >= STARRED_ITEMS_LIMIT) {
+      return mockError(400, `已达收藏上限 ${STARRED_ITEMS_LIMIT}`);
+    }
+    const updated = vfsApi.setStarred(folderId, next);
 
     return {
       success: true,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.tasks.scan import run_dangerous_file_scan
+from fileflash.tasks.scan import run_dangerous_file_scan
 
 
 def test_scan_marks_normal_text_file_as_clean(tmp_path: Path):

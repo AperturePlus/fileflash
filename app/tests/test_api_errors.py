@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from starlette.requests import Request
 
-from src.core.errors import ApiError, api_error_handler, api_success
+from fileflash.core.errors import ApiError, api_error_handler, api_success
 
 
 def _new_request() -> Request:

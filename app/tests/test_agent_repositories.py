@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.agents import PlanRunner, PromptBuilder
-from src.models import AgentWorkSession, BackgroundJob
-from src.repositories import (
+from fileflash.agents import PlanRunner, PromptBuilder
+from fileflash.models import AgentWorkSession, BackgroundJob
+from fileflash.repositories import (
     AgentActionLogRepository,
     AgentMcpRepository,
     AgentMemoryRepository,
@@ -17,7 +17,7 @@ from src.repositories import (
     AgentSkillRepository,
     AgentWorkSessionRepository,
 )
-from src.schemas.job import to_background_job_response
+from fileflash.schemas.job import to_background_job_response
 
 
 class FakeMappingResult:

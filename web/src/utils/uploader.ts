@@ -16,6 +16,7 @@ import axios from 'axios';
 import http from './http';
 import { calculateFileHash, type HashProgressCallback } from './hash';
 import type { 
+  BackgroundJob,
   UploadPreflightRequest, 
   UploadPreflightResponse, 
   MergeChunksRequest, 
@@ -26,6 +27,8 @@ const PREFLIGHT_TIMEOUT_MS = 45_000;
 const CHUNK_TIMEOUT_MS = 120_000;
 const MERGE_TIMEOUT_MS = 300_000;
 const MERGE_RETRY_TIMEOUT_MS = 120_000;
+const MERGE_JOB_POLL_INTERVAL_MS = 900;
+const MERGE_JOB_POLL_TIMEOUT_MS = 300_000;
 
 
 /**
@@ -158,9 +161,7 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
   };
 
   try {
-    const mergeResponse = await http.post<MergeChunksResponse>(`/uploads/${uploadId}/merge`, mergeRequest, {
-      timeout: MERGE_TIMEOUT_MS,
-    });
+    const mergeResponse = await requestMergeAndWait(uploadId, mergeRequest, MERGE_TIMEOUT_MS);
     console.log('文件合并成功，上传完成！', mergeResponse);
      // 最终进度更新，确保是100%
     if (onUploadProgress) {
@@ -351,9 +352,7 @@ async function reconcileMergeResult(options: ReconcileMergeOptions): Promise<Mer
 
     const targetUploadId = preflight.uploadId || uploadId;
     try {
-      return await http.post<MergeChunksResponse>(`/uploads/${targetUploadId}/merge`, mergeRequest, {
-        timeout: MERGE_RETRY_TIMEOUT_MS,
-      });
+      return await requestMergeAndWait(targetUploadId, mergeRequest, MERGE_RETRY_TIMEOUT_MS);
     } catch (retryError) {
       if (!isTimeoutOrNetworkError(retryError)) {
         throw retryError;
@@ -371,6 +370,68 @@ async function reconcileMergeResult(options: ReconcileMergeOptions): Promise<Mer
   }
 
   return null;
+}
+
+function isTerminalJobStatus(status: string | undefined): boolean {
+  return status === 'succeeded' || status === 'failed' || status === 'canceled';
+}
+
+function extractMergeResult(job: BackgroundJob<MergeChunksResponse>): MergeChunksResponse | null {
+  if (job.status === 'succeeded') {
+    const result = job.result;
+    if (
+      result &&
+      typeof result.fileId === 'string' &&
+      typeof result.fileName === 'string' &&
+      typeof result.downloadUrl === 'string'
+    ) {
+      return result;
+    }
+    throw new Error('Merge job succeeded but result is missing.');
+  }
+
+  if (job.status === 'failed' || job.status === 'canceled') {
+    throw new Error(job.errorMessage || `Merge job ${job.status}.`);
+  }
+  return null;
+}
+
+async function requestMergeAndWait(
+  uploadId: string,
+  mergeRequest: MergeChunksRequest,
+  timeoutMs: number,
+): Promise<MergeChunksResponse> {
+  const mergeJob = await http.post<BackgroundJob<MergeChunksResponse>>(`/uploads/${uploadId}/merge`, mergeRequest, {
+    timeout: timeoutMs,
+  });
+
+  const immediate = extractMergeResult(mergeJob);
+  if (immediate) {
+    return immediate;
+  }
+  return await pollMergeJob(mergeJob.jobId, MERGE_JOB_POLL_TIMEOUT_MS);
+}
+
+async function pollMergeJob(jobId: string, timeoutMs: number): Promise<MergeChunksResponse> {
+  const startedAt = Date.now();
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('Merge job polling timeout.');
+    }
+    const job = await http.get<BackgroundJob<MergeChunksResponse>>(`/jobs/${jobId}`, undefined, {
+      timeout: MERGE_RETRY_TIMEOUT_MS,
+    });
+    const result = extractMergeResult(job);
+    if (result) {
+      return result;
+    }
+    if (isTerminalJobStatus(job.status)) {
+      throw new Error(job.errorMessage || `Merge job ${job.status}.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, MERGE_JOB_POLL_INTERVAL_MS));
+  }
 }
 
 /**  

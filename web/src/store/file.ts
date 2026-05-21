@@ -13,10 +13,14 @@ export const useFileStore = defineStore('file', () => {
   const selectedFile = ref<ContentItem | null>(null);
   const previewFile = ref<ContentItem | null>(null);
 
-  async function fetchFolderContents(folderId: string) {
-    isLoading.value = true;
-    selectedFile.value = null;
-    previewFile.value = null;
+  async function fetchFolderContents(folderId: string, options: { silent?: boolean } = {}) {
+    const silent = options.silent === true;
+    if (!silent) {
+      isLoading.value = true;
+      items.value = [];
+      selectedFile.value = null;
+      previewFile.value = null;
+    }
 
     try {
       const contentsPromise = getFolderContents({
@@ -42,10 +46,14 @@ export const useFileStore = defineStore('file', () => {
       currentFolderId.value = folderId;
     } catch (error) {
       console.error(`Failed to fetch contents for folder ${folderId}:`, error);
-      items.value = [];
-      path.value = [{ folderId: 'root', name: 'My Files' }];
+      if (!silent) {
+        items.value = [];
+        path.value = [{ folderId: 'root', name: 'My Files' }];
+      }
     } finally {
-      isLoading.value = false;
+      if (!silent) {
+        isLoading.value = false;
+      }
     }
   }
 

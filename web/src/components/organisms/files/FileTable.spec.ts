@@ -89,4 +89,31 @@ describe('FileTable', () => {
     const p = wrapper.emitted('select')![0][0] as { modifiers: { shift: boolean } };
     expect(p.modifiers.shift).toBe(true);
   });
+
+  it('grid mode: temp folder in renaming state has temp row marker', () => {
+    const tempItems = [
+      {
+        id: 'temp-new-folder-1',
+        name: '新建文件夹-20260513-120000',
+        itemType: 'folder' as const,
+        size: 0,
+        ownerName: '',
+        createdAt: '2026-05-13T12:00:00Z',
+        updatedAt: '2026-05-13T12:00:00Z',
+        parentFolderId: 'root',
+        isStarred: false,
+      },
+    ];
+    const wrapper = mount(FileTable, {
+      props: {
+        ...baseProps,
+        mode: 'grid' as const,
+        items: tempItems,
+        renamingId: 'temp-new-folder-1',
+        renameValue: '新建文件夹-20260513-120000',
+      },
+    });
+
+    expect(wrapper.find('[data-temp-folder-row="temp-new-folder-1"]').exists()).toBe(true);
+  });
 });

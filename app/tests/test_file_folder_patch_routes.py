@@ -6,12 +6,12 @@ from datetime import UTC, datetime
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.core.deps import get_current_user, get_file_service, get_folder_service
-from src.models.tables_identity import User
-from src.routers.files import router as files_router
-from src.routers.folders import router as folders_router
-from src.schemas.file import FileDetails, FolderItem, RenameFileRequest
-from src.services.file import DownloadStreamResult
+from fileflash.core.deps import get_current_user, get_file_service, get_folder_service
+from fileflash.models.tables_identity import User
+from fileflash.routers.files import router as files_router
+from fileflash.routers.folders import router as folders_router
+from fileflash.schemas.file import FileDetails, FolderItem, RenameFileRequest
+from fileflash.services.file import DownloadStreamResult
 
 
 def _make_file_details(*, name: str, is_starred: bool) -> FileDetails:

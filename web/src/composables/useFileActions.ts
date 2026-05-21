@@ -12,11 +12,23 @@ import { ui } from '../utils/ui';
 import { useNewFolderCancel } from './useNewFolderCancel';
 
 type ShareHandling = 'keep' | 'revoke';
+const TEMP_NEW_FOLDER_PREFIX = 'temp-new-folder';
+
+function formatLocalTimestamp(date: Date): string {
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+}
 
 export function useFileActions(currentFolderId: Ref<string | null>) {
   const fileStore = useFileStore();
   const settingsStore = useSettingsStore();
   const localeStore = useLocaleStore();
+  const t = localeStore.t;
   const renamingItemId = ref<string | null>(null);
   const renameInputValue = ref('');
   const renameInput = ref<HTMLInputElement | null>(null);
@@ -35,7 +47,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     renameInputValue,
     onCancel: () => {
       const tempId = renamingItemId.value;
-      if (tempId && tempId.startsWith('temp-new-folder')) {
+      if (tempId && tempId.startsWith(TEMP_NEW_FOLDER_PREFIX)) {
         fileStore.items = fileStore.items.filter((i) => i.id !== tempId);
       }
       cancelRename();
@@ -43,18 +55,30 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     },
   });
 
+  const registerRenameInput = (itemId: string, el: HTMLInputElement | null) => {
+    if (renamingItemId.value !== itemId) return;
+    renameInput.value = el;
+    if (el) {
+      void nextTick().then(() => {
+        el.focus();
+        el.select();
+      });
+    }
+  };
+
   const startRename = async (item: ContentItem) => {
     renamingItemId.value = item.id;
     renameInputValue.value = item.name;
+    renameInput.value = null;
     await nextTick();
-    renameInput.value?.focus();
   };
 
   const cancelRename = () => {
-    if (renamingItemId.value && renamingItemId.value.startsWith('temp-new-folder')) {
+    if (renamingItemId.value && renamingItemId.value.startsWith(TEMP_NEW_FOLDER_PREFIX)) {
       fileStore.items = fileStore.items.filter((i) => i.id !== renamingItemId.value);
     }
     newFolderCancel.uninstall();
+    renameInput.value = null;
     renamingItemId.value = null;
     renameInputValue.value = '';
     isRenaming.value = false;
@@ -65,20 +89,32 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     isRenaming.value = true;
 
     const item = fileStore.items.find((i) => i.id === renamingItemId.value);
-    if (!item || renameInputValue.value === item.name || renameInputValue.value.trim() === '') {
+    if (!item) {
       cancelRename();
       return;
     }
     const newName = renameInputValue.value.trim();
+    if (newName === '') {
+      cancelRename();
+      return;
+    }
+    const isTempFolder = item.id.startsWith(TEMP_NEW_FOLDER_PREFIX);
+    if (!isTempFolder && newName === item.name) {
+      cancelRename();
+      return;
+    }
 
-    if (item.id.startsWith('temp-new-folder')) {
+    if (isTempFolder) {
       try {
         await createFolder({ folderName: newName, parentFolderId: currentFolderId.value || 'root' });
-        await fileStore.fetchFolderContents(currentFolderId.value || 'root');
-        ui.toast({ type: 'success', message: `Created folder "${newName}".` });
+        await fileStore.fetchFolderContents(currentFolderId.value || 'root', { silent: true });
+        ui.toast({
+          type: 'success',
+          message: t('files.rename.toast.createdFolder').replace('{folderName}', newName),
+        });
       } catch (error) {
         console.error(`Failed to create folder "${newName}":`, error);
-        ui.toast({ type: 'error', message: 'Folder creation failed.' });
+        ui.toast({ type: 'error', message: t('files.rename.toast.createFailed') });
         fileStore.items = fileStore.items.filter((i) => i.id !== item.id);
       } finally {
         cancelRename();
@@ -94,10 +130,10 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
           : await renameFile(item.id, { fileName: newName });
       const index = fileStore.items.findIndex((i) => i.id === item.id);
       if (index !== -1) fileStore.items[index].name = updatedItem.name;
-      ui.toast({ type: 'success', message: `Renamed to "${newName}".` });
+      ui.toast({ type: 'success', message: t('files.rename.toast.renamed').replace('{newName}', newName) });
     } catch (error) {
       console.error(`Failed to rename ${item.name}:`, error);
-      ui.toast({ type: 'error', message: 'Rename failed.' });
+      ui.toast({ type: 'error', message: t('files.rename.toast.renameFailed') });
     } finally {
       cancelRename();
       eventBus.emit('refresh-file-tree');
@@ -107,9 +143,9 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
   const handleDelete = async (item: ContentItem) => {
     if (settingsStore.settings.confirmDelete) {
       const confirmed = await ui.confirm({
-        title: 'Move To Trash',
-        message: `Move "${item.name}" to trash?`,
-        confirmText: 'Move',
+        title: t('files.delete.confirm.title'),
+        message: t('files.delete.confirm.message').replace('{itemName}', item.name),
+        confirmText: t('files.delete.confirm.confirmText'),
         danger: true,
       });
       if (!confirmed) return;
@@ -121,12 +157,12 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
       } else {
         await deleteFile(item.id);
       }
-      await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root');
+      await fileStore.fetchFolderContents(fileStore.currentFolderId || 'root', { silent: true });
       eventBus.emit('refresh-file-tree');
-      ui.toast({ type: 'success', message: `"${item.name}" moved to trash.` });
+      ui.toast({ type: 'success', message: t('files.delete.toast.success').replace('{itemName}', item.name) });
     } catch (error) {
       console.error(`Failed to delete ${item.name}:`, error);
-      ui.toast({ type: 'error', message: 'Failed to move item to trash.' });
+      ui.toast({ type: 'error', message: t('files.delete.toast.failed') });
     }
   };
 
@@ -164,7 +200,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
     ];
 
     if (!fileIds.length && !folderIds.length) {
-      ui.toast({ type: 'warning', message: 'No movable items found.' });
+      ui.toast({ type: 'warning', message: t('files.move.toast.noMovable') });
       return;
     }
 
@@ -177,31 +213,36 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
         shareHandling,
       });
 
-      await fileStore.fetchFolderContents(currentFolderId.value || 'root');
+      await fileStore.fetchFolderContents(currentFolderId.value || 'root', { silent: true });
       eventBus.emit('refresh-file-tree');
 
       const firstError = result.results.find((item) => !item.success)?.message;
       if (result.succeeded === 0) {
+        const reason = firstError || t('files.move.reason.noneMoved');
         ui.toast({
           type: 'error',
-          message: `Move failed. ${firstError || 'No items were moved.'}`,
+          message: t('files.move.toast.failedNoneMoved').replace('{reason}', reason),
           duration: 4200,
         });
         return;
       }
 
       if (result.failed > 0) {
+        const reason = firstError || t('files.move.reason.someFailed');
         ui.toast({
           type: 'warning',
-          message: `Moved ${result.succeeded}/${result.processed}. ${firstError || 'Some items failed.'}`,
+          message: t('files.move.toast.partial')
+            .replace('{succeeded}', String(result.succeeded))
+            .replace('{processed}', String(result.processed))
+            .replace('{reason}', reason),
           duration: 4200,
         });
       } else {
-        ui.toast({ type: 'success', message: `Moved ${result.succeeded} item(s).` });
+        ui.toast({ type: 'success', message: t('files.move.toast.success').replace('{count}', String(result.succeeded)) });
       }
     } catch (error) {
       console.error('Batch move failed:', error);
-      ui.toast({ type: 'error', message: 'Batch move failed.' });
+      ui.toast({ type: 'error', message: t('files.move.toast.failed') });
     }
   };
 
@@ -228,7 +269,7 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
   const startMoveForSelection = async (sourceItemIds: string[]) => {
     const sourceItems = fileStore.items.filter((item) => sourceItemIds.includes(item.id));
     if (!sourceItems.length) {
-      ui.toast({ type: 'warning', message: 'Please select at least one item.' });
+      ui.toast({ type: 'warning', message: t('files.move.toast.selectAtLeastOne') });
       return;
     }
     await openMoveDialog(sourceItems);
@@ -250,13 +291,23 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
   };
 
   const handleCreateFolder = () => {
-    const tempId = `temp-new-folder-${Date.now()}`;
+    const now = new Date();
+    const baseName = `${t('files.toolbar.newFolder')}-${formatLocalTimestamp(now)}`;
+    const existingNames = new Set(fileStore.items.map((item) => item.name));
+    let defaultFolderName = baseName;
+    let index = 2;
+    while (existingNames.has(defaultFolderName)) {
+      defaultFolderName = `${baseName}-${index}`;
+      index += 1;
+    }
+
+    const tempId = `${TEMP_NEW_FOLDER_PREFIX}-${Date.now()}`;
     const tempFolder: FolderItem = {
       itemType: 'folder',
       id: tempId,
-      name: '',
+      name: defaultFolderName,
       size: 0,
-      ownerName: 'You',
+      ownerName: t('files.owner.you'),
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       parentFolderId: currentFolderId.value,
@@ -288,14 +339,14 @@ export function useFileActions(currentFolderId: Ref<string | null>) {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error(`Failed to download file ${file.name}:`, error);
-      ui.toast({ type: 'error', message: 'Download failed.' });
+      ui.toast({ type: 'error', message: t('files.download.toast.failed') });
     }
   };
 
   return {
     renamingItemId,
     renameInputValue,
-    renameInput,
+    registerRenameInput,
     itemToMove,
     moveItemCount,
     moveHasActiveShare,

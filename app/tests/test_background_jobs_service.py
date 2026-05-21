@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from src.models import BackgroundJob
-from src.services.background_jobs import BackgroundJobService
+from fileflash.models import BackgroundJob
+from fileflash.services.background_jobs import BackgroundJobService, _build_queue_message
 
 
 class _PgUniqueViolation(Exception):
@@ -91,3 +91,57 @@ async def test_enqueue_recovers_from_unique_conflict_and_returns_existing_job():
     assert job is second_existing
     session.rollback.assert_awaited_once()
     queue.publish.assert_not_awaited()
+
+
+def test_build_queue_message_injects_job_id_when_missing_or_none():
+    base_kwargs = dict(
+        job_id=42,
+        task_type="task.archive_extract",
+        status="pending",
+        result={},
+        error_message=None,
+        attempt=0,
+        max_attempts=5,
+        scheduled_at=datetime.now(UTC),
+    )
+
+    missing = BackgroundJob(payload={"targetFolderId": "root"}, requested_by=9, **base_kwargs)
+    missing_message = _build_queue_message(missing)
+    assert missing_message.payload["jobId"] == 42
+    assert missing_message.payload["requestedBy"] == 9
+
+    none_job_id = BackgroundJob(payload={"jobId": None, "targetFolderId": "root"}, requested_by=9, **base_kwargs)
+    none_message = _build_queue_message(none_job_id)
+    assert none_message.payload["jobId"] == 42
+
+    keep_existing = BackgroundJob(payload={"jobId": 777, "targetFolderId": "root"}, requested_by=9, **base_kwargs)
+    keep_message = _build_queue_message(keep_existing)
+    assert keep_message.payload["jobId"] == 777
+
+
+@pytest.mark.asyncio
+async def test_enqueue_transcode_job_uses_object_storage_payload():
+    session = DummySession()
+    queue = SimpleNamespace(publish=AsyncMock(return_value="1-0"))
+    service = BackgroundJobService(queue_publisher=queue)
+
+    job = await service.enqueue_transcode_job(
+        session,  # type: ignore[arg-type]
+        source_bucket_name="fileflash",
+        source_object_key="objects/u1/src.mp4",
+        source_object_id=101,
+        output_bucket_name="fileflash",
+        output_object_key="optimized/transcode/v1/object-101/src-mp4-v1.mp4",
+        file_id=999,
+        requested_by=1,
+        idempotency_key="object:101:transcode:mp4-v1",
+    )
+
+    payload = job.payload
+    assert payload["sourceBucketName"] == "fileflash"
+    assert payload["sourceObjectKey"] == "objects/u1/src.mp4"
+    assert payload["sourceObjectId"] == 101
+    assert payload["outputBucketName"] == "fileflash"
+    assert payload["outputObjectKey"].endswith(".mp4")
+    assert payload["fileId"] == 999
+    assert payload["requestedBy"] == 1

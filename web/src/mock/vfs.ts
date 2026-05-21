@@ -15,9 +15,16 @@ export interface VfsNode {
   isTrashed?: boolean;
   deletedAt?: string;
   isStarred?: boolean;
+  starredAt?: string;
   hash?: string;
   virusStatus?: 'clean' | 'pending' | 'flagged';
   thumbnailUrl?: string;
+  mediaOptimization?: {
+    status: 'queued' | 'running' | 'ready' | 'failed';
+    mediaType: 'audio' | 'video';
+    optimizedMimeType?: string;
+    updatedAt: string;
+  };
 }
 
 export interface Vfs {
@@ -25,6 +32,7 @@ export interface Vfs {
 }
 
 const VFS_STORAGE_KEY = import.meta.env.VFS_STORAGE_KEY || 'fileflash-vfs';
+export const STARRED_ITEMS_LIMIT = 20;
 
 function nowIso() {
   return new Date().toISOString();
@@ -76,6 +84,7 @@ const initialVfs: Vfs = {
     updatedAt: nowIso(),
     permission: 'owner',
     isStarred: true,
+    starredAt: nowIso(),
     hash: 'mock-hash-file1',
     virusStatus: 'clean',
   },
@@ -164,7 +173,14 @@ const initialVfs: Vfs = {
     updatedAt: nowIso(),
     permission: 'owner',
     isStarred: true,
+    starredAt: nowIso(),
     virusStatus: 'clean',
+    mediaOptimization: {
+      status: 'ready',
+      mediaType: 'audio',
+      optimizedMimeType: 'audio/mp4',
+      updatedAt: nowIso(),
+    },
   },
   file9: {
     id: 'file9',
@@ -177,6 +193,11 @@ const initialVfs: Vfs = {
     updatedAt: nowIso(),
     permission: 'owner',
     virusStatus: 'clean',
+    mediaOptimization: {
+      status: 'running',
+      mediaType: 'video',
+      updatedAt: nowIso(),
+    },
   },
 };
 
@@ -475,13 +496,23 @@ export const vfsApi = {
     }
 
     node.isStarred = isStarred;
+    node.starredAt = isStarred ? nowIso() : undefined;
     node.updatedAt = nowIso();
     saveVfs();
     return node;
   },
 
   getStarred: (): VfsNode[] => {
-    return Object.values(vfs).filter((node) => !node.isTrashed && node.id !== 'root' && node.isStarred);
+    return Object.values(vfs)
+      .filter((node) => !node.isTrashed && node.id !== 'root' && node.isStarred)
+      .sort((left, right) => {
+        const leftTs = new Date(left.starredAt || left.updatedAt || left.createdAt).getTime();
+        const rightTs = new Date(right.starredAt || right.updatedAt || right.createdAt).getTime();
+        if (rightTs !== leftTs) {
+          return rightTs - leftTs;
+        }
+        return right.id.localeCompare(left.id);
+      });
   },
 
   delete: (id: string) => {

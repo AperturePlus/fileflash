@@ -6,13 +6,15 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.core.security import get_password_hash, hash_token
-from src.core.settings import Settings
-from src.models.enums import UiLanguage, UserRole, UserStatus
-from src.models.tables_audit_security import Log
-from src.models.tables_identity import User, UserPreference, UserSession
-from src.schemas.user import ChangePasswordRequest, GetActivityLogQuery, UpdateProfileRequest
-from src.services.auth import AuthService
+from fileflash.core.errors import ApiError
+from fileflash.core.security import get_password_hash, hash_token
+from fileflash.core.settings import Settings
+from fileflash.models.enums import UiLanguage, UserRole, UserStatus
+from fileflash.models.tables_audit_security import Log
+from fileflash.models.tables_identity import User, UserPreference, UserSession
+from fileflash.schemas.user import ChangePasswordRequest, GetActivityLogQuery, UpdateProfileRequest
+from fileflash.services.auth import AuthService
+from fileflash.services.email_delivery import EmailDeliveryError
 
 
 class DummyResult:
@@ -27,6 +29,7 @@ class DummySession:
     def __init__(self) -> None:
         self.add = Mock()
         self.commit = AsyncMock()
+        self.flush = AsyncMock()
         self.scalar = AsyncMock()
         self.scalars = AsyncMock()
         self.get = AsyncMock()
@@ -45,11 +48,13 @@ def make_settings(**overrides: object) -> Settings:
 def make_service(session: DummySession, publisher: AsyncMock | None = None) -> AuthService:
     event_publisher = SimpleNamespace(publish=publisher or AsyncMock())
     rate_limiter = SimpleNamespace(allow=AsyncMock(return_value=True))
+    verification_email_delivery = SimpleNamespace(send_verification_email=AsyncMock())
     return AuthService(
         db=session,
         settings=make_settings(),
         rate_limiter=rate_limiter,
         event_publisher=event_publisher,
+        verification_email_delivery=verification_email_delivery,  # type: ignore[arg-type]
     )
 
 
@@ -75,9 +80,11 @@ async def test_update_profile_resets_email_verification_and_publishes_event():
     )
     preference = UserPreference(user_id=1, ui_language=UiLanguage.ZH_CN)
     session.scalar = AsyncMock(side_effect=[user, None, None])
+    session.scalars = AsyncMock(return_value=[SimpleNamespace(pattern=r"new\.local", enabled=True)])
 
     service._get_user_preference = AsyncMock(return_value=preference)  # type: ignore[method-assign]
     service._create_email_verification_token = AsyncMock(return_value="verify-token")  # type: ignore[method-assign]
+    service._send_verification_email_or_raise = AsyncMock()  # type: ignore[method-assign]
 
     profile = await service.update_profile(
         user_id=1,
@@ -91,11 +98,47 @@ async def test_update_profile_resets_email_verification_and_publishes_event():
     assert user.email_verified_at is None
     session.commit.assert_awaited_once()
     publish_mock.assert_awaited_once()
+    service._send_verification_email_or_raise.assert_awaited_once()  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_update_profile_email_unchanged_skips_rule_check():
+    session = DummySession()
+    service = make_service(session)
+
+    user = User(
+        user_id=9,
+        username="demo",
+        email="same@local.test",
+        password_hash="hash",
+        role=UserRole.USER,
+        status=UserStatus.ACTIVE,
+        storage_limit=1024,
+        storage_used=128,
+        email_verified=True,
+        email_verified_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    preference = UserPreference(user_id=9, ui_language=UiLanguage.ZH_CN)
+    session.scalar = AsyncMock(return_value=user)
+    session.scalars = AsyncMock(return_value=[])
+    service._get_user_preference = AsyncMock(return_value=preference)  # type: ignore[method-assign]
+
+    profile = await service.update_profile(
+        user_id=9,
+        payload=UpdateProfileRequest(email="same@local.test"),
+        user_agent="pytest-agent",
+    )
+
+    assert profile.email == "same@local.test"
+    session.scalars.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_change_password_revokes_other_sessions_only():
     session = DummySession()
+    settings = make_settings()
     service = make_service(session)
 
     user = User(
@@ -114,14 +157,14 @@ async def test_change_password_revokes_other_sessions_only():
     keep_session = UserSession(
         session_id=11,
         user_id=2,
-        refresh_token_hash=hash_token(keep_refresh_token),
+        refresh_token_hash=hash_token(keep_refresh_token, settings),
         client_type="web",
         expire_at=datetime.now(UTC),
     )
     other_session = UserSession(
         session_id=12,
         user_id=2,
-        refresh_token_hash=hash_token("other-token"),
+        refresh_token_hash=hash_token("other-token", settings),
         client_type="web",
         expire_at=datetime.now(UTC),
     )
@@ -216,3 +259,71 @@ async def test_get_storage_summary_aggregates_files_and_folders():
     assert summary.breakdown["images"].count == 1
     assert summary.breakdown["documents"].count == 1
     assert summary.breakdown["archives"].count == 1
+
+
+@pytest.mark.asyncio
+async def test_send_verification_email_raises_503_in_production() -> None:
+    session = DummySession()
+    publish_mock = AsyncMock()
+    delivery = SimpleNamespace(send_verification_email=AsyncMock(side_effect=EmailDeliveryError("smtp down")))
+    service = AuthService(
+        db=session,
+        settings=make_settings(APP_ENV="production"),
+        rate_limiter=SimpleNamespace(allow=AsyncMock(return_value=True)),
+        event_publisher=SimpleNamespace(publish=publish_mock),
+        verification_email_delivery=delivery,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ApiError) as exc:
+        await service._send_verification_email_or_raise(  # type: ignore[attr-defined]
+            event_name="auth.email_verification_requested",
+            email="demo@example.com",
+            token="secure-token",
+            expires_in_minutes=60,
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.code == 503
+    publish_mock.assert_awaited_once_with(
+        "auth.email_verification_delivery_failed",
+        {"eventName": "auth.email_verification_requested"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_verification_email_raises_503_in_development() -> None:
+    session = DummySession()
+    publish_mock = AsyncMock()
+    delivery = SimpleNamespace(send_verification_email=AsyncMock(side_effect=EmailDeliveryError("smtp down")))
+    service = AuthService(
+        db=session,
+        settings=make_settings(APP_ENV="development"),
+        rate_limiter=SimpleNamespace(allow=AsyncMock(return_value=True)),
+        event_publisher=SimpleNamespace(publish=publish_mock),
+        verification_email_delivery=delivery,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ApiError) as exc:
+        await service._send_verification_email_or_raise(  # type: ignore[attr-defined]
+            event_name="auth.email_verification_resent",
+            email="demo@example.com",
+            token="secure-token",
+            expires_in_minutes=60,
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.code == 503
+
+    publish_mock.assert_awaited_once_with(
+        "auth.email_verification_delivery_failed",
+        {"eventName": "auth.email_verification_resent"},
+    )
+
+
+def test_assert_token_length_rejects_short_token() -> None:
+    with pytest.raises(ApiError, match="Invalid or expired verification token"):
+        AuthService._assert_token_length(
+            token="too-short",
+            minimum=16,
+            message="Invalid or expired verification token",
+        )

@@ -5,24 +5,34 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.core.deps import get_client_ip, get_share_service, get_user_agent
-from src.routers.shares import router as shares_router
+from fileflash.core.deps import get_client_ip, get_share_service, get_user_agent
+from fileflash.routers.shares import router as shares_router
 
 
 class StubShareService:
-    async def get_shared_file_stream(
+    async def get_shared_file_download_stream_response(
         self,
         *,
         share_link: str,  # noqa: ARG002
         share_access_token: str,  # noqa: ARG002
         action: str,  # noqa: ARG002
+        range_header: str | None,  # noqa: ARG002
         ip_address: str,  # noqa: ARG002
         user_agent: str | None,  # noqa: ARG002
-    ) -> tuple[AsyncIterator[bytes], str, str]:
+    ) -> tuple[AsyncIterator[bytes], str, str, int, dict[str, str]]:
         async def _stream() -> AsyncIterator[bytes]:
             yield b"data"
 
-        return _stream(), "测试文档.pdf", "application/pdf"
+        headers = {
+            "Content-Disposition": (
+                'inline; filename="测试文档.pdf"; filename*=UTF-8\'\'%E6%B5%8B%E8%AF%95%E6%96%87%E6%A1%A3.pdf'
+                if action == "preview"
+                else 'attachment; filename="测试文档.pdf"; filename*=UTF-8\'\'%E6%B5%8B%E8%AF%95%E6%96%87%E6%A1%A3.pdf'
+            ),
+            "Accept-Ranges": "bytes",
+            "Content-Length": "4",
+        }
+        return _stream(), "测试文档.pdf", "application/pdf", 200, headers
 
 
 def _build_client() -> TestClient:
@@ -61,4 +71,3 @@ def test_shared_preview_handles_unicode_filename_header() -> None:
     assert 'filename*=UTF-8\'\'' in header
     header.encode("latin-1")
     assert response.content == b"data"
-

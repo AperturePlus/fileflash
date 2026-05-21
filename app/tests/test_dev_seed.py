@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.core.settings import Settings
-from src.models.tables_identity import User
-from src.services.dev_seed import DevAccountSeeder, initialize_dev_accounts
+from fileflash.core.settings import Settings
+from fileflash.models.tables_identity import User
+from fileflash.services.dev_seed import DevAccountSeeder, initialize_dev_accounts
 
 
 class DummySeedSession:
@@ -97,7 +97,7 @@ async def test_dev_account_seeder_is_idempotent_and_supports_password_reset():
 @pytest.mark.asyncio
 async def test_initialize_dev_accounts_skips_auto_run_in_production(monkeypatch: pytest.MonkeyPatch):
     guard = AsyncMock(side_effect=AssertionError("SessionLocal should not be called"))
-    monkeypatch.setattr("src.services.dev_seed.SessionLocal", guard)
+    monkeypatch.setattr("fileflash.services.dev_seed.SessionLocal", guard)
 
     result = await initialize_dev_accounts(
         settings=make_settings(APP_ENV="production"),

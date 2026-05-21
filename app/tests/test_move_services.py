@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from src.core.errors import ApiError
-from src.models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
-from src.models.tables_access_share import FavoriteItem
-from src.models.tables_identity import User
-from src.models.tables_storage import File, Folder
-from src.schemas.file import (
+from fileflash.core.errors import ApiError
+from fileflash.models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType
+from fileflash.models.tables_access_share import FavoriteItem
+from fileflash.models.tables_identity import User
+from fileflash.models.tables_storage import File, FileMediaMetadata, Folder
+from fileflash.schemas.file import (
     BatchFilesRequest,
     CreateFolderRequest,
     FileDetails,
@@ -19,8 +20,8 @@ from src.schemas.file import (
     RenameFileRequest,
     RenameFolderRequest,
 )
-from src.services.file import FileService
-from src.services.folder import FolderService
+from fileflash.services.file import FileService
+from fileflash.services.folder import FolderService
 
 
 class DummySession:
@@ -275,7 +276,7 @@ async def test_folder_service_move_folder_delegates_to_file_service(monkeypatch:
             "moved_at": datetime.now(UTC),
         }
     )
-    monkeypatch.setattr("src.services.file.FileService._move_folder_record", move_mock)
+    monkeypatch.setattr("fileflash.services.file.FileService._move_folder_record", move_mock)
 
     result = await service.move_folder(
         user_id=1,
@@ -293,6 +294,7 @@ async def test_folder_service_move_folder_delegates_to_file_service(monkeypatch:
 class DummyFolderSession:
     def __init__(self) -> None:
         self.commit = AsyncMock()
+        self.execute = AsyncMock()
         self.scalar = AsyncMock()
         self.get = AsyncMock()
         self.refresh = AsyncMock()
@@ -380,6 +382,36 @@ async def test_folder_service_rename_folder_auto_suffix(monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
+async def test_folder_service_load_media_optimization_map_parses_transcode_metadata():
+    session = DummySession()
+    service = FolderService(db=session)
+    file_row = make_file_row()
+    extracted_at = datetime(2026, 5, 13, 8, 30, tzinfo=UTC)
+    metadata_row = FileMediaMetadata(
+        source_object_id=9,
+        extra_metadata={
+            "transcode": {
+                "status": "ready",
+                "mediaType": "video",
+                "optimizedMimeType": "video/mp4",
+                "updatedAt": "2026-05-13T08:31:00Z",
+            }
+        },
+        extracted_at=extracted_at,
+    )
+    session.scalars = AsyncMock(return_value=[metadata_row])
+
+    result = await service._load_media_optimization_map([file_row])
+
+    assert 1 in result
+    media = result[1]
+    assert media.status == "ready"
+    assert media.media_type == "video"
+    assert media.optimized_mime_type == "video/mp4"
+    assert media.updated_at == datetime(2026, 5, 13, 8, 31, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
 async def test_file_service_rename_file_auto_suffix(monkeypatch: pytest.MonkeyPatch):
     session = DummySession()
     service = FileService(db=session)
@@ -461,7 +493,9 @@ async def test_file_service_toggle_file_star_adds_favorite(monkeypatch: pytest.M
 
     monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
     monkeypatch.setattr(service, "get_file", AsyncMock(return_value=expected))
-    session.scalar = AsyncMock(return_value=None)
+    monkeypatch.setattr(service, "_get_file_favorite", AsyncMock(side_effect=[None, None]))
+    monkeypatch.setattr(service, "_lock_user_for_star_update", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_count_starred_items", AsyncMock(return_value=0))
 
     result = await service.toggle_file_star(user_id=1, file_id="1", is_starred=True)
 
@@ -502,7 +536,7 @@ async def test_file_service_toggle_file_star_removes_favorite(monkeypatch: pytes
         isStarred=False,
         status=True,
     )))
-    session.scalar = AsyncMock(return_value=existing_favorite)
+    monkeypatch.setattr(service, "_get_file_favorite", AsyncMock(return_value=existing_favorite))
 
     await service.toggle_file_star(user_id=1, file_id="1", is_starred=False)
 
@@ -518,8 +552,11 @@ async def test_folder_service_toggle_folder_star_adds_favorite():
     folder = make_folder_row(folder_id=200)
     owner = User(user_id=1, username="owner", email="owner@example.com", password_hash="hash")
 
-    session.scalar = AsyncMock(side_effect=[folder, None])
+    session.scalar = AsyncMock(return_value=folder)
     session.get = AsyncMock(return_value=owner)
+    service._get_folder_favorite = AsyncMock(side_effect=[None, None])  # type: ignore[method-assign]
+    service._count_starred_items = AsyncMock(return_value=0)  # type: ignore[method-assign]
+    service._lock_user_for_star_update = AsyncMock(return_value=None)  # type: ignore[method-assign]
 
     response = await service.toggle_folder_star(user_id=1, folder_id="200", is_starred=True)
 
@@ -548,8 +585,9 @@ async def test_folder_service_toggle_folder_star_removes_favorite():
         file_id=None,
     )
 
-    session.scalar = AsyncMock(side_effect=[folder, existing_favorite])
+    session.scalar = AsyncMock(return_value=folder)
     session.get = AsyncMock(return_value=owner)
+    service._get_folder_favorite = AsyncMock(return_value=existing_favorite)  # type: ignore[method-assign]
 
     response = await service.toggle_folder_star(user_id=1, folder_id="200", is_starred=False)
 
@@ -558,3 +596,75 @@ async def test_folder_service_toggle_folder_star_removes_favorite():
     assert session.added == []
     assert session.deleted == [existing_favorite]
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_file_service_toggle_file_star_rejects_when_limit_reached(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = FileService(db=session, starred_items_limit=2)
+    file_row = make_file_row()
+
+    monkeypatch.setattr(service, "_get_active_file", AsyncMock(return_value=file_row))
+    monkeypatch.setattr(service, "_get_file_favorite", AsyncMock(side_effect=[None, None]))
+    monkeypatch.setattr(service, "_lock_user_for_star_update", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_count_starred_items", AsyncMock(return_value=2))
+
+    with pytest.raises(ApiError) as exc:
+        await service.toggle_file_star(user_id=1, file_id="1", is_starred=True)
+
+    assert exc.value.status_code == 400
+    assert exc.value.code == 400
+    assert "已达收藏上限 2" in exc.value.message
+    session.commit.assert_not_awaited()
+    assert session.added == []
+
+
+@pytest.mark.asyncio
+async def test_folder_service_toggle_folder_star_rejects_when_limit_reached():
+    session = DummyFolderSession()
+    service = FolderService(db=session, starred_items_limit=2)
+    folder = make_folder_row(folder_id=200)
+    owner = User(user_id=1, username="owner", email="owner@example.com", password_hash="hash")
+
+    session.scalar = AsyncMock(return_value=folder)
+    session.get = AsyncMock(return_value=owner)
+    service._get_folder_favorite = AsyncMock(side_effect=[None, None])  # type: ignore[method-assign]
+    service._count_starred_items = AsyncMock(return_value=2)  # type: ignore[method-assign]
+    service._lock_user_for_star_update = AsyncMock(return_value=None)  # type: ignore[method-assign]
+
+    with pytest.raises(ApiError) as exc:
+        await service.toggle_folder_star(user_id=1, folder_id="200", is_starred=True)
+
+    assert exc.value.status_code == 400
+    assert exc.value.code == 400
+    assert "已达收藏上限 2" in exc.value.message
+    session.commit.assert_not_awaited()
+    assert session.added == []
+
+
+@pytest.mark.asyncio
+async def test_file_service_list_starred_orders_by_recent_favorite(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service = FileService(db=session)
+
+    older = datetime(2026, 5, 13, 8, 0, tzinfo=UTC)
+    middle = datetime(2026, 5, 13, 9, 0, tzinfo=UTC)
+    newer = datetime(2026, 5, 13, 10, 0, tzinfo=UTC)
+
+    file_old = make_file_row()
+    file_old.file_id = 1
+    file_old.file_name = "old.txt"
+    file_new = make_file_row()
+    file_new.file_id = 2
+    file_new.file_name = "new.txt"
+    folder_mid = make_folder_row(folder_id=200)
+    folder_mid.folder_name = "docs"
+
+    file_execute_result = SimpleNamespace(all=lambda: [(older, file_old, "owner"), (newer, file_new, "owner")])
+    folder_execute_result = SimpleNamespace(all=lambda: [(middle, folder_mid, "owner")])
+    session.execute = AsyncMock(side_effect=[file_execute_result, folder_execute_result])
+    monkeypatch.setattr(service, "_load_media_optimization_map", AsyncMock(return_value={}))
+
+    response = await service.list_starred(user_id=1)
+
+    assert [item.id for item in response.items] == ["2", "200", "1"]

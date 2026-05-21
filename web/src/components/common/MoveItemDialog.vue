@@ -3,6 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue';
 import type { ContentItem, FolderItem } from '../../types/file';
 import { getFolderContents } from '../../api/folder';
 import FolderTreeNode from './FolderTreeNode.vue';
+import FileTreeNode from './FileTreeNode.vue';
+import { useLocaleStore } from '../../store/locale';
 import { ui } from '../../utils/ui';
 
 interface Props {
@@ -16,8 +18,11 @@ interface Props {
   prompt?: string;
   confirmText?: string;
   rootLabel?: string;
+  treeVariant?: 'legacy' | 'modern';
 }
 const props = defineProps<Props>();
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const emit = defineEmits<{
   (event: 'close'): void;
@@ -32,15 +37,18 @@ const shareHandling = ref<'keep' | 'revoke'>('keep');
 const modalTitle = computed(() => {
   if (props.title) return props.title;
   const count = props.itemCount || (props.itemToMove ? 1 : 0);
-  if (count <= 1 && props.itemToMove) return `Move '${props.itemToMove.name}'`;
-  if (count > 1) return `Move ${count} items`;
-  return 'Move';
+  if (count <= 1 && props.itemToMove) {
+    return t('move.dialog.title.single').replace('{itemName}', props.itemToMove.name);
+  }
+  if (count > 1) return t('move.dialog.title.multiple').replace('{count}', String(count));
+  return t('move.dialog.title.default');
 });
 
-const promptText = computed(() => props.prompt || 'Choose a new location:');
-const confirmButtonText = computed(() => props.confirmText || 'Move Here');
-const rootText = computed(() => props.rootLabel || 'My Files (Root)');
+const promptText = computed(() => props.prompt || t('move.dialog.prompt'));
+const confirmButtonText = computed(() => props.confirmText || t('move.dialog.confirm'));
+const rootText = computed(() => props.rootLabel || t('move.dialog.root'));
 const showShareHandling = computed(() => props.enableShareHandling !== false && Boolean(props.hasActiveShare));
+const treeVariant = computed(() => props.treeVariant || 'legacy');
 
 const fetchRootFolders = async () => {
   if (rootFolders.value.length > 0) return; // Don't re-fetch if already loaded
@@ -82,13 +90,24 @@ const handleSelectFolder = (folderId: string) => {
 
 const handleConfirm = () => {
   if (!selectedFolderId.value) {
-    ui.toast({ type: 'warning', message: 'Please select a destination folder.' });
+    ui.toast({ type: 'warning', message: t('move.dialog.selectDestinationWarning') });
     return;
   }
   emit('confirm', {
     targetFolderId: selectedFolderId.value,
     shareHandling: showShareHandling.value ? shareHandling.value : 'keep',
   });
+};
+
+const handleModernTreeNavigate = (itemId: string) => {
+  const folder = rootFolders.value.find((entry) => entry.id === itemId);
+  if (folder) {
+    handleSelectFolder(folder.id);
+  }
+};
+
+const handleModernTreeSelectFolder = (folderId: string) => {
+  handleSelectFolder(folderId);
 };
 
 </script>
@@ -104,19 +123,19 @@ const handleConfirm = () => {
         <div class="modal-body">
           <p class="prompt">{{ promptText }}</p>
           <div v-if="showShareHandling" class="share-options">
-            <div class="share-label">Shared Link Handling</div>
+            <div class="share-label">{{ t('move.dialog.shareHandling.title') }}</div>
             <label>
               <input v-model="shareHandling" type="radio" value="keep" />
-              <span>Keep active share links</span>
+              <span>{{ t('move.dialog.shareHandling.keep') }}</span>
             </label>
             <label>
               <input v-model="shareHandling" type="radio" value="revoke" />
-              <span>Revoke active share links after move</span>
+              <span>{{ t('move.dialog.shareHandling.revoke') }}</span>
             </label>
           </div>
           <div class="folder-tree-container">
-            <div v-if="isLoading" class="loading-indicator">Loading...</div>
-            <div v-else-if="rootFolders.length === 0" class="empty-state">No folders available.</div>
+            <div v-if="isLoading" class="loading-indicator">{{ t('move.dialog.loading') }}</div>
+            <div v-else-if="rootFolders.length === 0" class="empty-state">{{ t('move.dialog.empty') }}</div>
             <div v-else>
               <div 
                 class="root-folder-item" 
@@ -125,18 +144,32 @@ const handleConfirm = () => {
               >
                 {{ rootText }}
               </div>
-              <FolderTreeNode
-                v-for="folder in rootFolders"
-                :key="folder.id"
-                :node="folder"
-                :selected-folder-id="selectedFolderId"
-                @select="handleSelectFolder"
-              />
+              <template v-if="treeVariant === 'legacy'">
+                <FolderTreeNode
+                  v-for="folder in rootFolders"
+                  :key="folder.id"
+                  :node="folder"
+                  :selected-folder-id="selectedFolderId"
+                  @select="handleSelectFolder"
+                />
+              </template>
+              <template v-else>
+                <FileTreeNode
+                  v-for="folder in rootFolders"
+                  :key="`modern-${folder.id}`"
+                  :node="folder"
+                  :level="0"
+                  :select-folders="true"
+                  :selected-node-id="selectedFolderId"
+                  @navigate="handleModernTreeNavigate"
+                  @select-folder="handleModernTreeSelectFolder"
+                />
+              </template>
             </div>
           </div>
         </div>
         <footer class="modal-footer">
-          <button class="btn btn-secondary" @click="$emit('close')">Cancel</button>
+          <button class="btn btn-secondary" @click="$emit('close')">{{ t('move.dialog.cancel') }}</button>
           <button class="btn btn-primary" @click="handleConfirm" :disabled="!selectedFolderId">{{ confirmButtonText }}</button>
         </footer>
       </div>

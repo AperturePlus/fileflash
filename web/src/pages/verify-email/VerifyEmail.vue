@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { Dot, Spinner, Text } from '../../components/atoms';
+import { Button } from '../../components/molecules';
 import { resendVerification, verifyEmail } from '../../api/user';
 import { useUserStore } from '../../store/user';
 
@@ -14,182 +16,90 @@ const resendLoading = ref(false);
 const resendMessage = ref('');
 const resendError = ref('');
 
-const token = computed(() => {
-  const value = route.query.token;
-  return typeof value === 'string' ? value : '';
-});
-
+const token = computed(() => (typeof route.query.token === 'string' ? route.query.token : ''));
 const canResend = computed(() => userStore.isAuthenticated && !userStore.user?.emailVerified);
+const dotTone = computed<'success' | 'error' | 'accent' | 'info'>(() => status.value === 'success' ? 'success' : status.value === 'error' ? 'error' : status.value === 'pending' ? 'accent' : 'info');
 
-async function executeVerify(tokenValue: string) {
+async function runVerify(t: string) {
   status.value = 'pending';
-  resendError.value = '';
-  resendMessage.value = '';
+  resendError.value = ''; resendMessage.value = '';
   try {
-    await verifyEmail(tokenValue);
+    await verifyEmail(t);
     await userStore.fetchUserProfile();
     status.value = 'success';
     message.value = 'Email verification completed successfully.';
-  } catch (error) {
+  } catch (e) {
     status.value = 'error';
-    message.value = error instanceof Error ? error.message : 'Failed to verify email.';
+    message.value = e instanceof Error ? e.message : 'Failed to verify email.';
   }
 }
 
-async function handleResend() {
-  if (resendLoading.value) {
-    return;
-  }
+async function onResend() {
+  if (resendLoading.value) return;
   resendLoading.value = true;
-  resendError.value = '';
-  resendMessage.value = '';
+  resendError.value = ''; resendMessage.value = '';
   try {
     await resendVerification();
     resendMessage.value = 'Verification email has been resent.';
-  } catch (error) {
-    resendError.value = error instanceof Error ? error.message : 'Failed to resend verification email.';
+  } catch (e) {
+    resendError.value = e instanceof Error ? e.message : 'Failed to resend verification email.';
   } finally {
     resendLoading.value = false;
   }
 }
 
 onMounted(async () => {
-  if (token.value) {
-    await executeVerify(token.value);
+  if (token.value) { await runVerify(token.value); return; }
+  if (!userStore.isAuthenticated) {
+    status.value = 'error';
+    message.value = 'Please log in first, then verify your email.';
     return;
   }
-
   if (userStore.user?.emailVerified) {
     status.value = 'success';
     message.value = 'Your email has already been verified.';
+    return;
   }
+  status.value = 'idle';
+  message.value = 'You are logged in but email is not verified yet. You can resend verification email.';
 });
 </script>
 
 <template>
-  <div class="auth-card">
-    <header class="auth-header">
-      <h1>Verify your email</h1>
-      <p>{{ message }}</p>
+  <section class="verify">
+    <header class="verify__head">
+      <Text variant="h1" as="h1">Verify your email</Text>
+      <div class="verify__row">
+        <Dot :tone="dotTone" />
+        <Text variant="small" as="p">{{ message }}</Text>
+      </div>
     </header>
 
-    <div class="content">
-      <p v-if="status === 'pending'" class="info-message">Verifying token...</p>
-      <p v-if="status === 'success'" class="success-message">Verification completed.</p>
-      <p v-if="status === 'error'" class="error-message">{{ message }}</p>
+    <div v-if="status === 'pending'" class="verify__pending"><Spinner /><Text variant="label">VERIFYING TOKEN</Text></div>
+    <div v-if="resendMessage" role="status" class="verify__msg verify__msg--ok">{{ resendMessage }}</div>
+    <div v-if="resendError" role="status" class="verify__msg verify__msg--err">{{ resendError }}</div>
 
-      <button
-        v-if="canResend"
-        class="submit-btn"
-        type="button"
-        :disabled="resendLoading"
-        @click="handleResend"
-      >
-        {{ resendLoading ? 'Resending...' : 'Resend verification email' }}
-      </button>
+    <Button v-if="canResend" variant="primary" :loading="resendLoading" :disabled="resendLoading" class="verify__resend" @click="onResend">
+      {{ resendLoading ? 'RESENDING' : 'RESEND VERIFICATION EMAIL' }}
+    </Button>
 
-      <p v-if="resendMessage" class="success-message">{{ resendMessage }}</p>
-      <p v-if="resendError" class="error-message">{{ resendError }}</p>
-    </div>
-
-    <footer class="auth-footer">
-      <button class="link-btn" type="button" @click="router.push('/login')">Back to login</button>
-      <button
-        v-if="userStore.isAuthenticated"
-        class="link-btn"
-        type="button"
-        @click="router.push('/files')"
-      >
-        Enter files
-      </button>
+    <footer class="verify__footer">
+      <button class="verify__link" type="button" @click="router.push('/login')">Back to login</button>
+      <button v-if="userStore.isAuthenticated" class="verify__link" type="button" @click="router.push('/files')">Enter files</button>
     </footer>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.auth-card {
-  width: 100%;
-  padding: 28px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 24px 44px rgba(15, 23, 42, 0.2);
-}
-
-.auth-header {
-  margin-bottom: 18px;
-}
-
-.auth-header h1 {
-  font-size: 28px;
-  margin-bottom: 6px;
-}
-
-.auth-header p {
-  margin: 0;
-  color: #52667f;
-}
-
-.content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.submit-btn {
-  margin-top: 4px;
-  height: 44px;
-  border-radius: 10px;
-  border: none;
-  background: linear-gradient(135deg, var(--color-primary), #3b82f6);
-  color: var(--color-text-on-primary);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-}
-
-.submit-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.error-message,
-.success-message,
-.info-message {
-  margin: 0;
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-
-.error-message {
-  color: var(--color-danger-dark);
-  background-color: var(--color-danger-light);
-  border: 1px solid #fca5a5;
-}
-
-.success-message {
-  color: #166534;
-  background-color: #dcfce7;
-  border: 1px solid #86efac;
-}
-
-.info-message {
-  color: #1e3a8a;
-  background-color: #dbeafe;
-  border: 1px solid #93c5fd;
-}
-
-.auth-footer {
-  margin-top: 16px;
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-}
-
-.link-btn {
-  border: none;
-  background: transparent;
-  color: var(--color-primary);
-  cursor: pointer;
-}
+.verify { display: flex; flex-direction: column; gap: var(--sp-lg); width: min(420px, 92vw); padding: var(--sp-2xl); background: var(--surface-raised); border: 1px solid var(--border-default); }
+.verify__head { display: flex; flex-direction: column; gap: var(--sp-sm); }
+.verify__row { display: flex; align-items: center; gap: var(--sp-sm); }
+.verify__pending { display: flex; align-items: center; gap: var(--sp-sm); color: var(--text-dim); }
+.verify__msg { padding: var(--sp-sm) var(--sp-md); border: 1px solid var(--border-default); font-family: var(--font-mono); font-size: var(--text-small); }
+.verify__msg--ok { color: var(--status-success); border-color: var(--status-success); }
+.verify__msg--err { color: var(--status-error); border-color: var(--status-error); }
+.verify__resend { width: 100%; justify-content: center; height: 40px; }
+.verify__footer { display: flex; justify-content: center; gap: var(--sp-md); }
+.verify__link { background: transparent; border: none; color: var(--ac); cursor: pointer; font: inherit; padding: 0; font-size: var(--text-small); }
+.verify__link:hover { text-decoration: underline; }
 </style>
