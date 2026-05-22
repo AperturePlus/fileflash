@@ -21,7 +21,7 @@ dependencies = [
     "python-multipart>=0.0.24",
 ]
 [project.scripts]
-fileflash = "fileflash.main:main"
+fileflash = "fileflash.scripts.run_with_workers:main"
 fileflash-dev = "fileflash.scripts.run_with_workers:main"
 
 [dependency-groups]
