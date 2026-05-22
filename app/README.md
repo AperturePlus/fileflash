@@ -3,26 +3,26 @@
 Use one command to start backend API and file workers together:
 
 ```bash
-uv run python -m fileflash.scripts.run_with_workers
+uv run fileflash
 ```
 
 Common options:
 
 ```bash
 # custom host/port
-uv run python -m fileflash.scripts.run_with_workers --host 127.0.0.1 --port 8080
+uv run fileflash --host 127.0.0.1 --port 8080
 
 # start multiple worker processes
-uv run python -m fileflash.scripts.run_with_workers --worker-count 2
+uv run fileflash --worker-count 2
 
 # API only (without workers)
-uv run python -m fileflash.scripts.run_with_workers --no-worker
+uv run fileflash --no-worker
 ```
 
 Notes:
 - This runner starts `uvicorn fileflash.main:app` and `python -m fileflash.workers.consumer`.
 - If any subprocess exits, the runner stops all other subprocesses.
-- If your environment resolves project scripts correctly, `uv run fileflash-dev` is equivalent.
+- `uv run fileflash-dev` is kept as a backward-compatible alias.
 
 ## Database Migration Requirement
 
@@ -31,6 +31,6 @@ Before starting API processes, ensure Flyway migrations are fully applied (inclu
 Recommended startup order:
 1. Start PostgreSQL
 2. Run Flyway migrate
-3. Start API (`uv run fileflash`) or runner (`uv run fileflash-dev`)
+3. Start backend (`uv run fileflash`; `uv run fileflash-dev` is also supported)
 
 If the schema is outdated, API startup will fail fast with an explicit compatibility error.
