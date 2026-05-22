@@ -1,16 +1,10 @@
 <script setup lang="ts">
-import { useThemeStore } from '../../store/theme';
-import logoLight from '../../assets/logo/icon_white.png';
-import logoDark from '../../assets/logo/icon_dark.png';
-
-const themeStore = useThemeStore();
 </script>
 
 <template>
   <div class="auth-layout">
     <div class="auth-card">
       <div class="auth-brand">
-        <img :src="themeStore.theme === 'light' ? logoLight : logoDark" alt="FileFlash" class="auth-logo" />
         <span class="auth-title">FileFlash</span>
       </div>
       <router-view v-slot="{ Component, route }">
@@ -35,10 +29,9 @@ const themeStore = useThemeStore();
   border: 1px solid var(--border-default);
 }
 .auth-brand {
-  display: flex; align-items: center; gap: var(--sp-md);
+  display: flex; align-items: center;
   margin-bottom: var(--sp-xl);
 }
-.auth-logo { width: 38px; height: 38px; }
 .auth-title { font-size: var(--text-h1); font-weight: var(--weight-semibold); color: var(--text-primary); }
 
 .page-fade-enter-active, .page-fade-leave-active {

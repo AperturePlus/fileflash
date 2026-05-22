@@ -45,11 +45,6 @@ function goHome() { router.push('/files'); }
         @click="emit('toggle-left')"
       />
       <div class="brand" @click="goHome">
-        <img
-          :src="themeStore.theme === 'light' ? '/src/assets/logo/icon_white.png' : '/src/assets/logo/icon_dark.png'"
-          alt="FileFlash"
-          class="brand-logo"
-        />
         <div class="brand-text">
           <strong>FileFlash</strong>
           <span>{{ t('header.brandSubtitle') }}</span>
@@ -99,7 +94,6 @@ function goHome() { router.push('/files'); }
 .header-left, .header-center, .header-right { display: flex; align-items: center; min-width: 0; gap: var(--sp-md); }
 .brand { display: flex; align-items: center; gap: var(--sp-sm); cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); transition: background-color var(--mo-duration-fast) var(--mo-easing); }
 .brand:hover { background: var(--surface-inset); }
-.brand-logo { width: 32px; height: 32px; border-radius: var(--radius-sm); }
 .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
 .brand-text strong { font-size: var(--text-body); color: var(--text-primary); }
 .brand-text span { font-size: var(--text-label); color: var(--text-dim); }
