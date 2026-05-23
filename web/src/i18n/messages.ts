@@ -423,6 +423,105 @@ export type LocaleKey =
   | 'move.dialog.loading'
   | 'move.dialog.empty'
   | 'move.dialog.cancel'
+  | 'files.preview.detail.unknownType'
+  | 'files.preview.detail.download'
+  | 'files.preview.detail.reload'
+  | 'files.preview.detail.loading'
+  | 'files.preview.detail.notAvailable'
+  | 'files.preview.detail.placeholder'
+  | 'files.preview.detail.loadFailed'
+  | 'files.preview.detail.downloadFailed'
+  | 'files.preview.image.alt'
+  | 'files.preview.pdf.prev'
+  | 'files.preview.pdf.next'
+  | 'files.preview.pdf.page'
+  | 'files.preview.pdf.fallbackMode'
+  | 'files.preview.pdf.fallbackNote'
+  | 'files.preview.pdf.retryRender'
+  | 'files.preview.pdf.openNewTab'
+  | 'files.preview.pdf.renderFailed'
+  | 'files.preview.video.loading'
+  | 'files.preview.video.loadFailed'
+  | 'files.preview.video.downloadFailed'
+  | 'files.preview.video.mimeFallback'
+  | 'agent.v2.layout.brand'
+  | 'agent.v2.layout.tab.workspace'
+  | 'agent.v2.layout.tab.skills'
+  | 'agent.v2.sessions.label'
+  | 'agent.v2.sessions.new'
+  | 'agent.v2.sessions.empty'
+  | 'agent.v2.sessions.delete'
+  | 'agent.v2.sessions.relative.justNow'
+  | 'agent.v2.sessions.relative.minutes'
+  | 'agent.v2.sessions.relative.hours'
+  | 'agent.v2.sessions.relative.days'
+  | 'agent.v2.timeline.label'
+  | 'agent.v2.timeline.welcomeHint'
+  | 'agent.v2.timeline.hint.organize'
+  | 'agent.v2.timeline.hint.duplicates'
+  | 'agent.v2.timeline.hint.tagInvoices'
+  | 'agent.v2.input.placeholder'
+  | 'agent.v2.input.send'
+  | 'agent.v2.input.policy.planOnly'
+  | 'agent.v2.input.policy.confirm'
+  | 'agent.v2.input.policy.autopilot'
+  | 'agent.v2.turn.role'
+  | 'agent.v2.turn.status.pending'
+  | 'agent.v2.turn.status.running'
+  | 'agent.v2.turn.status.succeeded'
+  | 'agent.v2.turn.status.failed'
+  | 'agent.v2.turn.status.canceled'
+  | 'agent.v2.turn.cost.label'
+  | 'agent.v2.turn.cost.tokens'
+  | 'agent.v2.turn.cost.calls'
+  | 'agent.v2.turn.cost.est'
+  | 'agent.v2.turn.warn.label'
+  | 'agent.v2.turn.execute'
+  | 'agent.v2.turn.cancel'
+  | 'agent.v2.inspector.label'
+  | 'agent.v2.inspector.empty'
+  | 'agent.v2.inspector.skill'
+  | 'agent.v2.inspector.planHash'
+  | 'agent.v2.inspector.copied'
+  | 'agent.v2.inspector.tokens'
+  | 'agent.v2.inspector.calls'
+  | 'agent.v2.inspector.estSec'
+  | 'agent.v2.inspector.actions'
+  | 'agent.v2.inspector.warnings'
+  | 'agent.v2.skills.search.label'
+  | 'agent.v2.skills.search.placeholder'
+  | 'agent.v2.skills.tab.marketplace'
+  | 'agent.v2.skills.tab.mySkills'
+  | 'agent.v2.skills.newSkill'
+  | 'agent.v2.skills.empty'
+  | 'agent.v2.skills.card.edit'
+  | 'agent.v2.skills.card.delete'
+  | 'agent.v2.skills.editor.titleEdit'
+  | 'agent.v2.skills.editor.titleNew'
+  | 'agent.v2.skills.editor.field.name'
+  | 'agent.v2.skills.editor.field.triggers'
+  | 'agent.v2.skills.editor.field.triggersPlaceholder'
+  | 'agent.v2.skills.editor.field.description'
+  | 'agent.v2.skills.editor.field.tools'
+  | 'agent.v2.skills.editor.field.toolsPlaceholder'
+  | 'agent.v2.skills.editor.advanced'
+  | 'agent.v2.skills.editor.field.planTemplate'
+  | 'agent.v2.skills.editor.field.inputsSchema'
+  | 'agent.v2.skills.editor.field.outputsSchema'
+  | 'agent.v2.skills.editor.error.required'
+  | 'agent.v2.skills.editor.error.invalidJson'
+  | 'agent.v2.skills.editor.cancel'
+  | 'agent.v2.skills.editor.save'
+  | 'agent.v2.skills.import.label'
+  | 'agent.v2.skills.import.mode.upsert'
+  | 'agent.v2.skills.import.mode.insertOnly'
+  | 'agent.v2.skills.import.dropHint'
+  | 'agent.v2.skills.import.jsonLabel'
+  | 'agent.v2.skills.import.jsonPlaceholder'
+  | 'agent.v2.skills.import.submit'
+  | 'agent.v2.skills.import.resultsLabel'
+  | 'agent.v2.skills.import.error.readFailed'
+  | 'agent.v2.skills.import.error.emptyJson'
   | 'footer.termsOfService'
   | 'footer.privacyPolicy';
 
@@ -854,6 +953,105 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'move.dialog.loading': '加载中...',
     'move.dialog.empty': '暂无可用文件夹。',
     'move.dialog.cancel': '取消',
+    'files.preview.detail.unknownType': '未知类型',
+    'files.preview.detail.download': '下载',
+    'files.preview.detail.reload': '重新加载预览',
+    'files.preview.detail.loading': '正在加载预览...',
+    'files.preview.detail.notAvailable': '该文件类型暂不支持预览。',
+    'files.preview.detail.placeholder': '选择一个文件以查看详情。',
+    'files.preview.detail.loadFailed': '无法加载文件预览。',
+    'files.preview.detail.downloadFailed': '无法下载该文件。',
+    'files.preview.image.alt': '图片预览',
+    'files.preview.pdf.prev': '上一页',
+    'files.preview.pdf.next': '下一页',
+    'files.preview.pdf.page': '第 {page} / {total} 页',
+    'files.preview.pdf.fallbackMode': '使用浏览器 PDF 兜底渲染',
+    'files.preview.pdf.fallbackNote': '当前环境不支持应用内 PDF 渲染。',
+    'files.preview.pdf.retryRender': '重试渲染',
+    'files.preview.pdf.openNewTab': '在新标签页打开',
+    'files.preview.pdf.renderFailed': '无法渲染 PDF 预览。',
+    'files.preview.video.loading': '正在加载预览...',
+    'files.preview.video.loadFailed': '无法加载视频预览。',
+    'files.preview.video.downloadFailed': '无法下载该文件。',
+    'files.preview.video.mimeFallback': 'video',
+    'agent.v2.layout.brand': '[ FILEFLASH · AGENT ]',
+    'agent.v2.layout.tab.workspace': '工作台',
+    'agent.v2.layout.tab.skills': '技能',
+    'agent.v2.sessions.label': '会话',
+    'agent.v2.sessions.new': '新建会话',
+    'agent.v2.sessions.empty': '暂无会话。',
+    'agent.v2.sessions.delete': '删除会话',
+    'agent.v2.sessions.relative.justNow': '刚刚',
+    'agent.v2.sessions.relative.minutes': '{value} 分钟前',
+    'agent.v2.sessions.relative.hours': '{value} 小时前',
+    'agent.v2.sessions.relative.days': '{value} 天前',
+    'agent.v2.timeline.label': '时间线',
+    'agent.v2.timeline.welcomeHint': '在下方输入任务以开始。',
+    'agent.v2.timeline.hint.organize': '按日期把我的截图整理到不同文件夹',
+    'agent.v2.timeline.hint.duplicates': '在我的照片库中查找重复项',
+    'agent.v2.timeline.hint.tagInvoices': '为发票打标签并移动到 /finance',
+    'agent.v2.input.placeholder': '描述一个任务，Shift+Enter 换行。',
+    'agent.v2.input.send': '发送',
+    'agent.v2.input.policy.planOnly': '仅生成计划',
+    'agent.v2.input.policy.confirm': '确认执行',
+    'agent.v2.input.policy.autopilot': '自动执行',
+    'agent.v2.turn.role': 'AGENT',
+    'agent.v2.turn.status.pending': '等待中',
+    'agent.v2.turn.status.running': '运行中',
+    'agent.v2.turn.status.succeeded': '已完成',
+    'agent.v2.turn.status.failed': '失败',
+    'agent.v2.turn.status.canceled': '已取消',
+    'agent.v2.turn.cost.label': '消耗',
+    'agent.v2.turn.cost.tokens': 'tokens',
+    'agent.v2.turn.cost.calls': '调用',
+    'agent.v2.turn.cost.est': '预计',
+    'agent.v2.turn.warn.label': '警告',
+    'agent.v2.turn.execute': '执行',
+    'agent.v2.turn.cancel': '取消',
+    'agent.v2.inspector.label': '检视器',
+    'agent.v2.inspector.empty': '选择一个回合以查看其计划详情。',
+    'agent.v2.inspector.skill': 'SKILL',
+    'agent.v2.inspector.planHash': 'PLAN HASH',
+    'agent.v2.inspector.copied': '已复制',
+    'agent.v2.inspector.tokens': 'TOKENS',
+    'agent.v2.inspector.calls': 'CALLS',
+    'agent.v2.inspector.estSec': '预计秒数',
+    'agent.v2.inspector.actions': '步骤数',
+    'agent.v2.inspector.warnings': '警告',
+    'agent.v2.skills.search.label': '搜索',
+    'agent.v2.skills.search.placeholder': '搜索技能...',
+    'agent.v2.skills.tab.marketplace': '技能市场',
+    'agent.v2.skills.tab.mySkills': '我的技能',
+    'agent.v2.skills.newSkill': '新增技能',
+    'agent.v2.skills.empty': '暂无技能。',
+    'agent.v2.skills.card.edit': '编辑',
+    'agent.v2.skills.card.delete': '删除',
+    'agent.v2.skills.editor.titleEdit': '编辑 Skill',
+    'agent.v2.skills.editor.titleNew': '新建 Skill',
+    'agent.v2.skills.editor.field.name': '名称',
+    'agent.v2.skills.editor.field.triggers': '触发词',
+    'agent.v2.skills.editor.field.triggersPlaceholder': '整理, 分类',
+    'agent.v2.skills.editor.field.description': '描述',
+    'agent.v2.skills.editor.field.tools': '工具',
+    'agent.v2.skills.editor.field.toolsPlaceholder': 'tool.a, tool.b',
+    'agent.v2.skills.editor.advanced': '高级 JSON',
+    'agent.v2.skills.editor.field.planTemplate': '计划模板',
+    'agent.v2.skills.editor.field.inputsSchema': '输入 Schema',
+    'agent.v2.skills.editor.field.outputsSchema': '输出 Schema',
+    'agent.v2.skills.editor.error.required': '名称和描述为必填项。',
+    'agent.v2.skills.editor.error.invalidJson': '{field} JSON 格式错误',
+    'agent.v2.skills.editor.cancel': '取消',
+    'agent.v2.skills.editor.save': '保存',
+    'agent.v2.skills.import.label': '导入技能',
+    'agent.v2.skills.import.mode.upsert': 'Upsert',
+    'agent.v2.skills.import.mode.insertOnly': '仅新增',
+    'agent.v2.skills.import.dropHint': '拖入 .json 文件或点击浏览',
+    'agent.v2.skills.import.jsonLabel': 'JSON',
+    'agent.v2.skills.import.jsonPlaceholder': '[{ "skillKey": "...", "name": "...", "description": "..." }]',
+    'agent.v2.skills.import.submit': '导入',
+    'agent.v2.skills.import.resultsLabel': '导入结果',
+    'agent.v2.skills.import.error.readFailed': '读取文件失败。',
+    'agent.v2.skills.import.error.emptyJson': '请先粘贴 JSON 或拖入文件。',
     'footer.termsOfService': '使用条款',
     'footer.privacyPolicy': '隐私政策',
   },
@@ -1280,6 +1478,105 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'move.dialog.loading': 'Loading...',
     'move.dialog.empty': 'No folders available.',
     'move.dialog.cancel': 'Cancel',
+    'files.preview.detail.unknownType': 'Unknown type',
+    'files.preview.detail.download': 'Download',
+    'files.preview.detail.reload': 'Reload Preview',
+    'files.preview.detail.loading': 'Loading preview...',
+    'files.preview.detail.notAvailable': 'Preview is not available for this file type.',
+    'files.preview.detail.placeholder': 'Select a file to preview details.',
+    'files.preview.detail.loadFailed': 'Unable to load file preview.',
+    'files.preview.detail.downloadFailed': 'Unable to download this file.',
+    'files.preview.image.alt': 'Image preview',
+    'files.preview.pdf.prev': 'Prev',
+    'files.preview.pdf.next': 'Next',
+    'files.preview.pdf.page': 'Page {page} / {total}',
+    'files.preview.pdf.fallbackMode': 'Browser PDF fallback mode',
+    'files.preview.pdf.fallbackNote': 'In-app PDF rendering is unavailable in this environment.',
+    'files.preview.pdf.retryRender': 'Retry render',
+    'files.preview.pdf.openNewTab': 'Open in new tab',
+    'files.preview.pdf.renderFailed': 'Unable to render PDF preview.',
+    'files.preview.video.loading': 'Loading preview...',
+    'files.preview.video.loadFailed': 'Unable to load video preview.',
+    'files.preview.video.downloadFailed': 'Unable to download this file.',
+    'files.preview.video.mimeFallback': 'video',
+    'agent.v2.layout.brand': '[ FILEFLASH · AGENT ]',
+    'agent.v2.layout.tab.workspace': 'WORKSPACE',
+    'agent.v2.layout.tab.skills': 'SKILLS',
+    'agent.v2.sessions.label': 'SESSIONS',
+    'agent.v2.sessions.new': 'New session',
+    'agent.v2.sessions.empty': 'No sessions yet.',
+    'agent.v2.sessions.delete': 'Delete session',
+    'agent.v2.sessions.relative.justNow': 'just now',
+    'agent.v2.sessions.relative.minutes': '{value}m',
+    'agent.v2.sessions.relative.hours': '{value}h',
+    'agent.v2.sessions.relative.days': '{value}d',
+    'agent.v2.timeline.label': 'TIMELINE',
+    'agent.v2.timeline.welcomeHint': 'Type a task below to get started.',
+    'agent.v2.timeline.hint.organize': 'Organize my screenshots into folders by date',
+    'agent.v2.timeline.hint.duplicates': 'Find duplicates across my photo library',
+    'agent.v2.timeline.hint.tagInvoices': 'Tag invoices and move them under /finance',
+    'agent.v2.input.placeholder': 'Describe a task. Shift+Enter for newline.',
+    'agent.v2.input.send': 'Send',
+    'agent.v2.input.policy.planOnly': 'PLAN ONLY',
+    'agent.v2.input.policy.confirm': 'CONFIRM',
+    'agent.v2.input.policy.autopilot': 'AUTOPILOT',
+    'agent.v2.turn.role': 'AGENT',
+    'agent.v2.turn.status.pending': 'pending',
+    'agent.v2.turn.status.running': 'running',
+    'agent.v2.turn.status.succeeded': 'succeeded',
+    'agent.v2.turn.status.failed': 'failed',
+    'agent.v2.turn.status.canceled': 'canceled',
+    'agent.v2.turn.cost.label': 'COST',
+    'agent.v2.turn.cost.tokens': 'tokens',
+    'agent.v2.turn.cost.calls': 'calls',
+    'agent.v2.turn.cost.est': 'est',
+    'agent.v2.turn.warn.label': 'WARN',
+    'agent.v2.turn.execute': 'Execute',
+    'agent.v2.turn.cancel': 'Cancel',
+    'agent.v2.inspector.label': 'INSPECTOR',
+    'agent.v2.inspector.empty': 'Select a turn to inspect its plan.',
+    'agent.v2.inspector.skill': 'SKILL',
+    'agent.v2.inspector.planHash': 'PLAN HASH',
+    'agent.v2.inspector.copied': 'COPIED',
+    'agent.v2.inspector.tokens': 'TOKENS',
+    'agent.v2.inspector.calls': 'CALLS',
+    'agent.v2.inspector.estSec': 'EST SEC',
+    'agent.v2.inspector.actions': 'ACTIONS',
+    'agent.v2.inspector.warnings': 'WARNINGS',
+    'agent.v2.skills.search.label': 'SEARCH',
+    'agent.v2.skills.search.placeholder': 'Search skills...',
+    'agent.v2.skills.tab.marketplace': 'MARKETPLACE',
+    'agent.v2.skills.tab.mySkills': 'MY SKILLS',
+    'agent.v2.skills.newSkill': 'New Skill',
+    'agent.v2.skills.empty': 'No skills here yet.',
+    'agent.v2.skills.card.edit': 'Edit',
+    'agent.v2.skills.card.delete': 'Delete',
+    'agent.v2.skills.editor.titleEdit': 'Edit Skill',
+    'agent.v2.skills.editor.titleNew': 'New Skill',
+    'agent.v2.skills.editor.field.name': 'NAME',
+    'agent.v2.skills.editor.field.triggers': 'TRIGGERS',
+    'agent.v2.skills.editor.field.triggersPlaceholder': 'organize, classify',
+    'agent.v2.skills.editor.field.description': 'DESCRIPTION',
+    'agent.v2.skills.editor.field.tools': 'TOOLS',
+    'agent.v2.skills.editor.field.toolsPlaceholder': 'tool.a, tool.b',
+    'agent.v2.skills.editor.advanced': 'ADVANCED JSON',
+    'agent.v2.skills.editor.field.planTemplate': 'PLAN TEMPLATE',
+    'agent.v2.skills.editor.field.inputsSchema': 'INPUTS SCHEMA',
+    'agent.v2.skills.editor.field.outputsSchema': 'OUTPUTS SCHEMA',
+    'agent.v2.skills.editor.error.required': 'Name and description are required.',
+    'agent.v2.skills.editor.error.invalidJson': '{field} JSON invalid',
+    'agent.v2.skills.editor.cancel': 'Cancel',
+    'agent.v2.skills.editor.save': 'Save',
+    'agent.v2.skills.import.label': 'IMPORT SKILLS',
+    'agent.v2.skills.import.mode.upsert': 'UPSERT',
+    'agent.v2.skills.import.mode.insertOnly': 'INSERT ONLY',
+    'agent.v2.skills.import.dropHint': 'Drop a .json file or click to browse',
+    'agent.v2.skills.import.jsonLabel': 'JSON',
+    'agent.v2.skills.import.jsonPlaceholder': '[{ "skillKey": "...", "name": "...", "description": "..." }]',
+    'agent.v2.skills.import.submit': 'Import',
+    'agent.v2.skills.import.resultsLabel': 'RESULTS',
+    'agent.v2.skills.import.error.readFailed': 'Failed to read file.',
+    'agent.v2.skills.import.error.emptyJson': 'Paste JSON or drop a file first.',
     'footer.termsOfService': 'Terms of Service',
     'footer.privacyPolicy': 'Privacy Policy',
   },
