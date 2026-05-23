@@ -2,14 +2,17 @@
 import { computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import SegmentedControl from '../../components/molecules/SegmentedControl.vue';
+import { useLocaleStore } from '../../store/locale';
 
 const router = useRouter();
 const route = useRoute();
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
-const TABS = [
-  { value: 'workspace', label: 'WORKSPACE' },
-  { value: 'skills', label: 'SKILLS' },
-];
+const TABS = computed(() => [
+  { value: 'workspace', label: t('agent.v2.layout.tab.workspace') },
+  { value: 'skills', label: t('agent.v2.layout.tab.skills') },
+]);
 
 const currentTab = computed(() =>
   route.path.startsWith('/agent/skills') ? 'skills' : 'workspace',
@@ -22,7 +25,7 @@ const onTab = (v: string | number) =>
 <template>
   <div class="agent-layout">
     <header class="agent-layout__head">
-      <span class="agent-layout__brand">[ FILEFLASH · AGENT ]</span>
+      <span class="agent-layout__brand">{{ t('agent.v2.layout.brand') }}</span>
       <SegmentedControl :model-value="currentTab" :options="TABS" @update:model-value="onTab" />
     </header>
     <div class="agent-layout__body">
