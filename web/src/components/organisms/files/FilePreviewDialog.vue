@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import FileDetailPanel from './FileDetailPanel.vue';
+import VideoPreviewDialog from './VideoPreviewDialog.vue';
 import { useLocaleStore } from '../../../store/locale';
+import { getPreviewCapabilities } from '../../../utils/preview';
 import type { FileItem } from '../../../types/file';
 
 const props = defineProps<{ file: FileItem | null }>();
@@ -11,6 +13,10 @@ const localeStore = useLocaleStore();
 const t = localeStore.t;
 
 const isOpen = computed(() => props.file !== null);
+const isVideoFile = computed(() => {
+  if (!props.file) return false;
+  return getPreviewCapabilities(props.file.mimeType, props.file.name).isVideo;
+});
 
 const onKey = (ev: KeyboardEvent) => {
   if (ev.key === 'Escape' && isOpen.value) {
@@ -32,7 +38,12 @@ const onOverlayClick = (ev: MouseEvent) => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <VideoPreviewDialog
+    v-if="isVideoFile"
+    :file="file"
+    @close="emit('close')"
+  />
+  <Teleport v-else to="body">
     <div
       v-if="isOpen"
       class="file-preview-dialog__overlay"

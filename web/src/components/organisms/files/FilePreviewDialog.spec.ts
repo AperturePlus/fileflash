@@ -14,6 +14,21 @@ vi.mock('pdfjs-dist', () => ({
   getDocument: vi.fn(),
 }));
 
+vi.mock('hls.js', () => ({
+  default: class {
+    static isSupported() { return false; }
+    destroy() {}
+    loadSource() {}
+    attachMedia() {}
+    on() {}
+  },
+}));
+vi.mock('plyr', () => ({
+  default: class {
+    destroy() {}
+  },
+}));
+
 const sampleFile = {
   itemType: 'file',
   id: 'f1',
@@ -69,6 +84,15 @@ describe('FilePreviewDialog', () => {
     const x = document.body.querySelector('.file-preview-dialog__close') as HTMLButtonElement;
     x.click();
     expect(w.emitted('close')).toBeTruthy();
+    w.unmount();
+  });
+
+  it('renders VideoPreviewDialog instead of FileDetailPanel for video files', async () => {
+    const videoFile = { ...sampleFile, id: 'v1', name: 'clip.mp4', mimeType: 'video/mp4' };
+    const w = mount(FilePreviewDialog, { props: { file: videoFile as any }, attachTo: document.body });
+    await nextTick();
+    expect(document.body.querySelector('.video-preview-dialog')).toBeTruthy();
+    expect(document.body.querySelector('.file-preview-dialog')).toBeNull();
     w.unmount();
   });
 });
