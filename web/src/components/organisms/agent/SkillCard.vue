@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import Button from '../../molecules/Button.vue';
 import Tag from '../../molecules/Tag.vue';
+import { useLocaleStore } from '../../../store/locale';
 import type { AgentSkillItem } from '../../../types/skill';
 
 defineProps<{ skill: AgentSkillItem; editable?: boolean }>();
 defineEmits<{ edit: []; delete: [] }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 </script>
 
 <template>
@@ -19,8 +23,8 @@ defineEmits<{ edit: []; delete: [] }>();
     <p class="ff-sc__desc">{{ skill.description }}</p>
     <p v-if="skill.triggersText" class="ff-sc__triggers">{{ skill.triggersText }}</p>
     <footer v-if="editable" class="ff-sc__row">
-      <Button variant="ghost" size="sm" @click="$emit('edit')">Edit</Button>
-      <Button variant="ghost" size="sm" @click="$emit('delete')">Delete</Button>
+      <Button variant="ghost" size="sm" @click="$emit('edit')">{{ t('agent.v2.skills.card.edit') }}</Button>
+      <Button variant="ghost" size="sm" @click="$emit('delete')">{{ t('agent.v2.skills.card.delete') }}</Button>
     </footer>
   </article>
 </template>

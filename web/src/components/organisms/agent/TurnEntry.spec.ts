@@ -44,14 +44,14 @@ describe('organisms/agent/TurnEntry', () => {
       props: { turn: baseTurn(), policy: 'planOnly', focused: false },
     });
     const buttons = w.findAll('button').map((b) => b.text());
-    expect(buttons.some((t) => /execute/i.test(t))).toBe(false);
+    expect(buttons.some((label) => /execute|执行/i.test(label))).toBe(false);
   });
 
   it('Cancel button present when running, clicking emits cancel', async () => {
     const w = mount(TurnEntry, {
       props: { turn: baseTurn({ status: 'running' }), policy: 'confirm', focused: false },
     });
-    const cancelBtn = w.findAll('button').find((b) => /cancel/i.test(b.text()));
+    const cancelBtn = w.findAll('button').find((b) => /cancel|取消/i.test(b.text()));
     expect(cancelBtn).toBeTruthy();
     await cancelBtn!.trigger('click');
     expect(w.emitted('cancel')).toHaveLength(1);

@@ -30,8 +30,8 @@ describe('organisms/agent/SkillCard', () => {
     const w = mount(SkillCard, { props: { skill, editable: true } });
     const buttons = w.findAll('button');
     expect(buttons.length).toBeGreaterThanOrEqual(2);
-    const edit = buttons.find((b) => /edit/i.test(b.text()))!;
-    const del = buttons.find((b) => /delete/i.test(b.text()))!;
+    const edit = buttons.find((b) => /edit|编辑/i.test(b.text()))!;
+    const del = buttons.find((b) => /delete|删除/i.test(b.text()))!;
     await edit.trigger('click');
     await del.trigger('click');
     expect(w.emitted('edit')).toHaveLength(1);

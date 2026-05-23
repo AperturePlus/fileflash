@@ -14,7 +14,7 @@ const session = (id: string, title = 'X'): Session => ({
 describe('organisms/agent/SessionList', () => {
   it('renders empty placeholder when no sessions', () => {
     const w = mount(SessionList, { props: { sessions: [], activeId: null } });
-    expect(w.text()).toContain('No sessions yet');
+    expect(w.text()).toContain('暂无会话');
   });
 
   it('emits select with id when an item is clicked', async () => {

@@ -3,6 +3,8 @@ import { computed } from 'vue';
 import Button from '../../molecules/Button.vue';
 import MonoNumber from '../../atoms/MonoNumber.vue';
 import PlanActionRow from './PlanActionRow.vue';
+import { useLocaleStore } from '../../../store/locale';
+import type { LocaleKey } from '../../../i18n/messages';
 import type { AgentExecutionPolicy } from '../../../types/agent';
 import type { AgentTurn } from '../../../composables/useAgentSession';
 
@@ -14,6 +16,9 @@ const props = defineProps<{
 
 defineEmits<{ execute: []; cancel: []; focus: [] }>();
 
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
 const canExecute = computed(
   () =>
     Boolean(props.turn.agent.planHash) &&
@@ -24,6 +29,11 @@ const canExecute = computed(
 const isActive = computed(
   () => props.turn.agent.status === 'pending' || props.turn.agent.status === 'running',
 );
+
+const statusLabel = computed(() => {
+  const key = `agent.v2.turn.status.${props.turn.agent.status}` as LocaleKey;
+  return t(key);
+});
 
 const formatTime = (iso: string) => {
   try {
@@ -48,9 +58,9 @@ const formatTime = (iso: string) => {
       <!-- agent row -->
       <div class="ff-te__agent" :class="{ 'is-focused': focused, 'is-active': isActive }">
         <header class="ff-te__agent-head">
-          <span class="ff-te__role">AGENT</span>
+          <span class="ff-te__role">{{ t('agent.v2.turn.role') }}</span>
           <span class="ff-te__status" :class="`ff-te__status--${turn.agent.status}`">{{
-            turn.agent.status
+            statusLabel
           }}</span>
         </header>
 
@@ -69,20 +79,20 @@ const formatTime = (iso: string) => {
         </section>
 
         <div v-if="turn.agent.planResult?.costEstimate" class="ff-te__cost">
-          <span class="ff-te__cost-label">COST</span>
+          <span class="ff-te__cost-label">{{ t('agent.v2.turn.cost.label') }}</span>
           <span class="ff-te__cost-item">
-            tokens <MonoNumber :value="turn.agent.planResult.costEstimate.tokens" />
+            {{ t('agent.v2.turn.cost.tokens') }} <MonoNumber :value="turn.agent.planResult.costEstimate.tokens" />
           </span>
           <span class="ff-te__cost-item">
-            calls <MonoNumber :value="turn.agent.planResult.costEstimate.toolCalls" />
+            {{ t('agent.v2.turn.cost.calls') }} <MonoNumber :value="turn.agent.planResult.costEstimate.toolCalls" />
           </span>
           <span class="ff-te__cost-item">
-            est <MonoNumber :value="`${turn.agent.planResult.costEstimate.durationSecEstimate}s`" />
+            {{ t('agent.v2.turn.cost.est') }} <MonoNumber :value="`${turn.agent.planResult.costEstimate.durationSecEstimate}s`" />
           </span>
         </div>
 
         <div v-if="turn.agent.executeResult?.warnings?.length" class="ff-te__warn">
-          <span class="ff-te__warn-label">WARN</span>
+          <span class="ff-te__warn-label">{{ t('agent.v2.turn.warn.label') }}</span>
           <ul>
             <li v-for="(w, i) in turn.agent.executeResult.warnings" :key="i">{{ w }}</li>
           </ul>
@@ -96,13 +106,13 @@ const formatTime = (iso: string) => {
             variant="primary"
             size="sm"
             @click.stop="$emit('execute')"
-          >Execute</Button>
+          >{{ t('agent.v2.turn.execute') }}</Button>
           <Button
             v-if="isActive"
             variant="ghost"
             size="sm"
             @click.stop="$emit('cancel')"
-          >Cancel</Button>
+          >{{ t('agent.v2.turn.cancel') }}</Button>
         </div>
       </div>
     </div>

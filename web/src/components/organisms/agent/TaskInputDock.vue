@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import Button from '../../molecules/Button.vue';
 import Select from '../../molecules/Select.vue';
+import { useLocaleStore } from '../../../store/locale';
 import type { AgentExecutionPolicy } from '../../../types/agent';
 
 defineProps<{
@@ -15,11 +17,14 @@ const emit = defineEmits<{
   submit: [];
 }>();
 
-const POLICY_OPTIONS = [
-  { value: 'planOnly', label: 'PLAN ONLY' },
-  { value: 'confirm', label: 'CONFIRM' },
-  { value: 'autopilot', label: 'AUTOPILOT' },
-];
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
+const POLICY_OPTIONS = computed(() => [
+  { value: 'planOnly', label: t('agent.v2.input.policy.planOnly') },
+  { value: 'confirm', label: t('agent.v2.input.policy.confirm') },
+  { value: 'autopilot', label: t('agent.v2.input.policy.autopilot') },
+]);
 
 const onInput = (e: Event) => {
   emit('update:modelValue', (e.target as HTMLTextAreaElement).value);
@@ -39,7 +44,7 @@ const onKey = (e: KeyboardEvent) => {
       class="ff-tid__ta"
       :value="modelValue"
       :disabled="disabled"
-      placeholder="Describe a task. Shift+Enter for newline."
+      :placeholder="t('agent.v2.input.placeholder')"
       rows="2"
       @input="onInput"
       @keydown="onKey"
@@ -55,7 +60,7 @@ const onKey = (e: KeyboardEvent) => {
         variant="primary"
         :disabled="!modelValue.trim() || disabled"
         @click="$emit('submit')"
-      >Send</Button>
+      >{{ t('agent.v2.input.send') }}</Button>
     </div>
   </footer>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import TurnEntry from './TurnEntry.vue';
+import { useLocaleStore } from '../../../store/locale';
 import type { AgentExecutionPolicy } from '../../../types/agent';
 import type { AgentTurn } from '../../../composables/useAgentSession';
 
@@ -17,11 +18,14 @@ defineEmits<{
   'hint-pick': [text: string];
 }>();
 
-const HINTS = [
-  'Organize my screenshots into folders by date',
-  'Find duplicates across my photo library',
-  'Tag invoices and move them under /finance',
-];
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
+const hints = computed(() => [
+  t('agent.v2.timeline.hint.organize'),
+  t('agent.v2.timeline.hint.duplicates'),
+  t('agent.v2.timeline.hint.tagInvoices'),
+]);
 
 const scrollEl = ref<HTMLElement | null>(null);
 
@@ -36,12 +40,12 @@ watch(
 
 <template>
   <div ref="scrollEl" class="ff-tt">
-    <header class="ff-tt__label">TIMELINE</header>
+    <header class="ff-tt__label">{{ t('agent.v2.timeline.label') }}</header>
     <div v-if="!turns.length" class="ff-tt__welcome">
-      <p class="ff-tt__hint">Type a task below to get started.</p>
+      <p class="ff-tt__hint">{{ t('agent.v2.timeline.welcomeHint') }}</p>
       <div class="ff-tt__chips">
         <button
-          v-for="h in HINTS"
+          v-for="h in hints"
           :key="h"
           type="button"
           class="ff-tt__chip"
@@ -52,14 +56,14 @@ watch(
       </div>
     </div>
     <TurnEntry
-      v-for="t in turns"
-      :key="t.agent.id"
-      :turn="t"
+      v-for="turn in turns"
+      :key="turn.agent.id"
+      :turn="turn"
       :policy="policy"
-      :focused="t.agent.id === focusedId"
-      @execute="$emit('execute', t.agent.id)"
-      @cancel="$emit('cancel', t.agent.id)"
-      @focus="$emit('focus-turn', t.agent.id)"
+      :focused="turn.agent.id === focusedId"
+      @execute="$emit('execute', turn.agent.id)"
+      @cancel="$emit('cancel', turn.agent.id)"
+      @focus="$emit('focus-turn', turn.agent.id)"
     />
   </div>
 </template>

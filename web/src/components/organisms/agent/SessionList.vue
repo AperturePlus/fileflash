@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import IconButton from '../../molecules/IconButton.vue';
 import SessionItem from './SessionItem.vue';
+import { useLocaleStore } from '../../../store/locale';
 import type { Session } from '../../../composables/useAgentSession';
 
 defineProps<{ sessions: Session[]; activeId: string | null }>();
@@ -9,13 +10,16 @@ defineEmits<{
   create: [];
   delete: [id: string];
 }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 </script>
 
 <template>
   <aside class="ff-sl">
     <header class="ff-sl__head">
-      <span class="ff-sl__label">SESSIONS</span>
-      <IconButton icon="plus" label="New session" size="sm" @click="$emit('create')" />
+      <span class="ff-sl__label">{{ t('agent.v2.sessions.label') }}</span>
+      <IconButton icon="plus" :label="t('agent.v2.sessions.new')" size="sm" @click="$emit('create')" />
     </header>
     <div v-if="sessions.length" class="ff-sl__list">
       <SessionItem
@@ -27,7 +31,7 @@ defineEmits<{
         @delete="$emit('delete', s.id)"
       />
     </div>
-    <div v-else class="ff-sl__empty">No sessions yet.</div>
+    <div v-else class="ff-sl__empty">{{ t('agent.v2.sessions.empty') }}</div>
   </aside>
 </template>
 

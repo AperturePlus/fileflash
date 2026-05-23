@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import StatBlock from '../../molecules/StatBlock.vue';
+import { useLocaleStore } from '../../../store/locale';
 import type { AgentTurn } from '../../../composables/useAgentSession';
 
 const props = defineProps<{ turn?: AgentTurn | null }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const plan = computed(() => props.turn?.agent.planResult ?? null);
 const skillName = computed(() => plan.value?.chosenSkill?.name ?? '—');
@@ -27,15 +31,15 @@ const copyHash = async () => {
 
 <template>
   <aside class="ff-pi">
-    <header class="ff-pi__label">INSPECTOR</header>
-    <div v-if="!turn" class="ff-pi__empty">Select a turn to inspect its plan.</div>
+    <header class="ff-pi__label">{{ t('agent.v2.inspector.label') }}</header>
+    <div v-if="!turn" class="ff-pi__empty">{{ t('agent.v2.inspector.empty') }}</div>
     <div v-else class="ff-pi__body">
       <section class="ff-pi__sect">
-        <span class="ff-pi__key">SKILL</span>
+        <span class="ff-pi__key">{{ t('agent.v2.inspector.skill') }}</span>
         <span class="ff-pi__val">{{ skillName }}</span>
       </section>
       <section class="ff-pi__sect">
-        <span class="ff-pi__key">PLAN HASH</span>
+        <span class="ff-pi__key">{{ t('agent.v2.inspector.planHash') }}</span>
         <button
           type="button"
           class="ff-pi__hash"
@@ -44,22 +48,22 @@ const copyHash = async () => {
           @click="copyHash"
         >
           {{ planHash || '—' }}
-          <span v-if="copied" class="ff-pi__copied">COPIED</span>
+          <span v-if="copied" class="ff-pi__copied">{{ t('agent.v2.inspector.copied') }}</span>
         </button>
       </section>
 
       <section v-if="cost" class="ff-pi__cost">
-        <StatBlock label="TOKENS" :value="cost.tokens" />
-        <StatBlock label="CALLS" :value="cost.toolCalls" />
-        <StatBlock label="EST SEC" :value="cost.durationSecEstimate" />
+        <StatBlock :label="t('agent.v2.inspector.tokens')" :value="cost.tokens" />
+        <StatBlock :label="t('agent.v2.inspector.calls')" :value="cost.toolCalls" />
+        <StatBlock :label="t('agent.v2.inspector.estSec')" :value="cost.durationSecEstimate" />
       </section>
 
       <section class="ff-pi__sect">
-        <span class="ff-pi__key">ACTIONS</span>
+        <span class="ff-pi__key">{{ t('agent.v2.inspector.actions') }}</span>
         <span class="ff-pi__val">{{ actions }}</span>
       </section>
       <section class="ff-pi__sect">
-        <span class="ff-pi__key">WARNINGS</span>
+        <span class="ff-pi__key">{{ t('agent.v2.inspector.warnings') }}</span>
         <span class="ff-pi__val">{{ warnings }}</span>
       </section>
     </div>
