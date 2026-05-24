@@ -70,3 +70,32 @@ def decode_share_access_token(token: str, settings: Settings) -> dict[str, Any]:
     if token_type != "share":
         raise jwt.InvalidTokenError("Invalid token type")
     return payload
+
+
+def create_file_preview_token(
+    *,
+    user_id: int,
+    file_id: int,
+    settings: Settings,
+    expires_at: datetime,
+) -> str:
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "sub": str(user_id),
+        "typ": "file_preview",
+        "scope": "file.preview",
+        "fileId": str(file_id),
+        "iat": int(now.timestamp()),
+        "exp": int(expires_at.timestamp()),
+        "jti": str(uuid.uuid4()),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_file_preview_token(token: str, settings: Settings) -> dict[str, Any]:
+    payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    token_type = payload.get("typ")
+    scope = payload.get("scope")
+    if token_type != "file_preview" or scope != "file.preview":
+        raise jwt.InvalidTokenError("Invalid token type")
+    return payload

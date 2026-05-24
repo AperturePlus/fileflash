@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { downloadFile, previewFile } from '../../../api/file';
+import { downloadFile, getPreviewUrl } from '../../../api/file';
 import { getPreviewCapabilities } from '../../../utils/preview';
 import { useLocaleStore } from '../../../store/locale';
 import { useVideoPlayer } from '../../../composables/useVideoPlayer';
@@ -16,7 +16,7 @@ const isOpen = computed(() => props.file !== null);
 const videoRef = ref<HTMLVideoElement | null>(null);
 const isLoading = ref(false);
 const error = ref('');
-const objectUrl = ref('');
+const streamUrl = ref('');
 
 const { mount: mountVideo, destroy: destroyVideo } = useVideoPlayer(videoRef);
 
@@ -35,10 +35,7 @@ const formatBytes = (bytes: number | undefined) => {
 const reset = () => {
   destroyVideo();
   error.value = '';
-  if (objectUrl.value) {
-    URL.revokeObjectURL(objectUrl.value);
-    objectUrl.value = '';
-  }
+  streamUrl.value = '';
 };
 
 const load = async () => {
@@ -47,12 +44,12 @@ const load = async () => {
 
   isLoading.value = true;
   try {
-    const blob = await previewFile(props.file.id);
-    objectUrl.value = URL.createObjectURL(blob);
+    const preview = await getPreviewUrl(props.file.id);
+    streamUrl.value = preview.url;
     isLoading.value = false;
     await nextTick();
     mountVideo({
-      source: objectUrl.value,
+      source: streamUrl.value,
       isHls: capabilities.value.isHls,
       onFatalError: (msg) => {
         error.value = msg;

@@ -419,6 +419,11 @@ export interface FileDetails extends FileItem {
   updatedAt: string;
 }
 
+export interface FilePreviewUrlResponse {
+  url: string;
+  expiresAt: string;
+}
+
 /**
  * 重命名文件的请求体
  */

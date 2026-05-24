@@ -5,6 +5,7 @@ import FilePreviewDialog from './FilePreviewDialog.vue';
 
 vi.mock('../../../api/file', () => ({
   previewFile: vi.fn(() => Promise.resolve(new Blob(['ok'], { type: 'text/plain' }))),
+  getPreviewUrl: vi.fn(() => Promise.resolve({ url: '/mock-video.mp4', expiresAt: '2026-01-01T01:00:00Z' })),
   downloadFile: vi.fn(),
 }));
 

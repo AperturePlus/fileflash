@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 3
     refresh_token_expire_days: int = 7
+    file_preview_url_ttl_seconds: int = Field(
+        default=4 * 60 * 60,
+        alias="FILE_PREVIEW_URL_TTL_SECONDS",
+    )
 
     refresh_cookie_name: str = "refreshToken"
     refresh_cookie_secure: bool = False
