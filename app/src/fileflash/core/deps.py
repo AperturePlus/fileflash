@@ -25,6 +25,7 @@ from ..services.admin.files import AdminFilesService
 from ..services.admin.moderation import AdminModerationService
 from ..services.admin.logs import AdminLogsService
 from ..services.admin.notifications import AdminNotificationsService
+from ..services.admin.system import AdminSystemService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
 from ..services.email_delivery import VerificationEmailDeliveryService
@@ -162,6 +163,13 @@ def get_admin_notifications_service(
     db: AsyncSession = Depends(get_db),
 ) -> AdminNotificationsService:
     return AdminNotificationsService(db=db)
+
+
+def get_admin_system_service(
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> AdminSystemService:
+    return AdminSystemService(db=db, settings=settings)
 
 
 def get_upload_service(
