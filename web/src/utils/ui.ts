@@ -14,6 +14,7 @@ export interface PromptOptions extends ConfirmOptions {
   placeholder?: string;
   defaultValue?: string;
   readonly?: boolean;
+  showCancelButton?: boolean;
   confirmText?: string;
   cancelText?: string;
 }
@@ -80,6 +81,7 @@ export const ui = {
         placeholder: normalized.placeholder || '',
         defaultValue: normalized.defaultValue || '',
         readonly: Boolean(normalized.readonly),
+        showCancelButton: normalized.showCancelButton !== false,
         confirmText: normalized.confirmText || 'Confirm',
         cancelText: normalized.cancelText || 'Cancel',
         danger: Boolean(normalized.danger),
@@ -98,6 +100,7 @@ export const ui = {
       message: normalized.message || 'Clipboard is unavailable. Copy text manually:',
       defaultValue: normalized.text,
       readonly: true,
+      showCancelButton: false,
       confirmText: 'Close',
       cancelText: 'Close',
     });
