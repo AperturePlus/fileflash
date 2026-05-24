@@ -169,6 +169,57 @@ async def test_preflight_returns_503_when_storage_is_unavailable(monkeypatch: py
 
 
 @pytest.mark.asyncio
+async def test_preflight_allows_20gb_file_size_boundary(monkeypatch: pytest.MonkeyPatch):
+    max_file_size = 20 * 1024 * 1024 * 1024
+    settings = make_settings(UPLOAD_SINGLE_FILE_SIZE_MAX=str(max_file_size))
+    session = DummySession()
+    service, _storage = make_service(session, settings=settings)
+
+    monkeypatch.setattr(service, "_cleanup_expired_tasks", AsyncMock())
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=7))
+    monkeypatch.setattr(service, "_find_storage_object", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_find_active_task", AsyncMock(return_value=None))
+
+    response = await service.preflight(
+        user_id=2,
+        payload=UploadPreflightRequest(
+            fileHash="b" * 64,
+            fileName="video.mp4",
+            fileSize=max_file_size,
+            mimeType="video/mp4",
+            parentId="7",
+        ),
+    )
+
+    assert response.status == "UPLOADING"
+    assert response.upload_id is not None
+
+
+@pytest.mark.asyncio
+async def test_preflight_rejects_file_size_over_20gb():
+    max_file_size = 20 * 1024 * 1024 * 1024
+    settings = make_settings(UPLOAD_SINGLE_FILE_SIZE_MAX=str(max_file_size))
+    session = DummySession()
+    service, storage = make_service(session, settings=settings)
+
+    with pytest.raises(ApiError) as exc:
+        await service.preflight(
+            user_id=2,
+            payload=UploadPreflightRequest(
+                fileHash="b" * 64,
+                fileName="video.mp4",
+                fileSize=max_file_size + 1,
+                mimeType="video/mp4",
+                parentId="7",
+            ),
+        )
+
+    assert exc.value.status_code == 413
+    assert exc.value.code == 413
+    storage.ensure_bucket.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_list_recoverable_sessions_returns_only_active_non_expired_tasks():
     session = DummySession()
     service, _storage = make_service(session)
@@ -458,9 +509,56 @@ async def test_merge_returns_conflict_without_strategy(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
-async def test_merge_marks_failed_on_hash_mismatch(monkeypatch: pytest.MonkeyPatch):
+async def test_merge_skips_full_hash_verification_in_fast_mode(monkeypatch: pytest.MonkeyPatch):
     session = DummySession()
     service, storage = make_service(session)
+    task = UploadTask(
+        task_id=19,
+        user_id=2,
+        folder_id=2,
+        file_name="asset.bin",
+        mime_type="application/octet-stream",
+        bucket_name="fileflash",
+        object_key="objects/u2/new",
+        object_hash="a" * 64,
+        total_size=4,
+        chunk_size=2,
+        upload_id="upload-fast-mode",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    parts = [
+        UploadTaskPart(task_id=19, part_number=0, part_size=2, status=UploadPartStatus.UPLOADED),
+        UploadTaskPart(task_id=19, part_number=1, part_size=2, status=UploadPartStatus.UPLOADED),
+    ]
+    session.scalars_queue = [parts]
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=2))
+    monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_find_storage_object", AsyncMock(return_value=None))
+
+    response = await service.merge_chunks(
+        user_id=2,
+        upload_id="upload-fast-mode",
+        payload=MergeChunksRequest(
+            fileHash="a" * 64,
+            fileName="asset.bin",
+            mimeType="application/octet-stream",
+            parentId="2",
+            conflictStrategy="rename",
+        ),
+    )
+
+    assert response.file_name == "asset.bin"
+    storage.compute_object_hash.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_merge_marks_failed_on_hash_mismatch(monkeypatch: pytest.MonkeyPatch):
+    settings = make_settings(UPLOAD_VERIFY_MERGED_OBJECT_HASH=True)
+    session = DummySession()
+    service, storage = make_service(session, settings=settings)
     task = UploadTask(
         task_id=20,
         user_id=2,

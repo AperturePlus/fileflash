@@ -511,16 +511,17 @@ class UploadService:
                 await self.db.commit()
                 raise ApiError(status_code=422, code=422, message="Composed file size mismatch")
 
-            actual_hash = await self.storage.compute_object_hash(
-                object_key=task.object_key,
-                algorithm=hash_algorithm,
-            )
-            if actual_hash != object_hash:
-                await self.storage.remove_object(object_key=task.object_key)
-                task.status = UploadTaskStatus.FAILED
-                task.last_error = "Composed file hash mismatch"
-                await self.db.commit()
-                raise ApiError(status_code=422, code=422, message="Composed file hash mismatch")
+            if self.settings.upload_verify_merged_object_hash:
+                actual_hash = await self.storage.compute_object_hash(
+                    object_key=task.object_key,
+                    algorithm=hash_algorithm,
+                )
+                if actual_hash != object_hash:
+                    await self.storage.remove_object(object_key=task.object_key)
+                    task.status = UploadTaskStatus.FAILED
+                    task.last_error = "Composed file hash mismatch"
+                    await self.db.commit()
+                    raise ApiError(status_code=422, code=422, message="Composed file hash mismatch")
 
             storage_object = await self._find_storage_object(
                 object_hash=object_hash,
