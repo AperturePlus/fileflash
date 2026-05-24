@@ -316,6 +316,7 @@ export type LocaleKey =
   | 'sharing.table.links.visitsDownloads'
   | 'sharing.table.links.createdAt'
   | 'sharing.table.links.copy'
+  | 'sharing.table.links.regeneratePassword'
   | 'sharing.table.links.delete'
   | 'sharing.batch.selected'
   | 'sharing.batch.acceptSelected'
@@ -323,11 +324,18 @@ export type LocaleKey =
   | 'sharing.confirm.deleteLink.title'
   | 'sharing.confirm.deleteLink.message'
   | 'sharing.confirm.deleteLink.confirm'
+  | 'sharing.confirm.regeneratePassword.title'
+  | 'sharing.confirm.regeneratePassword.message'
+  | 'sharing.confirm.regeneratePassword.confirm'
   | 'sharing.toast.linkDeleted'
   | 'sharing.toast.linkDeleteFailed'
   | 'sharing.toast.linkCopied'
+  | 'sharing.toast.passwordRegenerated'
+  | 'sharing.toast.passwordRegenerateFailed'
   | 'sharing.copyDialog.title'
   | 'sharing.copyDialog.message'
+  | 'sharing.passwordDialog.title'
+  | 'sharing.passwordDialog.message'
   | 'trash.page.title'
   | 'trash.page.description'
   | 'trash.page.clearBin'
@@ -431,6 +439,12 @@ export type LocaleKey =
   | 'share.dialog.copyLink.title'
   | 'share.dialog.copyLink.message'
   | 'share.dialog.publicHiddenNotice'
+  | 'share.dialog.pendingApplyNotice'
+  | 'share.dialog.confirmRevoke.title'
+  | 'share.dialog.confirmRevoke.message'
+  | 'share.dialog.confirmRevoke.confirm'
+  | 'share.dialog.generatedPassword.title'
+  | 'share.dialog.generatedPassword.message'
   | 'share.dialog.done'
   | 'move.dialog.title.single'
   | 'move.dialog.title.multiple'
@@ -868,6 +882,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sharing.table.links.visitsDownloads': '访问 / 下载',
     'sharing.table.links.createdAt': '创建时间',
     'sharing.table.links.copy': '复制',
+    'sharing.table.links.regeneratePassword': '重置并查看密码',
     'sharing.table.links.delete': '删除',
     'sharing.batch.selected': '已选',
     'sharing.batch.acceptSelected': '接收所选',
@@ -875,11 +890,18 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sharing.confirm.deleteLink.title': '删除共享链接',
     'sharing.confirm.deleteLink.message': '确定删除共享链接 {shareLink} 吗？',
     'sharing.confirm.deleteLink.confirm': '删除',
+    'sharing.confirm.regeneratePassword.title': '重置并查看密码',
+    'sharing.confirm.regeneratePassword.message': '确定重置共享链接 {shareLink} 的访问密码吗？旧密码将立即失效。',
+    'sharing.confirm.regeneratePassword.confirm': '确认重置',
     'sharing.toast.linkDeleted': '共享链接已删除。',
     'sharing.toast.linkDeleteFailed': '删除共享链接失败。',
     'sharing.toast.linkCopied': '共享链接已复制。',
+    'sharing.toast.passwordRegenerated': '已重置密码，请妥善保存新密码。',
+    'sharing.toast.passwordRegenerateFailed': '重置密码失败，请重试。',
     'sharing.copyDialog.title': '复制共享链接',
     'sharing.copyDialog.message': '剪贴板不可用，请手动复制此链接：',
+    'sharing.passwordDialog.title': '新共享密码',
+    'sharing.passwordDialog.message': '请立即保存该密码，旧密码已失效：',
     'trash.page.title': '回收站',
     'trash.page.description': '项目会保留最多 30 天，之后系统会自动清理。',
     'trash.page.clearBin': '清空回收站',
@@ -983,6 +1005,12 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'share.dialog.copyLink.title': '复制链接',
     'share.dialog.copyLink.message': '剪贴板不可用，请手动复制此链接：',
     'share.dialog.publicHiddenNotice': '当前仅在弹窗中隐藏公开链接，已有链接仍保持可用。',
+    'share.dialog.pendingApplyNotice': '所有改动将在点击“完成”后生效。',
+    'share.dialog.confirmRevoke.title': '关闭公开链接',
+    'share.dialog.confirmRevoke.message': '继续操作将导致当前共享链接失效，确认继续吗？',
+    'share.dialog.confirmRevoke.confirm': '确认关闭',
+    'share.dialog.generatedPassword.title': '已生成共享密码',
+    'share.dialog.generatedPassword.message': '系统已自动生成密码，请先保存再关闭：',
     'share.dialog.done': '完成',
     'move.dialog.title.single': '移动“{itemName}”',
     'move.dialog.title.multiple': '移动 {count} 个项目',
@@ -1415,6 +1443,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sharing.table.links.visitsDownloads': 'Visits / Downloads',
     'sharing.table.links.createdAt': 'Created At',
     'sharing.table.links.copy': 'Copy',
+    'sharing.table.links.regeneratePassword': 'Reset & Show Password',
     'sharing.table.links.delete': 'Delete',
     'sharing.batch.selected': 'SELECTED',
     'sharing.batch.acceptSelected': 'Accept Selected',
@@ -1422,11 +1451,18 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sharing.confirm.deleteLink.title': 'Delete Share Link',
     'sharing.confirm.deleteLink.message': 'Delete share link {shareLink}?',
     'sharing.confirm.deleteLink.confirm': 'Delete',
+    'sharing.confirm.regeneratePassword.title': 'Reset and Show Password',
+    'sharing.confirm.regeneratePassword.message': 'Reset the password for share link {shareLink}? The old password will be invalid immediately.',
+    'sharing.confirm.regeneratePassword.confirm': 'Reset Password',
     'sharing.toast.linkDeleted': 'Share link deleted.',
     'sharing.toast.linkDeleteFailed': 'Failed to delete share link.',
     'sharing.toast.linkCopied': 'Share link copied.',
+    'sharing.toast.passwordRegenerated': 'Password reset successfully. Save the new password now.',
+    'sharing.toast.passwordRegenerateFailed': 'Failed to reset password.',
     'sharing.copyDialog.title': 'Copy Share Link',
     'sharing.copyDialog.message': 'Clipboard is unavailable. Copy this link manually:',
+    'sharing.passwordDialog.title': 'New Share Password',
+    'sharing.passwordDialog.message': 'Save this password now. The old password is no longer valid:',
     'trash.page.title': 'Recycle Bin',
     'trash.page.description': 'Items are kept for up to 30 days before automatic cleanup.',
     'trash.page.clearBin': 'Clear Bin',
@@ -1530,6 +1566,12 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'share.dialog.copyLink.title': 'Copy Link',
     'share.dialog.copyLink.message': 'Clipboard is unavailable. Copy this link manually:',
     'share.dialog.publicHiddenNotice': 'Public link hidden in this dialog. Existing links are kept.',
+    'share.dialog.pendingApplyNotice': 'All changes will take effect only after you click "Done".',
+    'share.dialog.confirmRevoke.title': 'Disable Public Link',
+    'share.dialog.confirmRevoke.message': 'Continuing will invalidate this share link. Do you want to proceed?',
+    'share.dialog.confirmRevoke.confirm': 'Disable Link',
+    'share.dialog.generatedPassword.title': 'Generated Share Password',
+    'share.dialog.generatedPassword.message': 'A password was generated automatically. Save it before closing:',
     'share.dialog.done': 'Done',
     'move.dialog.title.single': 'Move "{itemName}"',
     'move.dialog.title.multiple': 'Move {count} items',
