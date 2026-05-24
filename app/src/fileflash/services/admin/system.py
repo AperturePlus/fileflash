@@ -39,7 +39,7 @@ class AdminSystemService:
             virus_scan_enabled=bool(getattr(self.settings, "virus_scan_enabled", False)),
             thumbnail_generation_enabled=bool(getattr(self.settings, "thumbnail_generation_enabled", True)),
             registration_mail_enabled=bool(self.settings.mail_server and self.settings.mail_from),
-            hash_computation_enabled=True,
+            hash_computation_enabled=bool(self.settings.upload_verify_merged_object_hash),
             last_updated_at=datetime.now(UTC),
         )
 
