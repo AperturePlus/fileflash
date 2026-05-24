@@ -14,6 +14,8 @@ def test_upload_related_settings_defaults():
     settings = Settings(FF_DB_URI="postgresql://root:pwd@localhost:5432/fileflash")
     assert settings.object_storage_bucket == "fileflash"
     assert settings.upload_chunk_size_default == 5 * 1024 * 1024
+    assert settings.upload_single_file_size_max == 20 * 1024 * 1024 * 1024
+    assert settings.upload_verify_merged_object_hash is False
     assert settings.upload_session_ttl_seconds == 24 * 3600
     assert settings.starred_items_limit == 20
     assert settings.worker_process_count == 1
@@ -57,6 +59,7 @@ def test_verify_base_url_defaults_to_localhost_in_development():
     settings = Settings(
         FF_DB_URI="postgresql://root:pwd@localhost:5432/fileflash",
         APP_ENV="development",
+        EMAIL_VERIFY_BASE_URL="",
     )
     assert settings.normalized_email_verify_base_url == "http://localhost:8080"
 
