@@ -202,6 +202,108 @@ async def test_upload_chunk_rejects_out_of_range_index(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_cancel_upload_session_marks_aborted_and_cleans_objects(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    task = UploadTask(
+        task_id=9,
+        user_id=1,
+        folder_id=1,
+        file_name="clip.mp4",
+        mime_type="video/mp4",
+        bucket_name="fileflash",
+        object_key="objects/u1/demo",
+        object_hash="a" * 64,
+        total_size=1024,
+        chunk_size=512,
+        upload_id="upload-cancel-active",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(
+        service,
+        "_collect_task_cleanup_keys",
+        AsyncMock(return_value=["objects/u1/demo", "temp/u1/upload-cancel-active/part-00000000"]),
+    )
+
+    response = await service.cancel_upload_session(user_id=1, upload_id="upload-cancel-active")
+
+    assert response.upload_id == "upload-cancel-active"
+    assert task.status == UploadTaskStatus.ABORTED
+    assert task.last_error == "Upload canceled by client"
+    assert session.commits == 1
+    storage.remove_objects.assert_awaited_once_with(
+        object_keys=["objects/u1/demo", "temp/u1/upload-cancel-active/part-00000000"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_cancel_upload_session_is_idempotent_for_aborted_task(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    canceled_at = datetime.now(UTC)
+    task = UploadTask(
+        task_id=10,
+        user_id=1,
+        folder_id=1,
+        file_name="already-aborted.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/aborted",
+        object_hash="b" * 64,
+        total_size=8,
+        chunk_size=4,
+        upload_id="upload-cancel-aborted",
+        status=UploadTaskStatus.ABORTED,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+        updated_at=canceled_at,
+    )
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    collect_mock = AsyncMock(return_value=["objects/u1/aborted"])
+    monkeypatch.setattr(service, "_collect_task_cleanup_keys", collect_mock)
+
+    response = await service.cancel_upload_session(user_id=1, upload_id="upload-cancel-aborted")
+
+    assert response.upload_id == "upload-cancel-aborted"
+    assert response.canceled_at == canceled_at
+    assert session.commits == 0
+    collect_mock.assert_not_awaited()
+    storage.remove_objects.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancel_upload_session_rejects_completed_task(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    task = UploadTask(
+        task_id=11,
+        user_id=1,
+        folder_id=1,
+        file_name="done.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/done",
+        object_hash="c" * 64,
+        total_size=8,
+        chunk_size=4,
+        upload_id="upload-cancel-completed",
+        status=UploadTaskStatus.COMPLETED,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+
+    with pytest.raises(ApiError) as exc:
+        await service.cancel_upload_session(user_id=1, upload_id="upload-cancel-completed")
+
+    assert exc.value.status_code == 409
+    assert "already completed" in exc.value.message
+    assert session.commits == 0
+    storage.remove_objects.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_merge_returns_conflict_without_strategy(monkeypatch: pytest.MonkeyPatch):
     session = DummySession()
     service, _storage = make_service(session)
