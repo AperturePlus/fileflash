@@ -6,6 +6,7 @@ from .admin_storage import router as admin_storage_router
 from .admin_files import router as admin_files_router
 from .admin_moderation import router as admin_moderation_router
 from .admin_logs import router as admin_logs_router
+from .admin_notifications import router as admin_notifications_router
 from .admin_registration_email_domain_rules import router as admin_registration_email_domain_rules_router
 from .files import router as files_router
 from .folders import router as folders_router
@@ -24,6 +25,7 @@ api_router.include_router(admin_storage_router)
 api_router.include_router(admin_files_router)
 api_router.include_router(admin_moderation_router)
 api_router.include_router(admin_logs_router)
+api_router.include_router(admin_notifications_router)
 api_router.include_router(admin_registration_email_domain_rules_router)
 api_router.include_router(files_router)
 api_router.include_router(folders_router)
