@@ -14,6 +14,7 @@ type UploadSession = {
   chunks: Map<number, Blob>;
   uploadedChunkIndexes: Set<number>;
   createdAt: string;
+  updatedAt: string;
 };
 
 const sessions = new Map<string, UploadSession>();
@@ -86,6 +87,7 @@ function resolveUploadSession(
     chunks: new Map(),
     uploadedChunkIndexes: new Set(),
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   sessions.set(uploadId, newSession);
@@ -139,6 +141,43 @@ function getBatchItemRuntimeStatus(item: BatchUploadItem) {
 }
 
 export const setupUploadMocks = () => {
+  Mock.mock(/\/api\/v1\/uploads\/recoverable$/, 'get', () => {
+    const now = new Date();
+    const sessionsData = Array.from(sessions.values())
+      .map((session) => {
+        const uploadedBytes = [...session.uploadedChunkIndexes].reduce((total, chunkIndex) => {
+          const start = chunkIndex * session.chunkSize;
+          const end = Math.min(start + session.chunkSize, session.fileSize);
+          return total + Math.max(0, end - start);
+        }, 0);
+        const expiredAt = new Date(new Date(session.createdAt).getTime() + 24 * 3600 * 1000).toISOString();
+        if (new Date(expiredAt).getTime() <= now.getTime()) {
+          return null;
+        }
+        return {
+          uploadId: session.uploadId,
+          fileName: session.fileName,
+          fileSize: session.fileSize,
+          uploadedBytes,
+          chunkSize: session.chunkSize,
+          fileHash: session.fileHash,
+          mimeType: session.mimeType,
+          parentId: session.parentId,
+          updatedAt: session.updatedAt || session.createdAt,
+          expiredAt,
+          status: 'uploading',
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      success: true,
+      code: 200,
+      message: 'Recoverable upload sessions fetched',
+      data: sessionsData,
+    };
+  });
+
   Mock.mock(/\/api\/v1\/uploads\/batch-preflight$/, 'post', (options) => {
     const payload = JSON.parse(options.body || '{}');
     const { parentId, files } = payload;
@@ -414,6 +453,7 @@ export const setupUploadMocks = () => {
 
     session.chunks.set(chunkIndex, chunk);
     session.uploadedChunkIndexes.add(chunkIndex);
+    session.updatedAt = new Date().toISOString();
 
     return {
       success: true,

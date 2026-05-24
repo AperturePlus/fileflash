@@ -16,6 +16,7 @@ import type {
   BatchDownloadRequest,
   UploadPreflightRequest,
   UploadPreflightResponse,
+  UploadRecoverableSession,
   BatchUploadPreflightRequest,
   BatchUploadPreflightResponse,
   BatchUploadCompleteRequest,
@@ -35,6 +36,10 @@ import type {
 // 上传相关API
 export const preflightUpload = (data: UploadPreflightRequest) => {
   return http.post<UploadPreflightResponse>('/uploads/preflight', data);
+};
+
+export const getRecoverableUploads = () => {
+  return http.get<UploadRecoverableSession[]>('/uploads/recoverable');
 };
 
 /**
