@@ -18,6 +18,16 @@ export type LocaleKey =
   | 'header.menu.admin'
   | 'header.menu.defaultUserName'
   | 'header.menu.defaultEmail'
+  | 'console.title'
+  | 'console.nav.overview'
+  | 'console.nav.users'
+  | 'console.nav.storage'
+  | 'console.nav.content'
+  | 'console.nav.moderation'
+  | 'console.nav.system'
+  | 'console.nav.logs'
+  | 'console.nav.notifications'
+  | 'console.nav.rules'
   | 'sidebar.myFiles'
   | 'sidebar.shared'
   | 'sidebar.recycleBin'
@@ -548,6 +558,16 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'header.menu.admin': '管理员',
     'header.menu.defaultUserName': '用户',
     'header.menu.defaultEmail': 'user@example.com',
+    'console.title': '控制台',
+    'console.nav.overview': '概览',
+    'console.nav.users': '用户',
+    'console.nav.storage': '存储',
+    'console.nav.content': '内容审计',
+    'console.nav.moderation': '违规处理',
+    'console.nav.system': '系统状态',
+    'console.nav.logs': '操作日志',
+    'console.nav.notifications': '通知',
+    'console.nav.rules': '注册规则',
     'sidebar.myFiles': '我的文件',
     'sidebar.shared': '共享',
     'sidebar.recycleBin': '回收站',
@@ -1073,6 +1093,16 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'header.menu.admin': 'Admin',
     'header.menu.defaultUserName': 'User',
     'header.menu.defaultEmail': 'user@example.com',
+    'console.title': 'Console',
+    'console.nav.overview': 'Overview',
+    'console.nav.users': 'Users',
+    'console.nav.storage': 'Storage',
+    'console.nav.content': 'Content Audit',
+    'console.nav.moderation': 'Moderation',
+    'console.nav.system': 'System',
+    'console.nav.logs': 'Logs',
+    'console.nav.notifications': 'Notifications',
+    'console.nav.rules': 'Registration Rules',
     'sidebar.myFiles': 'My Files',
     'sidebar.shared': 'Shared',
     'sidebar.recycleBin': 'Recycle Bin',
