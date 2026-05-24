@@ -1,5 +1,5 @@
 import Mock from 'mockjs';
-import { addNotification, mockNotifications, paginate } from '../state';
+import { addNotification, mockNotifications, mockUsers, paginate } from '../state';
 
 export const setupNotificationMocks = () => {
   Mock.mock(/\/api\/v1\/notifications(?:\?.*)?$/, 'get', (options) => {
@@ -41,27 +41,6 @@ export const setupNotificationMocks = () => {
       data: {
         updatedCount,
       },
-    };
-  });
-
-  Mock.mock(/\/api\/v1\/notifications\/broadcast$/, 'post', (options) => {
-    const { message } = JSON.parse(options.body || '{}');
-
-    if (!message) {
-      return {
-        success: false,
-        code: 400,
-        message: 'message is required',
-        data: null,
-      };
-    }
-
-    const created = addNotification(message, false);
-
-    return {
-      success: true,
-      code: 201,
-      data: created,
     };
   });
 
@@ -113,4 +92,62 @@ export const setupNotificationMocks = () => {
       },
     };
   });
+
+  Mock.mock(/\/api\/v1\/admin\/notifications(?:\?.*)?$/, 'get', (options) => {
+    const url = new URL(options.url, 'http://localhost');
+    const page = Number(url.searchParams.get('page') || 1);
+    const perPage = Number(url.searchParams.get('perPage') || 20);
+    const paged = paginate(mockNotifications, page, perPage);
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        ...paged,
+        unreadCount: mockNotifications.filter((item) => !item.isRead).length,
+        totalCount: mockNotifications.length,
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/notifications\/broadcast$/, 'post', (options) => {
+    const body = JSON.parse(options.body || '{}');
+    const message = (body.message || '').toString().trim();
+
+    if (!message) {
+      return {
+        success: false,
+        code: 422,
+        message: 'BROADCAST_EMPTY_MESSAGE',
+        data: null,
+      };
+    }
+
+    addNotification(message);
+
+    return {
+      success: true,
+      code: 200,
+      data: {
+        broadcastId: 'mock-' + Date.now(),
+        recipientCount: mockUsers.length,
+        sentAt: new Date().toISOString(),
+      },
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/notifications\/([^/]+)$/, 'delete', (options) => {
+    const id = (options.url.match(/\/api\/v1\/admin\/notifications\/([^/?]+)/) || [])[1];
+    const notificationId = Number(id);
+    const index = mockNotifications.findIndex((item) => item.id === notificationId);
+    if (index !== -1) {
+      mockNotifications.splice(index, 1);
+    }
+    return {
+      success: true,
+      code: 200,
+      data: { notificationId: id, status: 'archived' },
+    };
+  });
 };
+
