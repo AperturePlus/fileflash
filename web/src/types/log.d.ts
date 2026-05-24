@@ -28,17 +28,6 @@ export type LogsList = {
 };
 
 /**
- * 获取日志请求
- */
-export interface GetLogsRequest {
-  page?: number;
-  perPage?: number;
-  operation?: string;
-  startDate?: string;
-  endDate?: string;
-}
-
-/**
  * 管理员视角的日志查询请求
  */
 export interface GetAdminLogsRequest {

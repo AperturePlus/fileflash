@@ -13,7 +13,7 @@ export type LocaleKey =
   | 'header.userMenu'
   | 'header.menu.profile'
   | 'header.menu.settings'
-  | 'header.menu.dashboard'
+  | 'header.menu.console'
   | 'header.menu.logout'
   | 'header.menu.admin'
   | 'header.menu.defaultUserName'
@@ -553,7 +553,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'header.userMenu': '用户菜单',
     'header.menu.profile': '个人资料',
     'header.menu.settings': '设置',
-    'header.menu.dashboard': '仪表盘',
+    'header.menu.console': '控制台',
     'header.menu.logout': '退出登录',
     'header.menu.admin': '管理员',
     'header.menu.defaultUserName': '用户',
@@ -1088,7 +1088,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'header.userMenu': 'User menu',
     'header.menu.profile': 'Profile',
     'header.menu.settings': 'Settings',
-    'header.menu.dashboard': 'Dashboard',
+    'header.menu.console': 'Console',
     'header.menu.logout': 'Log out',
     'header.menu.admin': 'Admin',
     'header.menu.defaultUserName': 'User',

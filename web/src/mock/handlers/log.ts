@@ -2,33 +2,6 @@ import Mock from 'mockjs';
 import { mockLogs, mockUsers, paginate } from '../state';
 
 export const setupLogMocks = () => {
-  Mock.mock(/\/api\/v1\/logs(?:\?.*)?$/, 'get', (options) => {
-    const url = new URL(options.url, 'http://localhost');
-    const page = Number(url.searchParams.get('page') || 1);
-    const perPage = Number(url.searchParams.get('perPage') || 20);
-    const operation = url.searchParams.get('operation');
-    const startDate = url.searchParams.get('startDate');
-    const endDate = url.searchParams.get('endDate');
-
-    const filtered = mockLogs.filter((item) => {
-      if (operation && item.operation !== operation) return false;
-      if (startDate && new Date(item.performedAt).getTime() < new Date(startDate).getTime()) return false;
-      if (endDate && new Date(item.performedAt).getTime() > new Date(endDate).getTime()) return false;
-      return true;
-    });
-
-    const paged = paginate(filtered, page, perPage);
-
-    return {
-      success: true,
-      code: 200,
-      data: {
-        logs: paged.items,
-        pagination: paged.pagination,
-      },
-    };
-  });
-
   Mock.mock(/\/api\/v1\/admin\/logs(?:\?.*)?$/, 'get', (options) => {
     const url = new URL(options.url, 'http://localhost');
     const page = Number(url.searchParams.get('page') || 1);

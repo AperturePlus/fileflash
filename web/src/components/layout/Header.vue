@@ -114,7 +114,7 @@ const handleSearchInput = (event: Event) => {
             </div>
             <router-link class="menu-item" to="/profile">{{ t('header.menu.profile') }}</router-link>
             <router-link class="menu-item" to="/settings">{{ t('header.menu.settings') }}</router-link>
-            <router-link v-if="isAdmin" class="menu-item" to="/dashboard">{{ t('header.menu.dashboard') }}</router-link>
+            <router-link v-if="isAdmin" class="menu-item" to="/console/overview">{{ t('header.menu.console') }}</router-link>
             <button class="menu-item danger" @click="handleLogout">{{ t('header.menu.logout') }}</button>
           </div>
         </template>
