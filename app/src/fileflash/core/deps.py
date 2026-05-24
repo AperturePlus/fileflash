@@ -23,6 +23,7 @@ from ..services.admin.users import AdminUsersService
 from ..services.admin.storage import AdminStorageService
 from ..services.admin.files import AdminFilesService
 from ..services.admin.moderation import AdminModerationService
+from ..services.admin.logs import AdminLogsService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
 from ..services.email_delivery import VerificationEmailDeliveryService
@@ -148,6 +149,12 @@ def get_admin_moderation_service(
     db: AsyncSession = Depends(get_db),
 ) -> AdminModerationService:
     return AdminModerationService(db=db)
+
+
+def get_admin_logs_service(
+    db: AsyncSession = Depends(get_db),
+) -> AdminLogsService:
+    return AdminLogsService(db=db)
 
 
 def get_upload_service(
