@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { getStorageStats } from '../../../api/user';
-import type { StorageStats } from '../../../types/user';
+import { computed, onMounted, onUnmounted } from 'vue';
+import { useUserStore } from '../../../store/user';
+import { eventBus } from '../../../utils/eventBus';
 import Text from '../../atoms/Text.vue';
 import MonoNumber from '../../atoms/MonoNumber.vue';
 import Bar from '../../atoms/Bar.vue';
 
 defineProps<{ collapsed: boolean }>();
 
-const storage = ref<StorageStats | null>(null);
+const userStore = useUserStore();
+const storage = computed(() => userStore.storageStats);
 
 const pct = computed(() => {
-  if (!storage.value || storage.value.storageLimit === 0) return 0;
-  return Math.min(1, storage.value.storageUsed / storage.value.storageLimit);
+  if (!storage.value) return 0;
+  const rawPercentage = Number(storage.value.storagePercentage);
+  if (!Number.isFinite(rawPercentage)) return 0;
+  const clamped = Math.min(100, Math.max(0, rawPercentage));
+  return clamped / 100;
 });
 const pctLabel = computed(() => Math.round(pct.value * 100));
 
@@ -24,8 +28,17 @@ function fmt(bytes: number, decimals = 1) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals < 0 ? 0 : decimals))} ${sizes[i]}`;
 }
 
+function refreshStorageStats() {
+  userStore.scheduleStorageStatsRefresh();
+}
+
 onMounted(() => {
-  getStorageStats().then(s => storage.value = s);
+  void userStore.fetchStorageStats();
+  eventBus.on('refresh-file-tree', refreshStorageStats);
+});
+
+onUnmounted(() => {
+  eventBus.off('refresh-file-tree', refreshStorageStats);
 });
 </script>
 

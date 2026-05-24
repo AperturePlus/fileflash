@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, type PropType } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed, type PropType } from 'vue';
 import { useUserStore } from '../../store/user';
 import type { StorageStats } from '../../types/user';
+import { eventBus } from '../../utils/eventBus';
 
 const props = defineProps({
   stats: {
@@ -15,6 +16,20 @@ const localStats = ref<StorageStats | null>(null);
 const isLoading = ref(false);
 
 const storageData = computed(() => props.stats || localStats.value);
+const progressPercentage = computed(() => {
+  if (!storageData.value) return 0;
+  const raw = Number(storageData.value.storagePercentage);
+  if (!Number.isFinite(raw)) return 0;
+  return Math.min(100, Math.max(0, raw));
+});
+const progressWidthPercentage = computed(() => {
+  const stats = storageData.value;
+  if (!stats) return 0;
+  if (stats.storageUsed > 0 && progressPercentage.value > 0 && progressPercentage.value < 1) {
+    return 1;
+  }
+  return progressPercentage.value;
+});
 
 const formatBytes = (bytes: number, decimals = 2) => {
   if (bytes === 0) return '0 Bytes';
@@ -25,18 +40,38 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-onMounted(async () => {
-  if (!props.stats) {
-    isLoading.value = true;
-    try {
-      await userStore.fetchStorageStats();
-      localStats.value = userStore.storageStats;
-    } catch (error) {
-      console.error('Failed to load storage stats in component:', error);
-    } finally {
-      isLoading.value = false;
+watch(
+  () => userStore.storageStats,
+  (nextStats) => {
+    if (!props.stats) {
+      localStats.value = nextStats;
     }
+  },
+  { immediate: true },
+);
+
+function refreshStorageStats() {
+  userStore.scheduleStorageStatsRefresh();
+}
+
+onMounted(async () => {
+  eventBus.on('refresh-file-tree', refreshStorageStats);
+  if (props.stats) {
+    return;
   }
+  isLoading.value = true;
+  try {
+    await userStore.fetchStorageStats();
+    localStats.value = userStore.storageStats;
+  } catch (error) {
+    console.error('Failed to load storage stats in component:', error);
+  } finally {
+    isLoading.value = false;
+  }
+});
+
+onUnmounted(() => {
+  eventBus.off('refresh-file-tree', refreshStorageStats);
 });
 </script>
 
@@ -50,7 +85,7 @@ onMounted(async () => {
         <div class="progress-bar">
           <div 
             class="progress-bar-fill" 
-            :style="{ width: storageData.storagePercentage + '%' }"
+            :style="{ width: progressWidthPercentage + '%' }"
           ></div>
         </div>
       </div>

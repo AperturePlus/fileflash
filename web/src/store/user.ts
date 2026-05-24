@@ -37,6 +37,7 @@ export const useUserStore = defineStore('user', () => {
   const token = ref<string | null>(localStorage.getItem('authToken'));
   const user = ref<UserProfile | User | null>(loadStoredUser());
   const storageStats = ref<StorageStats | null>(null);
+  let storageRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   const isAuthenticated = computed(() => !!token.value);
   const isAdmin = computed(() => user.value?.role === 'admin');
@@ -120,6 +121,19 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  function scheduleStorageStatsRefresh(delayMs = 250) {
+    if (!isAuthenticated.value || user.value?.emailVerified === false) {
+      return;
+    }
+    if (storageRefreshTimer !== null) {
+      clearTimeout(storageRefreshTimer);
+    }
+    storageRefreshTimer = setTimeout(() => {
+      storageRefreshTimer = null;
+      void fetchStorageStats();
+    }, delayMs);
+  }
+
   /**
    * Refresh the access token
    * @returns The refresh token response
@@ -155,6 +169,10 @@ export const useUserStore = defineStore('user', () => {
 
   function logout() {
     apiLogout().catch(() => undefined);
+    if (storageRefreshTimer !== null) {
+      clearTimeout(storageRefreshTimer);
+      storageRefreshTimer = null;
+    }
     setToken(null);
     setUser(null);
     storageStats.value = null;
@@ -185,5 +203,6 @@ export const useUserStore = defineStore('user', () => {
     updatePreference,
     fetchUserProfile,
     fetchStorageStats,
+    scheduleStorageStatsRefresh,
   };
 });
