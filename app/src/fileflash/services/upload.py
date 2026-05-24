@@ -36,6 +36,7 @@ from ..s3.minio_client import MinioObjectStorageClient, ObjectStorageError
 from ..schemas.file import (
     MergeChunksRequest,
     MergeChunksResponse,
+    RecoverableUploadSession,
     UploadCancelResponse,
     UploadPreflightRequest,
     UploadPreflightResponse,
@@ -154,6 +155,65 @@ class UploadService:
             if is_retryable_database_error(exc) or is_unique_violation_error(exc):
                 raise to_retryable_concurrency_error(exc) from exc
             raise
+
+    async def list_recoverable_sessions(self, *, user_id: int) -> list[RecoverableUploadSession]:
+        now = datetime.now(UTC)
+        rows = list(
+            await self.db.scalars(
+                select(UploadTask)
+                .where(
+                    and_(
+                        UploadTask.user_id == user_id,
+                        UploadTask.upload_id.is_not(None),
+                        UploadTask.status.in_((UploadTaskStatus.INIT, UploadTaskStatus.UPLOADING)),
+                        or_(UploadTask.expired_at.is_(None), UploadTask.expired_at > now),
+                    )
+                )
+                .order_by(UploadTask.updated_at.desc(), UploadTask.task_id.desc())
+            )
+        )
+
+        sessions: list[RecoverableUploadSession] = []
+        for row in rows:
+            if row.expired_at and row.expired_at <= now:
+                continue
+            if row.status not in (UploadTaskStatus.INIT, UploadTaskStatus.UPLOADING):
+                continue
+            upload_id = (row.upload_id or "").strip()
+            file_name = (row.file_name or "").strip()
+            file_hash = self._normalize_task_hash(row.object_hash)
+            if not upload_id or not file_name or not file_hash:
+                continue
+
+            file_size = max(0, int(row.total_size or 0))
+            uploaded_bytes = max(0, min(file_size, int(row.uploaded_bytes or 0)))
+            chunk_size = int(row.chunk_size or self._resolved_chunk_size())
+            parent_id = str(row.folder_id) if row.folder_id is not None else "root"
+            status = "init" if row.status == UploadTaskStatus.INIT else "uploading"
+            resolved_mime_type = resolve_file_mime_type(
+                mime_type=row.mime_type,
+                file_ext=self._extract_ext(file_name),
+                file_name=file_name,
+                default=DEFAULT_MIME_TYPE,
+            )
+
+            sessions.append(
+                RecoverableUploadSession(
+                    upload_id=upload_id,
+                    file_name=file_name,
+                    file_size=file_size,
+                    uploaded_bytes=uploaded_bytes,
+                    chunk_size=max(1, chunk_size),
+                    file_hash=file_hash,
+                    mime_type=resolved_mime_type,
+                    parent_id=parent_id,
+                    updated_at=row.updated_at or now,
+                    expired_at=row.expired_at,
+                    status=status,
+                )
+            )
+
+        return sessions
 
     async def upload_chunk(self, *, user_id: int, upload_id: str, chunk_index: int, chunk_bytes: bytes) -> None:
         if chunk_index < 0:

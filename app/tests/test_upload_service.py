@@ -169,6 +169,111 @@ async def test_preflight_returns_503_when_storage_is_unavailable(monkeypatch: py
 
 
 @pytest.mark.asyncio
+async def test_list_recoverable_sessions_returns_only_active_non_expired_tasks():
+    session = DummySession()
+    service, _storage = make_service(session)
+    now = datetime.now(UTC)
+    active_uploading = UploadTask(
+        task_id=100,
+        user_id=1,
+        folder_id=7,
+        file_name="resume.bin",
+        mime_type="application/octet-stream",
+        bucket_name="fileflash",
+        object_key="objects/u1/resume",
+        object_hash="a" * 64,
+        total_size=100,
+        uploaded_bytes=140,
+        chunk_size=None,
+        upload_id="upload-resume-1",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=now + timedelta(hours=1),
+        updated_at=now,
+    )
+    active_init = UploadTask(
+        task_id=101,
+        user_id=1,
+        folder_id=None,
+        file_name="init.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/init",
+        object_hash="b" * 64,
+        total_size=20,
+        uploaded_bytes=5,
+        chunk_size=10,
+        upload_id="upload-resume-2",
+        status=UploadTaskStatus.INIT,
+        expired_at=now + timedelta(hours=2),
+        updated_at=now,
+    )
+    expired_task = UploadTask(
+        task_id=102,
+        user_id=1,
+        folder_id=9,
+        file_name="expired.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/expired",
+        object_hash="c" * 64,
+        total_size=30,
+        chunk_size=10,
+        upload_id="upload-expired",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=now - timedelta(minutes=1),
+        updated_at=now,
+    )
+    failed_task = UploadTask(
+        task_id=103,
+        user_id=1,
+        folder_id=9,
+        file_name="failed.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/failed",
+        object_hash="d" * 64,
+        total_size=30,
+        chunk_size=10,
+        upload_id="upload-failed",
+        status=UploadTaskStatus.FAILED,
+        expired_at=now + timedelta(hours=1),
+        updated_at=now,
+    )
+    missing_hash_task = UploadTask(
+        task_id=104,
+        user_id=1,
+        folder_id=9,
+        file_name="missing-hash.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/nohash",
+        object_hash=None,
+        total_size=30,
+        chunk_size=10,
+        upload_id="upload-nohash",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=now + timedelta(hours=1),
+        updated_at=now,
+    )
+    session.scalars_queue = [[active_uploading, active_init, expired_task, failed_task, missing_hash_task]]
+
+    sessions = await service.list_recoverable_sessions(user_id=1)
+
+    assert len(sessions) == 2
+    first = sessions[0]
+    assert first.upload_id == "upload-resume-1"
+    assert first.file_size == 100
+    assert first.uploaded_bytes == 100
+    assert first.chunk_size == 5 * 1024 * 1024
+    assert first.parent_id == "7"
+    assert first.status == "uploading"
+    second = sessions[1]
+    assert second.upload_id == "upload-resume-2"
+    assert second.parent_id == "root"
+    assert second.status == "init"
+
+
+@pytest.mark.asyncio
 async def test_upload_chunk_rejects_out_of_range_index(monkeypatch: pytest.MonkeyPatch):
     session = DummySession()
     service, _storage = make_service(session)
