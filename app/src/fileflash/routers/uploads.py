@@ -59,3 +59,19 @@ async def merge_chunks(
         code=201,
         status_code=201,
     )
+
+
+@router.post("/{upload_id}/cancel")
+async def cancel_upload(
+    upload_id: str,
+    current_user: User = Depends(get_current_user),
+    upload_service: UploadService = Depends(get_upload_service),
+):
+    response = await upload_service.cancel_upload_session(
+        user_id=current_user.user_id,
+        upload_id=upload_id,
+    )
+    return api_success(
+        data=response.model_dump(by_alias=True),
+        message="Upload session canceled",
+    )

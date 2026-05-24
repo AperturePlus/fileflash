@@ -33,7 +33,13 @@ from ..models.enums import (
 from ..models.tables_storage import File, FileMediaMetadata, Folder, StorageObject, UploadTask, UploadTaskPart
 from ..models.tables_worker import BackgroundJob
 from ..s3.minio_client import MinioObjectStorageClient, ObjectStorageError
-from ..schemas.file import MergeChunksRequest, MergeChunksResponse, UploadPreflightRequest, UploadPreflightResponse
+from ..schemas.file import (
+    MergeChunksRequest,
+    MergeChunksResponse,
+    UploadCancelResponse,
+    UploadPreflightRequest,
+    UploadPreflightResponse,
+)
 from .background_jobs import BackgroundJobService
 
 logger = logging.getLogger(__name__)
@@ -546,6 +552,34 @@ class UploadService:
                 raise to_retryable_concurrency_error(exc) from exc
             raise
 
+    async def cancel_upload_session(self, *, user_id: int, upload_id: str) -> UploadCancelResponse:
+        task = await self._get_task_for_update(user_id=user_id, upload_id=upload_id)
+        if task is None:
+            raise ApiError(status_code=404, code=404, message="Upload session not found")
+        if task.status == UploadTaskStatus.COMPLETED:
+            raise ApiError(status_code=409, code=409, message="Upload session already completed")
+        if task.status == UploadTaskStatus.FAILED:
+            raise ApiError(status_code=409, code=409, message="Upload session is not cancelable")
+        if task.status == UploadTaskStatus.ABORTED:
+            return UploadCancelResponse(
+                upload_id=upload_id,
+                canceled_at=task.updated_at or datetime.now(UTC),
+            )
+
+        canceled_at = datetime.now(UTC)
+        cleanup_keys = await self._collect_task_cleanup_keys(task=task)
+        task.status = UploadTaskStatus.ABORTED
+        task.last_error = "Upload canceled by client"
+        await self.db.commit()
+
+        if cleanup_keys:
+            try:
+                await self.storage.remove_objects(object_keys=cleanup_keys)
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to cleanup canceled upload temp objects uploadId=%s", upload_id)
+
+        return UploadCancelResponse(upload_id=upload_id, canceled_at=canceled_at)
+
     async def _cleanup_expired_tasks(self, *, user_id: int) -> None:
         now = datetime.now(UTC)
         expired_tasks = list(
@@ -567,10 +601,7 @@ class UploadService:
         for task in expired_tasks:
             task.status = UploadTaskStatus.ABORTED
             task.last_error = "Upload session expired"
-            if task.object_key:
-                cleanup_keys.append(task.object_key)
-            part_indexes = await self._list_uploaded_indexes(task_id=task.task_id)
-            cleanup_keys.extend(self._build_part_object_key(task=task, chunk_index=index) for index in part_indexes)
+            cleanup_keys.extend(await self._collect_task_cleanup_keys(task=task))
 
         await self.db.commit()
         if cleanup_keys:
@@ -757,6 +788,15 @@ class UploadService:
                 .order_by(UploadTaskPart.part_number.asc())
             )
         )
+
+    async def _collect_task_cleanup_keys(self, *, task: UploadTask) -> list[str]:
+        keys: list[str] = []
+        if task.object_key:
+            keys.append(task.object_key)
+        part_indexes = await self._list_uploaded_indexes(task_id=task.task_id)
+        keys.extend(self._build_part_object_key(task=task, chunk_index=index) for index in part_indexes)
+        # Preserve order but deduplicate possible repeated entries.
+        return list(dict.fromkeys(keys))
 
     async def _abort_task(self, *, task: UploadTask, reason: str) -> None:
         task.status = UploadTaskStatus.ABORTED

@@ -147,6 +147,11 @@ class MergeChunksResponse(CamelModel):
     download_url: str
 
 
+class UploadCancelResponse(CamelModel):
+    upload_id: str
+    canceled_at: datetime
+
+
 class FileDetails(FileItem):
     status: bool
 
