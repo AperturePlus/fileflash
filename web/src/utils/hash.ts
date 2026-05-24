@@ -12,6 +12,15 @@ export type HashProgressCallback = (progress: {
   totalChunks: number;  
 }) => void;  
 
+function createAbortError(message: string): Error {
+  if (typeof DOMException !== 'undefined') {
+    return new DOMException(message, 'AbortError');
+  }
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
+}
+
 /**  
  * 以分片、增量的方式异步计算文件的 MD5 哈希值。  
  * 使用 spark-md5 库，性能优秀，适用于大文件秒传场景。  
@@ -25,9 +34,18 @@ export type HashProgressCallback = (progress: {
 export function calculateFileHash(  
   file: File,  
   onProgress?: HashProgressCallback,  
-  chunkSize: number = 2 * 1024 * 1024 // 默认分片大小: 2MB  
+  chunkSize: number = 2 * 1024 * 1024, // 默认分片大小: 2MB
+  options: {
+    signal?: AbortSignal;
+  } = {},
 ): Promise<string> {  
   return new Promise((resolve, reject) => {  
+    const signal = options.signal;
+    if (signal?.aborted) {
+      reject(createAbortError('Hash calculation canceled.'));
+      return;
+    }
+
     // 初始化 spark-md5 的 ArrayBuffer 实例，用于增量计算  
     const spark = new SparkMD5.ArrayBuffer();  
     
@@ -37,16 +55,54 @@ export function calculateFileHash(
 
     // 创建一个 FileReader 实例来读取文件内容  
     const reader = new FileReader();  
+    let settled = false;
+
+    const cleanupSignal = () => {
+      if (signal) {
+        signal.removeEventListener('abort', handleAbort);
+      }
+    };
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanupSignal();
+      reject(error);
+    };
+
+    const succeed = (hash: string) => {
+      if (settled) return;
+      settled = true;
+      cleanupSignal();
+      resolve(hash);
+    };
+
+    function handleAbort() {
+      if (settled) return;
+      try {
+        reader.abort();
+      } catch {
+        // Ignore FileReader abort errors during cancellation.
+      }
+      fail(createAbortError('Hash calculation canceled.'));
+    }
+    if (signal) {
+      signal.addEventListener('abort', handleAbort, { once: true });
+    }
 
     /**  
      * 加载下一个分片进行处理  
      */  
     function loadNext() {  
+      if (signal?.aborted) {
+        fail(createAbortError('Hash calculation canceled.'));
+        return;
+      }
       // 如果所有分片都已处理完毕  
       if (currentChunk >= totalChunks) {  
         // 完成哈希计算并返回十六进制结果  
         // 调用 end() 方法获取最终的 MD5 hash  
-        resolve(spark.end());  
+        succeed(spark.end());  
         return;  
       }  
 
@@ -62,11 +118,15 @@ export function calculateFileHash(
     reader.onload = (e) => {  
       // 确保读取结果存在  
       if (!e.target?.result) {  
-        reject(new Error('Failed to read file chunk.'));  
+        fail(new Error('Failed to read file chunk.'));
         return;  
       }  
 
       try {  
+        if (signal?.aborted) {
+          fail(createAbortError('Hash calculation canceled.'));
+          return;
+        }
         // 将读取到的 ArrayBuffer 数据喂给哈希实例，使用append方法 
         spark.append(e.target.result as ArrayBuffer);  
 
@@ -87,14 +147,18 @@ export function calculateFileHash(
         loadNext();  
 
       } catch (error) {  
-        reject(error);  
+        fail(error instanceof Error ? error : new Error(String(error)));  
       }  
     };  
 
     // 当 FileReader 读取出错时触发  
     reader.onerror = () => {  
-      reject(new Error('An error occurred while reading the file.'));  
+      fail(new Error('An error occurred while reading the file.'));
     };  
+
+    reader.onabort = () => {
+      fail(createAbortError('Hash calculation canceled.'));
+    };
 
     // 启动第一个分片的加载  
     loadNext();  
