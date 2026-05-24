@@ -22,6 +22,7 @@ from ..services.agent import ExecuteService, McpService, MemoryService, PlanServ
 from ..services.admin.users import AdminUsersService
 from ..services.admin.storage import AdminStorageService
 from ..services.admin.files import AdminFilesService
+from ..services.admin.moderation import AdminModerationService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
 from ..services.email_delivery import VerificationEmailDeliveryService
@@ -141,6 +142,12 @@ def get_admin_files_service(
     event_publisher: InProcessAuthEventPublisher = Depends(get_event_publisher),
 ) -> AdminFilesService:
     return AdminFilesService(db=db, publisher=event_publisher)
+
+
+def get_admin_moderation_service(
+    db: AsyncSession = Depends(get_db),
+) -> AdminModerationService:
+    return AdminModerationService(db=db)
 
 
 def get_upload_service(
