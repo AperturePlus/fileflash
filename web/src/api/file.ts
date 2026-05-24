@@ -23,6 +23,7 @@ import type {
   BatchUploadStatusResponse,
   MergeChunksRequest,
   MergeChunksResponse,
+  CancelUploadResponse,
   AdminFileAuditItem,
   GetAdminFilesRequest,
   ArchiveExtractRequest,
@@ -88,6 +89,10 @@ export const uploadChunk = (uploadId: string, chunk: File, chunkIndex: number) =
  */
 export const mergeChunks = (uploadId: string, data: MergeChunksRequest) => {
   return http.post<BackgroundJob<MergeChunksResponse>>(`/uploads/${uploadId}/merge`, data);
+};
+
+export const cancelUploadSession = (uploadId: string) => {
+  return http.post<CancelUploadResponse>(`/uploads/${uploadId}/cancel`);
 };
 
 // Archive preview/extract APIs

@@ -19,6 +19,8 @@ type UploadSession = {
 const sessions = new Map<string, UploadSession>();
 const hashToSessionId = new Map<string, string>();
 const batchSessions = new Map<string, BatchUploadSession>();
+const canceledUploadIds = new Set<string>();
+const completedUploadIds = new Set<string>();
 
 type BatchUploadItem = {
   clientFileId: string;
@@ -71,6 +73,8 @@ function resolveUploadSession(
 
   const uploadId = Mock.Random.guid();
   const chunkSize = 5 * 1024 * 1024;
+  canceledUploadIds.delete(uploadId);
+  completedUploadIds.delete(uploadId);
   const newSession: UploadSession = {
     uploadId,
     fileHash,
@@ -419,6 +423,64 @@ export const setupUploadMocks = () => {
     };
   });
 
+  Mock.mock(/\/api\/v1\/uploads\/([^/]+)\/cancel$/, 'post', (options) => {
+    const uploadId = (options.url.match(/\/api\/v1\/uploads\/([^/]+)\/cancel/) || [])[1];
+    const now = new Date().toISOString();
+
+    if (completedUploadIds.has(uploadId)) {
+      return {
+        success: false,
+        code: 409,
+        message: 'Upload session already completed',
+        data: null,
+      };
+    }
+
+    if (canceledUploadIds.has(uploadId)) {
+      return {
+        success: true,
+        code: 200,
+        message: 'Upload session canceled',
+        data: {
+          uploadId,
+          canceledAt: now,
+        },
+      };
+    }
+
+    const session = sessions.get(uploadId);
+    if (!session) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Upload session not found',
+        data: null,
+      };
+    }
+
+    sessions.delete(uploadId);
+    hashToSessionId.delete(session.fileHash);
+    canceledUploadIds.add(uploadId);
+
+    for (const batch of batchSessions.values()) {
+      const target = batch.items.find((item) => item.uploadId === uploadId);
+      if (target) {
+        target.status = 'UPLOADING';
+        batch.updatedAt = now;
+      }
+    }
+
+    return {
+      success: true,
+      code: 200,
+      message: 'Upload session canceled',
+      data: {
+        uploadId,
+        canceledAt: now,
+      },
+    };
+  });
+
   Mock.mock(/\/api\/v1\/uploads\/([^/]+)\/merge$/, 'post', async (options) => {
     const uploadId = (options.url.match(/\/api\/v1\/uploads\/([^/]+)\/merge/) || [])[1];
     const mergeRequest = JSON.parse(options.body || '{}');
@@ -489,6 +551,7 @@ export const setupUploadMocks = () => {
 
           sessions.delete(uploadId);
           hashToSessionId.delete(session.fileHash);
+          completedUploadIds.add(uploadId);
 
           for (const batch of batchSessions.values()) {
             const target = batch.items.find((item) => item.fileHash === session.fileHash);

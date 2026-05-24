@@ -376,6 +376,11 @@ export interface MergeChunksResponse {
   downloadUrl: string;
 }
 
+export interface CancelUploadResponse {
+  uploadId: string;
+  canceledAt: string;
+}
+
 /**
  * 获取文件列表的查询参数
  */
