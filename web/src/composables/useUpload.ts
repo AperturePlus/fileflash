@@ -12,6 +12,7 @@ export function useUpload(currentFolderId: Ref<string | null>) {
   const localeStore = useLocaleStore();
   const t = localeStore.t;
   const { tasks: uploadTasks } = storeToRefs(uploadStore);
+  void uploadStore.bootstrapRecovery();
 
   const isDragging = ref(false);
   let dragCounter = 0;
@@ -107,6 +108,10 @@ export function useUpload(currentFolderId: Ref<string | null>) {
     await uploadStore.cancelTask(String(taskId));
   };
 
+  const resumeUpload = async (taskId: string | number, file: File) => {
+    await uploadStore.resumeTask(String(taskId), file);
+  };
+
   return {
     uploadTasks,
     isDragging,
@@ -116,5 +121,6 @@ export function useUpload(currentFolderId: Ref<string | null>) {
     handleDrop,
     handleFileSelect,
     cancelUpload,
+    resumeUpload,
   };
 }

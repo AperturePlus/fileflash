@@ -4,6 +4,8 @@ import { ref } from 'vue';
 const emitSpy = vi.fn();
 const startUploadMock = vi.fn(async () => 'task-id');
 const cancelTaskMock = vi.fn(async () => undefined);
+const resumeTaskMock = vi.fn(async () => undefined);
+const bootstrapRecoveryMock = vi.fn(async () => undefined);
 const uploadTasksRef = ref<Array<{ id: string; name: string; progress: { percentage: number } }>>([]);
 
 const mockFileStore = {
@@ -51,6 +53,8 @@ vi.mock('../store/upload', () => ({
     tasks: uploadTasksRef,
     startUpload: startUploadMock,
     cancelTask: cancelTaskMock,
+    resumeTask: resumeTaskMock,
+    bootstrapRecovery: bootstrapRecoveryMock,
   }),
 }));
 
@@ -76,6 +80,8 @@ describe('useUpload internal drag handling', () => {
     emitSpy.mockReset();
     startUploadMock.mockClear();
     cancelTaskMock.mockClear();
+    resumeTaskMock.mockClear();
+    bootstrapRecoveryMock.mockClear();
     uploadTasksRef.value = [];
     mockFileStore.items = [
       { id: 'file-1', itemType: 'file', folderId: '10' },
@@ -121,5 +127,12 @@ describe('useUpload internal drag handling', () => {
     const { cancelUpload } = useUpload(ref('root'));
     await cancelUpload('task-9');
     expect(cancelTaskMock).toHaveBeenCalledWith('task-9');
+  });
+
+  it('delegates resumeUpload to upload store resumeTask', async () => {
+    const { resumeUpload } = useUpload(ref('root'));
+    const file = new File(['resume'], 'resume.txt', { type: 'text/plain' });
+    await resumeUpload('task-10', file);
+    expect(resumeTaskMock).toHaveBeenCalledWith('task-10', file);
   });
 });
