@@ -291,9 +291,9 @@ async def test_get_preview_stream_prefers_transcoded_object_when_ready(monkeypat
     storage = DummyStorage()
     service = FileService(db=session, storage=storage)
 
-    file_row = make_file_row(file_id=11, file_name="preview.mp4")
-    file_row.file_ext = "mp4"
-    file_row.mime_type = "video/mp4"
+    file_row = make_file_row(file_id=11, file_name="preview.mkv")
+    file_row.file_ext = "mkv"
+    file_row.mime_type = "video/x-matroska"
     file_row.storage_object_id = 101
     source_object = StorageObject(
         object_id=101,
@@ -330,6 +330,7 @@ async def test_get_preview_stream_prefers_transcoded_object_when_ready(monkeypat
 
     result = await service.get_preview_stream(user_id=1, file_id="11", range_header=None)
     assert result.status_code == 200
+    assert result.content_type == "video/mp4"
     assert result.headers["Content-Length"] == "128"
 
 

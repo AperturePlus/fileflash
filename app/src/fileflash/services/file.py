@@ -74,6 +74,12 @@ class DownloadStreamResult:
     headers: dict[str, str]
 
 
+@dataclass(slots=True)
+class ResolvedStreamObject:
+    storage_object: StorageObject
+    content_type_override: str | None = None
+
+
 class FileService:
     def __init__(
         self,
@@ -284,10 +290,11 @@ class FileService:
             raise ApiError(status_code=503, code=503, message="Object storage is unavailable")
 
         file_row = await self._get_active_file(user_id=user_id, file_id=file_id)
-        storage_object = await self._resolve_stream_storage_object(
+        resolved_object = await self._resolve_stream_storage_object(
             file_row=file_row,
             prefer_optimized=(content_disposition == "inline"),
         )
+        storage_object = resolved_object.storage_object if resolved_object is not None else None
         if storage_object is None or storage_object.upload_status != UploadStatus.ACTIVE:
             raise ApiError(status_code=404, code=404, message="File content not found")
 
@@ -296,7 +303,11 @@ class FileService:
             raise ApiError(status_code=404, code=404, message="File content not found")
 
         content_type = resolve_file_mime_type(
-            mime_type=file_row.mime_type or storage_object.content_type,
+            mime_type=(
+                resolved_object.content_type_override
+                if resolved_object is not None and resolved_object.content_type_override
+                else file_row.mime_type or storage_object.content_type
+            ),
             file_ext=file_row.file_ext,
             file_name=file_row.file_name,
             default=DEFAULT_MIME_TYPE,
@@ -1832,12 +1843,12 @@ class FileService:
         *,
         file_row: File,
         prefer_optimized: bool,
-    ) -> StorageObject | None:
+    ) -> ResolvedStreamObject | None:
         source_object = await self.db.get(StorageObject, int(file_row.storage_object_id))
         if source_object is None:
             return None
         if not prefer_optimized:
-            return source_object
+            return ResolvedStreamObject(storage_object=source_object)
 
         metadata_row = await self.db.scalar(
             select(FileMediaMetadata)
@@ -1845,17 +1856,19 @@ class FileService:
             .limit(1)
         )
         if not isinstance(metadata_row, FileMediaMetadata):
-            return source_object
+            return ResolvedStreamObject(storage_object=source_object)
         transcode = (metadata_row.extra_metadata or {}).get("transcode")
         if not isinstance(transcode, dict):
-            return source_object
+            return ResolvedStreamObject(storage_object=source_object)
         if str(transcode.get("status") or "").strip().lower() != TRANSCODE_READY_STATUS:
-            return source_object
+            return ResolvedStreamObject(storage_object=source_object)
 
         bucket_name = str(transcode.get("optimizedBucketName") or "").strip()
         object_key = str(transcode.get("optimizedObjectKey") or "").strip()
         if not bucket_name or not object_key:
-            return source_object
+            return ResolvedStreamObject(storage_object=source_object)
+
+        optimized_mime_type = str(transcode.get("optimizedMimeType") or "").strip() or None
 
         optimized_object = await self.db.scalar(
             select(StorageObject)
@@ -1869,13 +1882,16 @@ class FileService:
             .limit(1)
         )
         if isinstance(optimized_object, StorageObject):
-            return optimized_object
+            return ResolvedStreamObject(
+                storage_object=optimized_object,
+                content_type_override=optimized_mime_type or optimized_object.content_type,
+            )
 
         if self.storage is None:
-            return source_object
+            return ResolvedStreamObject(storage_object=source_object)
         exists = await self.storage.object_exists(bucket_name=bucket_name, object_key=object_key)
         if not exists:
-            return source_object
+            return ResolvedStreamObject(storage_object=source_object)
 
         stat = await self.storage.stat_object(bucket_name=bucket_name, object_key=object_key)
         created = StorageObject(
@@ -1889,7 +1905,10 @@ class FileService:
         )
         self.db.add(created)
         await self.db.flush()
-        return created
+        return ResolvedStreamObject(
+            storage_object=created,
+            content_type_override=optimized_mime_type or created.content_type,
+        )
 
     @staticmethod
     def _parse_datetime(raw: object) -> datetime | None:
