@@ -21,6 +21,7 @@ from ..services.archive import ArchiveService
 from ..services.agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from ..services.admin.users import AdminUsersService
 from ..services.admin.storage import AdminStorageService
+from ..services.admin.files import AdminFilesService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
 from ..services.email_delivery import VerificationEmailDeliveryService
@@ -133,6 +134,13 @@ def get_admin_storage_service(
     rate_limiter: RedisRateLimiter = Depends(get_rate_limiter),
 ) -> AdminStorageService:
     return AdminStorageService(db=db, redis=getattr(rate_limiter, "_redis", None))
+
+
+def get_admin_files_service(
+    db: AsyncSession = Depends(get_db),
+    event_publisher: InProcessAuthEventPublisher = Depends(get_event_publisher),
+) -> AdminFilesService:
+    return AdminFilesService(db=db, publisher=event_publisher)
 
 
 def get_upload_service(
