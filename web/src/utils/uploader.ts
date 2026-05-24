@@ -1,6 +1,10 @@
 import axios from 'axios';
 import http from './http';
-import { calculateFileHash, type HashProgressCallback } from './hash';
+import {
+  calculateFileHash,
+  HASH_CHUNK_SIZE_LARGE_FILE,
+  type HashProgressCallback,
+} from './hash';
 import type {
   BackgroundJob,
   MergeChunksRequest,
@@ -151,7 +155,7 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
 
   try {
     throwIfAborted(signal);
-    const fileHash = await calculateFileHash(file, onHashProgress, chunkSize, { signal });
+    const fileHash = await calculateFileHash(file, onHashProgress, HASH_CHUNK_SIZE_LARGE_FILE, { signal });
     onFileHashed?.(fileHash);
     throwIfAborted(signal);
 
@@ -172,7 +176,8 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
     } catch (error) {
       const canceled = normalizeCanceledError(error);
       if (canceled) throw canceled;
-      throw new Error('无法开始上传，请检查网络连接或与管理员联系。');
+      const backendMessage = extractApiErrorMessage(error);
+      throw new Error(backendMessage || '无法开始上传，请检查网络连接或与管理员联系。');
     }
 
     const { status, fileId, uploadId, uploadedChunkIndexes } = preflightResponse;
