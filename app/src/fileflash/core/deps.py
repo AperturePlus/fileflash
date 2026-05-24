@@ -20,6 +20,7 @@ from ..repositories import (
 from ..services.archive import ArchiveService
 from ..services.agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from ..services.admin.users import AdminUsersService
+from ..services.admin.storage import AdminStorageService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
 from ..services.email_delivery import VerificationEmailDeliveryService
@@ -125,6 +126,13 @@ def get_admin_users_service(
     db: AsyncSession = Depends(get_db),
 ) -> AdminUsersService:
     return AdminUsersService(db=db)
+
+
+def get_admin_storage_service(
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RedisRateLimiter = Depends(get_rate_limiter),
+) -> AdminStorageService:
+    return AdminStorageService(db=db, redis=getattr(rate_limiter, "_redis", None))
 
 
 def get_upload_service(
