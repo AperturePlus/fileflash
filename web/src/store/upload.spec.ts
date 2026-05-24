@@ -6,6 +6,7 @@ import type { MergeChunksResponse, UploadRecoverableSession } from '../types/fil
 
 const uploadFileMock = vi.fn();
 const completeUploadSessionMock = vi.fn();
+const emitMock = vi.fn();
 const cancelUploadSessionMock = vi.fn(async (_uploadId: string) => ({
   uploadId: 'upload-1',
   canceledAt: '2026-05-24T00:00:00Z',
@@ -31,7 +32,7 @@ vi.mock('../utils/ui', () => ({
 
 vi.mock('../utils/eventBus', () => ({
   eventBus: {
-    emit: vi.fn(),
+    emit: (...args: unknown[]) => emitMock(...args),
   },
 }));
 
@@ -55,6 +56,7 @@ describe('upload store', () => {
     localStorage.clear();
     uploadFileMock.mockReset();
     completeUploadSessionMock.mockReset();
+    emitMock.mockReset();
     cancelUploadSessionMock.mockClear();
     getRecoverableUploadsMock.mockReset();
     getRecoverableUploadsMock.mockResolvedValue([]);
@@ -250,5 +252,25 @@ describe('upload store', () => {
     expect(completeUploadSessionMock).toHaveBeenCalledTimes(1);
     expect((completeUploadSessionMock.mock.calls[0]?.[0] as { uploadId: string }).uploadId).toBe('upload-complete');
     expect(store.tasks.find((task) => task.uploadId === 'upload-partial')?.status).toBe('paused');
+  });
+
+  it('emits refresh-file-tree after upload succeeds', async () => {
+    uploadFileMock.mockResolvedValue({
+      fileId: 'file-1',
+      fileName: 'done.txt',
+      fileSize: 5,
+      mimeType: 'text/plain',
+      folderId: 'root',
+      objectHash: 'f'.repeat(64),
+      createdAt: '2026-05-24T03:00:00Z',
+      downloadUrl: '/api/v1/files/file-1/download',
+    });
+
+    const store = useUploadStore();
+    await store.startUpload(new File(['hello'], 'done.txt', { type: 'text/plain' }), 'root');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(emitMock).toHaveBeenCalledWith('refresh-file-tree');
   });
 });
