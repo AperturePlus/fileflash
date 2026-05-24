@@ -3,8 +3,8 @@ import { mount } from '../../../test/mount';
 import UploadProgressTray from './UploadProgressTray.vue';
 
 const tasks = [
-  { id: 't1', name: 'video.mp4', progress: { percentage: 42 } },
-  { id: 't2', name: 'doc.pdf', progress: { percentage: 100 } },
+  { id: 't1', name: 'video.mp4', progress: { percentage: 42 }, status: 'uploading' as const },
+  { id: 't2', name: 'doc.pdf', progress: { percentage: 100 }, status: 'succeeded' as const },
 ];
 
 describe('UploadProgressTray', () => {
@@ -24,5 +24,11 @@ describe('UploadProgressTray', () => {
   it('shows the queue length in the header', () => {
     const wrapper = mount(UploadProgressTray, { props: { tasks } });
     expect(wrapper.find('.tray__head').text()).toMatch(/2/);
+  });
+
+  it('emits cancel when clicking cancel on running task', async () => {
+    const wrapper = mount(UploadProgressTray, { props: { tasks } });
+    await wrapper.find('.tray__cancel').trigger('click');
+    expect(wrapper.emitted('cancel')?.[0]).toEqual(['t1']);
   });
 });

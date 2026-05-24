@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
 const emitSpy = vi.fn();
+const startUploadMock = vi.fn(async () => 'task-id');
+const cancelTaskMock = vi.fn(async () => undefined);
+const uploadTasksRef = ref<Array<{ id: string; name: string; progress: { percentage: number } }>>([]);
 
 const mockFileStore = {
   items: [] as Array<{ id: string; itemType: 'file' | 'folder'; folderId?: string; parentFolderId?: string | null }>,
@@ -14,13 +17,7 @@ vi.mock('../store/file', () => ({
 
 vi.mock('../store/settings', () => ({
   useSettingsStore: () => ({
-    settings: {
-      chunkSize: 4,
-      maxConcurrentUploads: 2,
-      autoRetryFailedUploads: true,
-      retryAttempts: 2,
-      uploadCompleteNotification: false,
-    },
+    settings: {},
   }),
 }));
 
@@ -49,10 +46,12 @@ vi.mock('../utils/uploader', () => ({
   uploadFile: vi.fn(),
 }));
 
-vi.mock('../utils/ui', () => ({
-  ui: {
-    toast: vi.fn(),
-  },
+vi.mock('../store/upload', () => ({
+  useUploadStore: () => ({
+    tasks: uploadTasksRef,
+    startUpload: startUploadMock,
+    cancelTask: cancelTaskMock,
+  }),
 }));
 
 import { useUpload } from './useUpload';
@@ -75,6 +74,9 @@ function createInternalDropEvent(sourceItemIds: string[], options: { dropOnConta
 describe('useUpload internal drag handling', () => {
   beforeEach(() => {
     emitSpy.mockReset();
+    startUploadMock.mockClear();
+    cancelTaskMock.mockClear();
+    uploadTasksRef.value = [];
     mockFileStore.items = [
       { id: 'file-1', itemType: 'file', folderId: '10' },
       { id: 'folder-1', itemType: 'folder', parentFolderId: '8' },
@@ -102,5 +104,22 @@ describe('useUpload internal drag handling', () => {
       targetFolderId: '42',
       targetFolderName: 'Current Folder',
     });
+  });
+
+  it('keeps tasks from shared upload store when composable is recreated', () => {
+    uploadTasksRef.value = [{ id: 'task-1', name: 'demo.txt', progress: { percentage: 33 } }];
+
+    const first = useUpload(ref('root'));
+    expect(first.uploadTasks.value).toHaveLength(1);
+
+    const second = useUpload(ref('root'));
+    expect(second.uploadTasks.value).toHaveLength(1);
+    expect(second.uploadTasks.value[0]?.id).toBe('task-1');
+  });
+
+  it('delegates cancelUpload to upload store cancelTask', async () => {
+    const { cancelUpload } = useUpload(ref('root'));
+    await cancelUpload('task-9');
+    expect(cancelTaskMock).toHaveBeenCalledWith('task-9');
   });
 });

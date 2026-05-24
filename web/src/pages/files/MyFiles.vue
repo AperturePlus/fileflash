@@ -35,7 +35,16 @@ const selection = useFileSelection();
 const { selectedItems, selectedCount, clear: clearSelection } = selection;
 const a = useFileActions(currentFolderId);
 const { handleBatchDownload, handleBatchDelete } = useBatchActions(selectedItems, clearSelection);
-const { uploadTasks, isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, handleFileSelect } = useUpload(currentFolderId);
+const {
+  uploadTasks,
+  isDragging,
+  handleDragEnter,
+  handleDragLeave,
+  handleDragOver,
+  handleDrop,
+  handleFileSelect,
+  cancelUpload,
+} = useUpload(currentFolderId);
 const { sortedItems, setSort, sortKey, sortDirection } = useFileSorting(items);
 const drag = useFileDragMove({ isSelected: selection.isSelected, selectedItems, handleBatchMove: a.handleBatchMove });
 const { openPreview } = useFilePreview();
@@ -138,7 +147,7 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
       </template>
     </FileToolbar>
 
-    <UploadProgressTray :tasks="uploadTasks" />
+    <UploadProgressTray :tasks="uploadTasks" @cancel="cancelUpload" />
 
     <div class="page__body">
       <div v-if="isDragging" class="page__drag">{{ t('files.drag.dropToUpload') }}</div>

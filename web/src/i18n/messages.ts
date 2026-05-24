@@ -37,6 +37,7 @@ export type LocaleKey =
   | 'sidebar.storage'
   | 'sidebar.skills'
   | 'sidebar.agent'
+  | 'sidebar.myFiles.uploadingAria'
   | 'agent.pageTitle'
   | 'agent.pageDescription'
   | 'agent.nav.workspace'
@@ -226,6 +227,13 @@ export type LocaleKey =
   | 'files.empty.noMatch'
   | 'files.drag.dropToUpload'
   | 'files.upload.queueTitle'
+  | 'files.upload.action.cancel'
+  | 'files.upload.state.hashing'
+  | 'files.upload.state.uploading'
+  | 'files.upload.state.canceling'
+  | 'files.upload.state.succeeded'
+  | 'files.upload.state.failed'
+  | 'files.upload.state.canceled'
   | 'files.bulk.selected'
   | 'files.bulk.move'
   | 'files.bulk.download'
@@ -577,6 +585,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.storage': '存储',
     'sidebar.skills': '技能',
     'sidebar.agent': 'Agent',
+    'sidebar.myFiles.uploadingAria': '我的文件有上传进行中',
     'agent.pageTitle': 'Cloud Agent',
     'agent.pageDescription': '以云端 Agent 模式规划并执行文件操作。',
     'agent.nav.workspace': '工作台',
@@ -766,6 +775,13 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.empty.noMatch': '未找到匹配项',
     'files.drag.dropToUpload': '松开以上传文件',
     'files.upload.queueTitle': '上传队列',
+    'files.upload.action.cancel': '取消上传',
+    'files.upload.state.hashing': '计算校验中',
+    'files.upload.state.uploading': '上传中',
+    'files.upload.state.canceling': '取消中',
+    'files.upload.state.succeeded': '已完成',
+    'files.upload.state.failed': '失败',
+    'files.upload.state.canceled': '已取消',
     'files.bulk.selected': '已选',
     'files.bulk.move': '移动',
     'files.bulk.download': '下载',
@@ -1112,6 +1128,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.storage': 'Storage',
     'sidebar.skills': 'Skills',
     'sidebar.agent': 'Agent',
+    'sidebar.myFiles.uploadingAria': 'My Files has uploads in progress',
     'agent.pageTitle': 'Cloud Agent',
     'agent.pageDescription': 'Plan and execute cloud agent workflows for file operations.',
     'agent.nav.workspace': 'Workspace',
@@ -1301,6 +1318,13 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.empty.noMatch': 'No matches for',
     'files.drag.dropToUpload': 'Drop files to upload',
     'files.upload.queueTitle': 'Upload Queue',
+    'files.upload.action.cancel': 'Cancel',
+    'files.upload.state.hashing': 'Hashing',
+    'files.upload.state.uploading': 'Uploading',
+    'files.upload.state.canceling': 'Canceling',
+    'files.upload.state.succeeded': 'Done',
+    'files.upload.state.failed': 'Failed',
+    'files.upload.state.canceled': 'Canceled',
     'files.bulk.selected': 'Selected',
     'files.bulk.move': 'Move',
     'files.bulk.download': 'Download',
