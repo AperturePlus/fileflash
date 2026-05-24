@@ -129,6 +129,7 @@ export interface UploadFileOptions {
   concurrency?: number;
   maxRetries?: number;
   onHashProgress?: HashProgressCallback;
+  onFileHashed?: (fileHash: string) => void;
   onUploadProgress?: UploadProgressCallback;
   onUploadId?: (uploadId: string) => void;
   signal?: AbortSignal;
@@ -142,6 +143,7 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
     concurrency = 5,
     maxRetries = 3,
     onHashProgress,
+    onFileHashed,
     onUploadProgress,
     onUploadId,
     signal,
@@ -150,6 +152,7 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
   try {
     throwIfAborted(signal);
     const fileHash = await calculateFileHash(file, onHashProgress, chunkSize, { signal });
+    onFileHashed?.(fileHash);
     throwIfAborted(signal);
 
     const preflightRequest: UploadPreflightRequest = {
@@ -251,6 +254,44 @@ export async function uploadFile(options: UploadFileOptions): Promise<MergeChunk
     const canceled = normalizeCanceledError(error);
     if (canceled) throw canceled;
     throw asUploadError(error);
+  }
+}
+
+export interface CompleteUploadSessionOptions {
+  uploadId: string;
+  fileHash: string;
+  fileName: string;
+  mimeType: string;
+  parentId: string;
+  conflictStrategy?: 'rename' | 'overwrite' | 'cancel';
+  signal?: AbortSignal;
+}
+
+export async function completeUploadSession(options: CompleteUploadSessionOptions): Promise<MergeChunksResponse> {
+  const {
+    uploadId,
+    fileHash,
+    fileName,
+    mimeType,
+    parentId,
+    conflictStrategy,
+    signal,
+  } = options;
+  const mergeRequest: MergeChunksRequest = {
+    fileHash,
+    fileName,
+    mimeType,
+    parentId,
+    conflictStrategy,
+  };
+
+  try {
+    return await requestMergeAndWait(uploadId, mergeRequest, MERGE_TIMEOUT_MS, signal);
+  } catch (error) {
+    const canceled = normalizeCanceledError(error);
+    if (canceled) throw canceled;
+    const backendMessage = extractApiErrorMessage(error);
+    throw new Error(backendMessage || '文件分片合并失败，请重试或联系管理员。');
   }
 }
 
