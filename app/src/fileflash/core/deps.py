@@ -19,6 +19,13 @@ from ..repositories import (
 )
 from ..services.archive import ArchiveService
 from ..services.agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
+from ..services.admin.users import AdminUsersService
+from ..services.admin.storage import AdminStorageService
+from ..services.admin.files import AdminFilesService
+from ..services.admin.moderation import AdminModerationService
+from ..services.admin.logs import AdminLogsService
+from ..services.admin.notifications import AdminNotificationsService
+from ..services.admin.system import AdminSystemService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
 from ..services.email_delivery import VerificationEmailDeliveryService
@@ -118,6 +125,51 @@ def get_registration_email_domain_rule_service(
     db: AsyncSession = Depends(get_db),
 ) -> RegistrationEmailDomainRuleService:
     return RegistrationEmailDomainRuleService(db=db)
+
+
+def get_admin_users_service(
+    db: AsyncSession = Depends(get_db),
+) -> AdminUsersService:
+    return AdminUsersService(db=db)
+
+
+def get_admin_storage_service(
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RedisRateLimiter = Depends(get_rate_limiter),
+) -> AdminStorageService:
+    return AdminStorageService(db=db, redis=getattr(rate_limiter, "_redis", None))
+
+
+def get_admin_files_service(
+    db: AsyncSession = Depends(get_db),
+    event_publisher: InProcessAuthEventPublisher = Depends(get_event_publisher),
+) -> AdminFilesService:
+    return AdminFilesService(db=db, publisher=event_publisher)
+
+
+def get_admin_moderation_service(
+    db: AsyncSession = Depends(get_db),
+) -> AdminModerationService:
+    return AdminModerationService(db=db)
+
+
+def get_admin_logs_service(
+    db: AsyncSession = Depends(get_db),
+) -> AdminLogsService:
+    return AdminLogsService(db=db)
+
+
+def get_admin_notifications_service(
+    db: AsyncSession = Depends(get_db),
+) -> AdminNotificationsService:
+    return AdminNotificationsService(db=db)
+
+
+def get_admin_system_service(
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> AdminSystemService:
+    return AdminSystemService(db=db, settings=settings)
 
 
 def get_upload_service(

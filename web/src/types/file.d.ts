@@ -216,6 +216,23 @@ export interface UploadPreflightResponse {
 }
 
 /**
+ * 可恢复上传会话
+ */
+export interface UploadRecoverableSession {
+  uploadId: string;
+  fileName: string;
+  fileSize: number;
+  uploadedBytes: number;
+  chunkSize: number;
+  fileHash: string;
+  mimeType: string;
+  parentId: string;
+  updatedAt: string;
+  expiredAt?: string | null;
+  status: 'init' | 'uploading';
+}
+
+/**
  * 批量上传单文件元数据
  */
 export interface BatchUploadFileMeta {
@@ -374,6 +391,11 @@ export interface MergeChunksResponse {
   objectHash: string;
   createdAt: string;
   downloadUrl: string;
+}
+
+export interface CancelUploadResponse {
+  uploadId: string;
+  canceledAt: string;
 }
 
 /**

@@ -16,6 +16,7 @@ import type {
   BatchDownloadRequest,
   UploadPreflightRequest,
   UploadPreflightResponse,
+  UploadRecoverableSession,
   BatchUploadPreflightRequest,
   BatchUploadPreflightResponse,
   BatchUploadCompleteRequest,
@@ -23,6 +24,7 @@ import type {
   BatchUploadStatusResponse,
   MergeChunksRequest,
   MergeChunksResponse,
+  CancelUploadResponse,
   AdminFileAuditItem,
   GetAdminFilesRequest,
   ArchiveExtractRequest,
@@ -34,6 +36,10 @@ import type {
 // 上传相关API
 export const preflightUpload = (data: UploadPreflightRequest) => {
   return http.post<UploadPreflightResponse>('/uploads/preflight', data);
+};
+
+export const getRecoverableUploads = () => {
+  return http.get<UploadRecoverableSession[]>('/uploads/recoverable');
 };
 
 /**
@@ -88,6 +94,10 @@ export const uploadChunk = (uploadId: string, chunk: File, chunkIndex: number) =
  */
 export const mergeChunks = (uploadId: string, data: MergeChunksRequest) => {
   return http.post<BackgroundJob<MergeChunksResponse>>(`/uploads/${uploadId}/merge`, data);
+};
+
+export const cancelUploadSession = (uploadId: string) => {
+  return http.post<CancelUploadResponse>(`/uploads/${uploadId}/cancel`);
 };
 
 // Archive preview/extract APIs

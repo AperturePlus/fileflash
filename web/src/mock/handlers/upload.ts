@@ -14,11 +14,14 @@ type UploadSession = {
   chunks: Map<number, Blob>;
   uploadedChunkIndexes: Set<number>;
   createdAt: string;
+  updatedAt: string;
 };
 
 const sessions = new Map<string, UploadSession>();
 const hashToSessionId = new Map<string, string>();
 const batchSessions = new Map<string, BatchUploadSession>();
+const canceledUploadIds = new Set<string>();
+const completedUploadIds = new Set<string>();
 
 type BatchUploadItem = {
   clientFileId: string;
@@ -71,6 +74,8 @@ function resolveUploadSession(
 
   const uploadId = Mock.Random.guid();
   const chunkSize = 5 * 1024 * 1024;
+  canceledUploadIds.delete(uploadId);
+  completedUploadIds.delete(uploadId);
   const newSession: UploadSession = {
     uploadId,
     fileHash,
@@ -82,6 +87,7 @@ function resolveUploadSession(
     chunks: new Map(),
     uploadedChunkIndexes: new Set(),
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   sessions.set(uploadId, newSession);
@@ -135,6 +141,43 @@ function getBatchItemRuntimeStatus(item: BatchUploadItem) {
 }
 
 export const setupUploadMocks = () => {
+  Mock.mock(/\/api\/v1\/uploads\/recoverable$/, 'get', () => {
+    const now = new Date();
+    const sessionsData = Array.from(sessions.values())
+      .map((session) => {
+        const uploadedBytes = [...session.uploadedChunkIndexes].reduce((total, chunkIndex) => {
+          const start = chunkIndex * session.chunkSize;
+          const end = Math.min(start + session.chunkSize, session.fileSize);
+          return total + Math.max(0, end - start);
+        }, 0);
+        const expiredAt = new Date(new Date(session.createdAt).getTime() + 24 * 3600 * 1000).toISOString();
+        if (new Date(expiredAt).getTime() <= now.getTime()) {
+          return null;
+        }
+        return {
+          uploadId: session.uploadId,
+          fileName: session.fileName,
+          fileSize: session.fileSize,
+          uploadedBytes,
+          chunkSize: session.chunkSize,
+          fileHash: session.fileHash,
+          mimeType: session.mimeType,
+          parentId: session.parentId,
+          updatedAt: session.updatedAt || session.createdAt,
+          expiredAt,
+          status: 'uploading',
+        };
+      })
+      .filter(Boolean);
+
+    return {
+      success: true,
+      code: 200,
+      message: 'Recoverable upload sessions fetched',
+      data: sessionsData,
+    };
+  });
+
   Mock.mock(/\/api\/v1\/uploads\/batch-preflight$/, 'post', (options) => {
     const payload = JSON.parse(options.body || '{}');
     const { parentId, files } = payload;
@@ -410,12 +453,71 @@ export const setupUploadMocks = () => {
 
     session.chunks.set(chunkIndex, chunk);
     session.uploadedChunkIndexes.add(chunkIndex);
+    session.updatedAt = new Date().toISOString();
 
     return {
       success: true,
       code: 200,
       message: `Chunk ${chunkIndex} uploaded`,
       data: null,
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/uploads\/([^/]+)\/cancel$/, 'post', (options) => {
+    const uploadId = (options.url.match(/\/api\/v1\/uploads\/([^/]+)\/cancel/) || [])[1];
+    const now = new Date().toISOString();
+
+    if (completedUploadIds.has(uploadId)) {
+      return {
+        success: false,
+        code: 409,
+        message: 'Upload session already completed',
+        data: null,
+      };
+    }
+
+    if (canceledUploadIds.has(uploadId)) {
+      return {
+        success: true,
+        code: 200,
+        message: 'Upload session canceled',
+        data: {
+          uploadId,
+          canceledAt: now,
+        },
+      };
+    }
+
+    const session = sessions.get(uploadId);
+    if (!session) {
+      return {
+        success: false,
+        code: 404,
+        message: 'Upload session not found',
+        data: null,
+      };
+    }
+
+    sessions.delete(uploadId);
+    hashToSessionId.delete(session.fileHash);
+    canceledUploadIds.add(uploadId);
+
+    for (const batch of batchSessions.values()) {
+      const target = batch.items.find((item) => item.uploadId === uploadId);
+      if (target) {
+        target.status = 'UPLOADING';
+        batch.updatedAt = now;
+      }
+    }
+
+    return {
+      success: true,
+      code: 200,
+      message: 'Upload session canceled',
+      data: {
+        uploadId,
+        canceledAt: now,
+      },
     };
   });
 
@@ -489,6 +591,7 @@ export const setupUploadMocks = () => {
 
           sessions.delete(uploadId);
           hashToSessionId.delete(session.fileHash);
+          completedUploadIds.add(uploadId);
 
           for (const batch of batchSessions.values()) {
             const target = batch.items.find((item) => item.fileHash === session.fileHash);

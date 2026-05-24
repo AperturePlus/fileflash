@@ -77,8 +77,22 @@ export const setupUserMocks = () => {
     const url = new URL(options.url, 'http://localhost');
     const page = Number(url.searchParams.get('page') || 1);
     const perPage = Number(url.searchParams.get('perPage') || 20);
+    const search = (url.searchParams.get('search') || '').toLowerCase();
+    const statusFilter = url.searchParams.get('status');
+    const roleFilter = url.searchParams.get('role');
 
-    const users = mockUsers.map((user) => ({
+    const filtered = mockUsers.filter((user) => {
+      if (search) {
+        const hit = user.username.toLowerCase().includes(search)
+          || user.email.toLowerCase().includes(search);
+        if (!hit) return false;
+      }
+      if (statusFilter && user.status !== statusFilter) return false;
+      if (roleFilter && user.role !== roleFilter) return false;
+      return true;
+    });
+
+    const users = filtered.map((user) => ({
       userId: user.userId,
       username: user.username,
       email: user.email,
@@ -90,6 +104,7 @@ export const setupUserMocks = () => {
       role: user.role,
       status: user.status,
       lastActiveAt: new Date(Date.now() - Mock.Random.integer(1, 72) * 3600000).toISOString(),
+      lastLoginAt: new Date(Date.now() - Mock.Random.integer(1, 240) * 3600000).toISOString(),
     }));
 
     return {

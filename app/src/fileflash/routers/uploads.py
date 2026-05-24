@@ -22,6 +22,18 @@ async def preflight_upload(
     return api_success(data=response.model_dump(by_alias=True), message="Ready for upload")
 
 
+@router.get("/recoverable")
+async def recoverable_uploads(
+    current_user: User = Depends(get_current_user),
+    upload_service: UploadService = Depends(get_upload_service),
+):
+    sessions = await upload_service.list_recoverable_sessions(user_id=current_user.user_id)
+    return api_success(
+        data=[session.model_dump(by_alias=True) for session in sessions],
+        message="Recoverable upload sessions fetched",
+    )
+
+
 @router.post("/{upload_id}/chunk")
 async def upload_chunk(
     upload_id: str,
@@ -58,4 +70,20 @@ async def merge_chunks(
         message="Upload merge job created",
         code=201,
         status_code=201,
+    )
+
+
+@router.post("/{upload_id}/cancel")
+async def cancel_upload(
+    upload_id: str,
+    current_user: User = Depends(get_current_user),
+    upload_service: UploadService = Depends(get_upload_service),
+):
+    response = await upload_service.cancel_upload_session(
+        user_id=current_user.user_id,
+        upload_id=upload_id,
+    )
+    return api_success(
+        data=response.model_dump(by_alias=True),
+        message="Upload session canceled",
     )

@@ -128,6 +128,20 @@ class UploadPreflightResponse(CamelModel):
     uploaded_chunk_indexes: list[int] | None = None
 
 
+class RecoverableUploadSession(CamelModel):
+    upload_id: str
+    file_name: str = Field(min_length=1, max_length=255)
+    file_size: int = Field(ge=0)
+    uploaded_bytes: int = Field(ge=0)
+    chunk_size: int = Field(gt=0)
+    file_hash: str = Field(min_length=8, max_length=128)
+    mime_type: str = Field(min_length=1, max_length=255)
+    parent_id: str
+    updated_at: datetime
+    expired_at: datetime | None = None
+    status: Literal["init", "uploading"]
+
+
 class MergeChunksRequest(CamelModel):
     file_hash: str = Field(min_length=8, max_length=128)
     file_name: str = Field(min_length=1, max_length=255)
@@ -145,6 +159,11 @@ class MergeChunksResponse(CamelModel):
     object_hash: str
     created_at: datetime
     download_url: str
+
+
+class UploadCancelResponse(CamelModel):
+    upload_id: str
+    canceled_at: datetime
 
 
 class FileDetails(FileItem):

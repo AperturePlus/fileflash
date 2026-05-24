@@ -1,3 +1,5 @@
+import type { PaginationMeta } from './base';
+
 /**
  * 日志项
  * @property {string} id 日志ID
@@ -9,6 +11,7 @@
  */
 export interface LogItem {
   id: string;
+  userId?: string | null;
   operation: string;
   operationName: string;
   details: Record<string, string | number>;
@@ -17,45 +20,22 @@ export interface LogItem {
 }
 
 /**
- * 日志列表
- * @property {LogItem[]} logs 日志列表
- * @property {number} totalCount 总日志数
- * @property {number} returnedCount 返回的日志数
- * @property {boolean} hasMore 是否有更多日志
- * @property {FilterSummary} filterSummary 过滤摘要
+ * 日志列表（标准分页形状）
  */
 export type LogsList = {
   logs: LogItem[];
-  totalCount: number;
-  returnedCount: number;
-  hasMore: boolean;
-  filterSummary: FilterSummary;
+  pagination: PaginationMeta;
 };
 
 /**
- * 过滤摘要
- * @property {string} operation 操作类型
- * @property {string} dateRange 日期范围
- * @property {number} matchedRecords 匹配的记录数
+ * 管理员视角的日志查询请求
  */
-export interface FilterSummary {
+export interface GetAdminLogsRequest {
+  userId?: string;
   operation?: string;
-  dateRange?: string;
-  matchedRecords: number;
-}
-
-/**
- * 获取日志请求
- * @property {number} page 页码
- * @property {number} perPage 每页数量
- * @property {string} operation 操作类型
- * @property {string} startDate 开始日期
- * @property {string} endDate 结束日期
- */
-export interface GetLogsRequest {
+  result?: 'success' | 'failure';
+  fromAt?: string;
+  toAt?: string;
   page?: number;
   perPage?: number;
-  operation?: string;
-  startDate?: string;
-  endDate?: string;
-} 
+}

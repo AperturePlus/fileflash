@@ -32,3 +32,17 @@ export const updateStorageQuota = (userId: string, storageLimit: number) => {
     updatedAt: string;
   }>(`/admin/storage/users/${userId}/quota`, { storageLimit });
 };
+
+/**
+ * 管理员视角：全局存储概览
+ */
+export const getAdminStorageSummary = () => {
+  return http.get<{
+    storageUsed: number;
+    storageLimit: number;
+    storagePercentage: number;
+    fileCount: number;
+    userCount: number;
+    updatedAt: string;
+  }>('/admin/storage/summary');
+};

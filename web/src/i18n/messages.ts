@@ -13,11 +13,21 @@ export type LocaleKey =
   | 'header.userMenu'
   | 'header.menu.profile'
   | 'header.menu.settings'
-  | 'header.menu.dashboard'
+  | 'header.menu.console'
   | 'header.menu.logout'
   | 'header.menu.admin'
   | 'header.menu.defaultUserName'
   | 'header.menu.defaultEmail'
+  | 'console.title'
+  | 'console.nav.overview'
+  | 'console.nav.users'
+  | 'console.nav.storage'
+  | 'console.nav.content'
+  | 'console.nav.moderation'
+  | 'console.nav.system'
+  | 'console.nav.logs'
+  | 'console.nav.notifications'
+  | 'console.nav.rules'
   | 'sidebar.myFiles'
   | 'sidebar.shared'
   | 'sidebar.recycleBin'
@@ -27,6 +37,7 @@ export type LocaleKey =
   | 'sidebar.storage'
   | 'sidebar.skills'
   | 'sidebar.agent'
+  | 'sidebar.myFiles.uploadingAria'
   | 'agent.pageTitle'
   | 'agent.pageDescription'
   | 'agent.nav.workspace'
@@ -216,6 +227,17 @@ export type LocaleKey =
   | 'files.empty.noMatch'
   | 'files.drag.dropToUpload'
   | 'files.upload.queueTitle'
+  | 'files.upload.action.cancel'
+  | 'files.upload.action.resume'
+  | 'files.upload.state.hashing'
+  | 'files.upload.state.uploading'
+  | 'files.upload.state.paused'
+  | 'files.upload.state.canceling'
+  | 'files.upload.state.succeeded'
+  | 'files.upload.state.failed'
+  | 'files.upload.state.canceled'
+  | 'files.upload.hint.sessionExpired'
+  | 'files.upload.hint.needReselect'
   | 'files.bulk.selected'
   | 'files.bulk.move'
   | 'files.bulk.download'
@@ -543,11 +565,21 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'header.userMenu': '用户菜单',
     'header.menu.profile': '个人资料',
     'header.menu.settings': '设置',
-    'header.menu.dashboard': '仪表盘',
+    'header.menu.console': '控制台',
     'header.menu.logout': '退出登录',
     'header.menu.admin': '管理员',
     'header.menu.defaultUserName': '用户',
     'header.menu.defaultEmail': 'user@example.com',
+    'console.title': '控制台',
+    'console.nav.overview': '概览',
+    'console.nav.users': '用户',
+    'console.nav.storage': '存储',
+    'console.nav.content': '内容审计',
+    'console.nav.moderation': '违规处理',
+    'console.nav.system': '系统状态',
+    'console.nav.logs': '操作日志',
+    'console.nav.notifications': '通知',
+    'console.nav.rules': '注册规则',
     'sidebar.myFiles': '我的文件',
     'sidebar.shared': '共享',
     'sidebar.recycleBin': '回收站',
@@ -557,6 +589,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.storage': '存储',
     'sidebar.skills': '技能',
     'sidebar.agent': 'Agent',
+    'sidebar.myFiles.uploadingAria': '我的文件有上传进行中',
     'agent.pageTitle': 'Cloud Agent',
     'agent.pageDescription': '以云端 Agent 模式规划并执行文件操作。',
     'agent.nav.workspace': '工作台',
@@ -746,6 +779,17 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.empty.noMatch': '未找到匹配项',
     'files.drag.dropToUpload': '松开以上传文件',
     'files.upload.queueTitle': '上传队列',
+    'files.upload.action.cancel': '取消上传',
+    'files.upload.action.resume': '继续上传',
+    'files.upload.state.hashing': '计算校验中',
+    'files.upload.state.uploading': '上传中',
+    'files.upload.state.paused': '已暂停',
+    'files.upload.state.canceling': '取消中',
+    'files.upload.state.succeeded': '已完成',
+    'files.upload.state.failed': '失败',
+    'files.upload.state.canceled': '已取消',
+    'files.upload.hint.sessionExpired': '上传会话已失效，请重新上传该文件。',
+    'files.upload.hint.needReselect': '请重新选择同一个文件以继续断点续传。',
     'files.bulk.selected': '已选',
     'files.bulk.move': '移动',
     'files.bulk.download': '下载',
@@ -1068,11 +1112,21 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'header.userMenu': 'User menu',
     'header.menu.profile': 'Profile',
     'header.menu.settings': 'Settings',
-    'header.menu.dashboard': 'Dashboard',
+    'header.menu.console': 'Console',
     'header.menu.logout': 'Log out',
     'header.menu.admin': 'Admin',
     'header.menu.defaultUserName': 'User',
     'header.menu.defaultEmail': 'user@example.com',
+    'console.title': 'Console',
+    'console.nav.overview': 'Overview',
+    'console.nav.users': 'Users',
+    'console.nav.storage': 'Storage',
+    'console.nav.content': 'Content Audit',
+    'console.nav.moderation': 'Moderation',
+    'console.nav.system': 'System',
+    'console.nav.logs': 'Logs',
+    'console.nav.notifications': 'Notifications',
+    'console.nav.rules': 'Registration Rules',
     'sidebar.myFiles': 'My Files',
     'sidebar.shared': 'Shared',
     'sidebar.recycleBin': 'Recycle Bin',
@@ -1082,6 +1136,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.storage': 'Storage',
     'sidebar.skills': 'Skills',
     'sidebar.agent': 'Agent',
+    'sidebar.myFiles.uploadingAria': 'My Files has uploads in progress',
     'agent.pageTitle': 'Cloud Agent',
     'agent.pageDescription': 'Plan and execute cloud agent workflows for file operations.',
     'agent.nav.workspace': 'Workspace',
@@ -1271,6 +1326,17 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.empty.noMatch': 'No matches for',
     'files.drag.dropToUpload': 'Drop files to upload',
     'files.upload.queueTitle': 'Upload Queue',
+    'files.upload.action.cancel': 'Cancel',
+    'files.upload.action.resume': 'Resume',
+    'files.upload.state.hashing': 'Hashing',
+    'files.upload.state.uploading': 'Uploading',
+    'files.upload.state.paused': 'Paused',
+    'files.upload.state.canceling': 'Canceling',
+    'files.upload.state.succeeded': 'Done',
+    'files.upload.state.failed': 'Failed',
+    'files.upload.state.canceled': 'Canceled',
+    'files.upload.hint.sessionExpired': 'Upload session expired. Please upload this file again.',
+    'files.upload.hint.needReselect': 'Please reselect the same file to resume upload.',
     'files.bulk.selected': 'Selected',
     'files.bulk.move': 'Move',
     'files.bulk.download': 'Download',

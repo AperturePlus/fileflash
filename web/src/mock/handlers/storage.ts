@@ -164,4 +164,22 @@ export const setupStorageMocks = () => {
       },
     };
   });
+
+  Mock.mock(/\/api\/v1\/admin\/storage\/summary$/, 'get', () => {
+    const used = mockUsers.reduce((sum, u) => sum + u.storageUsed, 0);
+    const limit = mockUsers.reduce((sum, u) => sum + u.storageLimit, 0);
+    const files = Object.values(vfsApi.getAll()).filter((node) => !node.isTrashed && node.type === 'file');
+    return {
+      success: true,
+      code: 200,
+      data: {
+        storageUsed: used,
+        storageLimit: limit,
+        storagePercentage: limit ? Number(((used / limit) * 100).toFixed(2)) : 0,
+        fileCount: files.length,
+        userCount: mockUsers.length,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  });
 };

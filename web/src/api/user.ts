@@ -144,7 +144,13 @@ export const getUsers = (params: { search?: string; page?: number; perPage?: num
   return http.get<PaginatedData<User>>('/users', params);
 };
 
-export const getAdminUsers = (params: { page?: number; perPage?: number }) => {
+export const getAdminUsers = (params: {
+  page?: number;
+  perPage?: number;
+  search?: string;
+  status?: 'active' | 'suspended';
+  role?: 'user' | 'admin';
+}) => {
   return http.get<PaginatedData<any>>('/admin/users', params);
 };
 

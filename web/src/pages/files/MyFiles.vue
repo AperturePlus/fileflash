@@ -29,13 +29,24 @@ const t = localeStore.t;
 const { items, path, isLoading, currentFolderId } = storeToRefs(fileStore);
 const { settings } = storeToRefs(useSettingsStore());
 const fileInput = ref<HTMLInputElement | null>(null);
+const resumeFileInput = ref<HTMLInputElement | null>(null);
 
 const searchQuery = ref(''); const isSearching = ref(false); const searchResults = ref<ContentItem[]>([]);
 const selection = useFileSelection();
 const { selectedItems, selectedCount, clear: clearSelection } = selection;
 const a = useFileActions(currentFolderId);
 const { handleBatchDownload, handleBatchDelete } = useBatchActions(selectedItems, clearSelection);
-const { uploadTasks, isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, handleFileSelect } = useUpload(currentFolderId);
+const {
+  uploadTasks,
+  isDragging,
+  handleDragEnter,
+  handleDragLeave,
+  handleDragOver,
+  handleDrop,
+  handleFileSelect,
+  cancelUpload,
+  resumeUpload,
+} = useUpload(currentFolderId);
 const { sortedItems, setSort, sortKey, sortDirection } = useFileSorting(items);
 const drag = useFileDragMove({ isSelected: selection.isSelected, selectedItems, handleBatchMove: a.handleBatchMove });
 const { openPreview } = useFilePreview();
@@ -48,6 +59,7 @@ const displayItems = computed(() => isSearching.value
   : sortedItems.value);
 
 const isExtractDialogVisible = ref(false); const fileToExtract = ref<FileItem | null>(null);
+const pendingResumeTaskId = ref<string | null>(null);
 
 const onSearch = async (query: string) => {
   searchQuery.value = query;
@@ -111,6 +123,21 @@ const onToggleStar = async (item: ContentItem) => {
 };
 const navigateBC = (id: string) => { isSearching.value = false; searchQuery.value = ''; searchResults.value = []; fileStore.navigateToFolder(id); };
 
+const handleResumeTask = (taskId: string | number) => {
+  pendingResumeTaskId.value = String(taskId);
+  resumeFileInput.value?.click();
+};
+
+const handleResumeFileSelect = async (event: Event) => {
+  const taskId = pendingResumeTaskId.value;
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  target.value = '';
+  pendingResumeTaskId.value = null;
+  if (!taskId || !file) return;
+  await resumeUpload(taskId, file);
+};
+
 let timer: number | null = null;
 watch(() => [settings.value.autoRefreshInterval, currentFolderId.value], () => {
   if (timer !== null) { window.clearInterval(timer); timer = null; }
@@ -125,6 +152,7 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
 <template>
   <div class="page" @dragenter="handleDragEnter" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
     <input ref="fileInput" type="file" multiple hidden @change="handleFileSelect" />
+    <input ref="resumeFileInput" type="file" hidden @change="handleResumeFileSelect" />
 
     <FileToolbar
       :view-mode="viewMode" :sort-key="sortKey" :sort-direction="sortDirection"
@@ -138,7 +166,7 @@ onUnmounted(() => { eventBus.off('move-items', drag.onSidebarMove); eventBus.off
       </template>
     </FileToolbar>
 
-    <UploadProgressTray :tasks="uploadTasks" />
+    <UploadProgressTray :tasks="uploadTasks" @cancel="cancelUpload" @resume="handleResumeTask" />
 
     <div class="page__body">
       <div v-if="isDragging" class="page__drag">{{ t('files.drag.dropToUpload') }}</div>
