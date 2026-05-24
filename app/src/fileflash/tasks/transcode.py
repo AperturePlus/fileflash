@@ -13,6 +13,11 @@ from ..core.settings import get_settings
 from ..s3.minio_client import MinioObjectStorageClient
 
 TRANSCODE_PROFILE_VERSION = "mp4-v1"
+_FFMPEG_DETERMINISTIC_ERROR_PATTERNS = (
+    "unsupported channel layout",
+    "error while opening encoder",
+    "could not open encoder before eof",
+)
 
 
 @dataclass(slots=True)
@@ -182,6 +187,8 @@ def build_ffmpeg_command(
                 audio_codec,
                 "-b:a",
                 f"{audio_bitrate}k",
+                "-ac",
+                "2",
                 "-map",
                 "0:v:0",
                 "-map",
@@ -196,6 +203,8 @@ def build_ffmpeg_command(
                 "aac",
                 "-b:a",
                 f"{audio_bitrate}k",
+                "-ac",
+                "2",
                 "-movflags",
                 "+faststart",
                 "-map",
@@ -279,8 +288,31 @@ def _run_command(command: list[str], *, timeout_seconds: int) -> subprocess.Comp
         raise RuntimeError(f"Binary not found for command: {command[0]}") from exc
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
-        raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(command)} | {stderr}")
+        error_message = f"Command failed ({result.returncode}): {' '.join(command)} | {stderr}"
+        if _is_deterministic_ffmpeg_failure(command=command, stderr=stderr):
+            raise ValueError(error_message)
+        raise RuntimeError(error_message)
     return result
+
+
+def _is_deterministic_ffmpeg_failure(*, command: list[str], stderr: str) -> bool:
+    if not command:
+        return False
+
+    binary_name = Path(command[0]).name.lower()
+    if "ffmpeg" not in binary_name:
+        return False
+
+    stderr_text = stderr.lower()
+    if any(pattern in stderr_text for pattern in _FFMPEG_DETERMINISTIC_ERROR_PATTERNS):
+        return True
+
+    if "invalid argument" in stderr_text and (
+        "enc:aac" in stderr_text or "aac @" in stderr_text or "channel layout" in stderr_text
+    ):
+        return True
+
+    return False
 
 
 def _run_async(awaitable: Any) -> Any:
