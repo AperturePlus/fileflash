@@ -228,12 +228,16 @@ export type LocaleKey =
   | 'files.drag.dropToUpload'
   | 'files.upload.queueTitle'
   | 'files.upload.action.cancel'
+  | 'files.upload.action.resume'
   | 'files.upload.state.hashing'
   | 'files.upload.state.uploading'
+  | 'files.upload.state.paused'
   | 'files.upload.state.canceling'
   | 'files.upload.state.succeeded'
   | 'files.upload.state.failed'
   | 'files.upload.state.canceled'
+  | 'files.upload.hint.sessionExpired'
+  | 'files.upload.hint.needReselect'
   | 'files.bulk.selected'
   | 'files.bulk.move'
   | 'files.bulk.download'
@@ -776,12 +780,16 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.drag.dropToUpload': '松开以上传文件',
     'files.upload.queueTitle': '上传队列',
     'files.upload.action.cancel': '取消上传',
+    'files.upload.action.resume': '继续上传',
     'files.upload.state.hashing': '计算校验中',
     'files.upload.state.uploading': '上传中',
+    'files.upload.state.paused': '已暂停',
     'files.upload.state.canceling': '取消中',
     'files.upload.state.succeeded': '已完成',
     'files.upload.state.failed': '失败',
     'files.upload.state.canceled': '已取消',
+    'files.upload.hint.sessionExpired': '上传会话已失效，请重新上传该文件。',
+    'files.upload.hint.needReselect': '请重新选择同一个文件以继续断点续传。',
     'files.bulk.selected': '已选',
     'files.bulk.move': '移动',
     'files.bulk.download': '下载',
@@ -1319,12 +1327,16 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.drag.dropToUpload': 'Drop files to upload',
     'files.upload.queueTitle': 'Upload Queue',
     'files.upload.action.cancel': 'Cancel',
+    'files.upload.action.resume': 'Resume',
     'files.upload.state.hashing': 'Hashing',
     'files.upload.state.uploading': 'Uploading',
+    'files.upload.state.paused': 'Paused',
     'files.upload.state.canceling': 'Canceling',
     'files.upload.state.succeeded': 'Done',
     'files.upload.state.failed': 'Failed',
     'files.upload.state.canceled': 'Canceled',
+    'files.upload.hint.sessionExpired': 'Upload session expired. Please upload this file again.',
+    'files.upload.hint.needReselect': 'Please reselect the same file to resume upload.',
     'files.bulk.selected': 'Selected',
     'files.bulk.move': 'Move',
     'files.bulk.download': 'Download',
