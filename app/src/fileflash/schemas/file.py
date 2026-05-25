@@ -177,6 +177,11 @@ class MediaOptimization(CamelModel):
     updated_at: datetime
 
 
+class FilePreviewUrlResponse(CamelModel):
+    url: str
+    expires_at: datetime
+
+
 class RenameFileRequest(CamelModel):
     file_name: str = Field(min_length=1, max_length=255)
 

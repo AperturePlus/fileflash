@@ -1,5 +1,8 @@
 import SparkMD5 from 'spark-md5';  
 
+export const HASH_CHUNK_SIZE_DEFAULT = 2 * 1024 * 1024;
+export const HASH_CHUNK_SIZE_LARGE_FILE = 16 * 1024 * 1024;
+
 /**  
  * 进度回调函数的类型定义。  
  * @param percentage - 当前计算进度的百分比 (0-100)。  
@@ -34,7 +37,7 @@ function createAbortError(message: string): Error {
 export function calculateFileHash(  
   file: File,  
   onProgress?: HashProgressCallback,  
-  chunkSize: number = 2 * 1024 * 1024, // 默认分片大小: 2MB
+  chunkSize: number = HASH_CHUNK_SIZE_DEFAULT,
   options: {
     signal?: AbortSignal;
   } = {},

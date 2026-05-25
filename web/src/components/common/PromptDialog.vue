@@ -42,7 +42,7 @@ const handleConfirm = () => {
           />
         </div>
         <footer class="modal-footer">
-          <button class="btn btn-secondary" @click="handleClose">{{ active.cancelText }}</button>
+          <button v-if="active.showCancelButton" class="btn btn-secondary" @click="handleClose">{{ active.cancelText }}</button>
           <button class="btn" :class="active.danger ? 'btn-danger' : 'btn-primary'" @click="handleConfirm">
             {{ active.confirmText }}
           </button>

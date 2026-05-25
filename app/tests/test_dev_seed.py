@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from fileflash.core.settings import Settings
+from fileflash.models.enums import UserRole
 from fileflash.models.tables_identity import User
-from fileflash.services.dev_seed import DevAccountSeeder, initialize_dev_accounts
+from fileflash.services.dev_seed import DevAccountSeeder, DevSeedSummary, initialize_dev_accounts
 
 
 class DummySeedSession:
@@ -38,7 +39,10 @@ class MemoryDevAccountSeeder(DevAccountSeeder):
         for obj in self.db.added:
             if not isinstance(obj, User):
                 continue
-            if obj.username.lower() == spec.username.lower() or obj.email.lower() == spec.email.lower():
+            if (
+                obj.username.lower() == spec.username.lower()
+                or obj.email.lower() == spec.email.lower()
+            ):
                 return obj
         return None
 
@@ -59,7 +63,7 @@ def make_settings(**overrides: object) -> Settings:
         "JWT_SECRET_KEY": "unit-test-secret-key-1234567890abcd",
     }
     payload.update(overrides)
-    return Settings(**payload)
+    return Settings(_env_file=None, **payload)
 
 
 @pytest.mark.asyncio
@@ -95,16 +99,74 @@ async def test_dev_account_seeder_is_idempotent_and_supports_password_reset():
 
 
 @pytest.mark.asyncio
-async def test_initialize_dev_accounts_skips_auto_run_in_production(monkeypatch: pytest.MonkeyPatch):
+async def test_initialize_dev_accounts_skips_auto_run_outside_dev_and_prod(
+    monkeypatch: pytest.MonkeyPatch,
+):
     guard = AsyncMock(side_effect=AssertionError("SessionLocal should not be called"))
     monkeypatch.setattr("fileflash.services.dev_seed.SessionLocal", guard)
 
     result = await initialize_dev_accounts(
-        settings=make_settings(APP_ENV="production"),
+        settings=make_settings(APP_ENV="staging"),
         auto_run=True,
         reset_password=False,
     )
 
     assert result is False
     guard.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_initialize_dev_accounts_uses_env_admin_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    class SessionLocalStub:
+        calls = 0
+
+        def __call__(self):
+            self.calls += 1
+            return self
+
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class SeederStub:
+        def __init__(self, *, db: object, accounts: tuple[object, ...]) -> None:
+            captured["db"] = db
+            captured["accounts"] = accounts
+
+        async def seed(self, *, reset_password: bool = False) -> DevSeedSummary:
+            captured["reset_password"] = reset_password
+            return DevSeedSummary(created_users=1)
+
+    session_local = SessionLocalStub()
+    monkeypatch.setattr("fileflash.services.dev_seed.SessionLocal", session_local)
+    monkeypatch.setattr("fileflash.services.dev_seed.DevAccountSeeder", SeederStub)
+
+    result = await initialize_dev_accounts(
+        settings=make_settings(
+            APP_ENV="production",
+            DEFAULT_ADMIN_USERNAME="root-admin",
+            DEFAULT_ADMIN_EMAIL="root-admin@example.com",
+            DEFAULT_ADMIN_PASSWORD="p" * 32,
+        ),
+        auto_run=True,
+        reset_password=False,
+    )
+
+    assert result is True
+    assert session_local.calls == 1
+    accounts = captured["accounts"]
+    assert isinstance(accounts, tuple)
+    assert len(accounts) == 1
+    account = accounts[0]
+    assert account.username == "root-admin"
+    assert account.email == "root-admin@example.com"
+    assert account.password == "p" * 32
+    assert account.role == UserRole.ADMIN
+    assert captured["reset_password"] is False
 

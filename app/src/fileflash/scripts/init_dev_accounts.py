@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Initialize development test accounts for FileFlash.")
+    parser = argparse.ArgumentParser(description="Initialize seeded accounts for FileFlash.")
     parser.add_argument(
         "--reset-password",
         action="store_true",
-        help="Force reset passwords to defaults (admin/admin123, demo/demo123).",
+        help="Force reset seeded account passwords from the active environment configuration.",
     )
     return parser
 
@@ -23,8 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
 async def run(reset_password: bool) -> int:
     settings = get_settings()
     if settings.is_production_env:
-        logger.warning(
-            "Manual dev-account initialization is running under APP_ENV=%s. This is not executed automatically in production.",
+        logger.info(
+            "Manual account initialization is using DEFAULT_ADMIN_* for APP_ENV=%s.",
             settings.app_env,
         )
 

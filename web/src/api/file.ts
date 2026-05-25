@@ -6,6 +6,7 @@ import type {
   FileItem,
   ContentItem,
   FileDetails,
+  FilePreviewUrlResponse,
   GetFilesRequest,
   RenameFileRequest,
   MoveFileRequest,
@@ -148,6 +149,10 @@ export const downloadFile = (fileId: string, range?: string) => {
  */
 export const previewFile = (fileId: string) => {
   return http.get<Blob>(`/files/${fileId}/preview`, undefined, { responseType: 'blob' });
+};
+
+export const getPreviewUrl = (fileId: string) => {
+  return http.post<FilePreviewUrlResponse>(`/files/${fileId}/preview-url`);
 };
 
 /**

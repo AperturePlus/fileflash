@@ -599,6 +599,30 @@ export const setupFileMocks = () => {
     return buildMockFileBlob(resolvePreviewNode(node));
   });
 
+  Mock.mock(/\/api\/v1\/files\/([^/]+)\/preview-url$/, 'post', (options) => {
+    const fileId = (options.url.match(/\/api\/v1\/files\/([^/]+)\/preview-url/) || [])[1];
+    const node = vfsApi.get(fileId);
+
+    if (!node || node.type !== 'file') {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    const previewBlob = buildMockFileBlob(resolvePreviewNode(node));
+    return {
+      success: true,
+      code: 200,
+      data: {
+        url: URL.createObjectURL(previewBlob),
+        expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+      },
+    };
+  });
+
   Mock.mock(/\/api\/v1\/files\/([^/]+)\/archive\/preview$/, 'post', (options) => {
     const fileId = (options.url.match(/\/api\/v1\/files\/([^/]+)\/archive\/preview/) || [])[1];
     const node = vfsApi.get(fileId);

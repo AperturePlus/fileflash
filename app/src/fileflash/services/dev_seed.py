@@ -59,19 +59,23 @@ async def initialize_dev_accounts(
     reset_password: bool = False,
     auto_run: bool = False,
 ) -> bool:
-    if auto_run and not settings.is_development_env:
-        if settings.is_production_env:
-            logger.info("Skip dev account auto-initialization in production environment: %s", settings.app_env)
-        else:
-            logger.info("Skip dev account auto-initialization for non-dev APP_ENV=%s", settings.app_env)
+    if auto_run and not settings.is_development_env and not settings.is_production_env:
+        logger.info("Skip account auto-initialization for non-dev APP_ENV=%s", settings.app_env)
         return False
 
+    if settings.is_production_env:
+        settings.assert_runtime_security()
+
+    accounts = _seed_accounts_for_settings(settings)
+
     async with SessionLocal() as db:
-        seeder = DevAccountSeeder(db=db)
+        seeder = DevAccountSeeder(db=db, accounts=accounts)
         summary = await seeder.seed(reset_password=reset_password)
 
     logger.info(
-        "Dev accounts initialized: createdUsers=%s updatedUsers=%s resetPasswordUsers=%s createdPreferences=%s createdRoots=%s",
+        "%s initialized: createdUsers=%s updatedUsers=%s resetPasswordUsers=%s "
+        "createdPreferences=%s createdRoots=%s",
+        "Production default admin" if settings.is_production_env else "Dev accounts",
         summary.created_users,
         summary.updated_users,
         summary.reset_password_users,
@@ -81,15 +85,44 @@ async def initialize_dev_accounts(
     return True
 
 
+def _seed_accounts_for_settings(settings: Settings) -> tuple[DevSeedAccount, ...]:
+    if not settings.is_production_env:
+        return DEV_SEED_ACCOUNTS
+
+    username = (settings.default_admin_username or "").strip()
+    email = (settings.default_admin_email or "").strip()
+    password = (settings.default_admin_password or "").strip()
+    if not username or not email or not password:
+        raise ValueError(
+            "DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_EMAIL, and DEFAULT_ADMIN_PASSWORD are required"
+        )
+
+    return (
+        DevSeedAccount(
+            username=username,
+            email=email,
+            password=password,
+            role=UserRole.ADMIN,
+            language=UiLanguage.ZH_CN,
+        ),
+    )
+
+
 class DevAccountSeeder:
-    def __init__(self, *, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        *,
+        db: AsyncSession,
+        accounts: tuple[DevSeedAccount, ...] = DEV_SEED_ACCOUNTS,
+    ) -> None:
         self.db = db
+        self.accounts = accounts
 
     async def seed(self, *, reset_password: bool = False) -> DevSeedSummary:
         summary = DevSeedSummary()
         now = datetime.now(UTC)
 
-        for spec in DEV_SEED_ACCOUNTS:
+        for spec in self.accounts:
             user = await self._find_existing_user(spec=spec)
             created = user is None
 
@@ -129,7 +162,12 @@ class DevAccountSeeder:
             if created:
                 user.password_changed_at = now
 
-            await self._ensure_preference(user=user, language=spec.language, now=now, summary=summary)
+            await self._ensure_preference(
+                user=user,
+                language=spec.language,
+                now=now,
+                summary=summary,
+            )
             await self._ensure_root_folder(user=user, now=now, summary=summary)
 
         await self.db.commit()
@@ -156,7 +194,9 @@ class DevAccountSeeder:
         now: datetime,
         summary: DevSeedSummary,
     ) -> None:
-        preference = await self.db.scalar(select(UserPreference).where(UserPreference.user_id == user.user_id))
+        preference = await self.db.scalar(
+            select(UserPreference).where(UserPreference.user_id == user.user_id)
+        )
         if preference is None:
             self.db.add(
                 UserPreference(
