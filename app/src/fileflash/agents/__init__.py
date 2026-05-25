@@ -14,9 +14,10 @@ from .harness import (
     ToolCall,
     ToolRouter,
 )
-from .runtime import ExecuteRunner, PlanRunner, SubagentRunner
+from .runtime import AgentJobCanceled, ExecuteRunner, PlanRunner, SubagentRunner
 
 __all__ = [
+    "AgentJobCanceled",
     "AgentEvent",
     "CheckpointStore",
     "ContextBudget",
