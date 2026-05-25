@@ -50,7 +50,7 @@ defineEmits<{ click: [event: MouseEvent] }>();
 .ff-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .ff-btn--md { height: 32px; }
-.ff-btn--sm { height: 24px; padding: 0 10px; font-size: 9px; }
+.ff-btn--sm { height: 24px; padding: 0 10px; font-size: var(--text-label); }
 
 .ff-btn--primary { background: var(--ac); color: var(--ac-fg); }
 .ff-btn--primary:hover:not(:disabled) { filter: brightness(1.1); box-shadow: var(--mo-hover-bloom); }

@@ -47,7 +47,7 @@ const t = localeStore.t;
   font-weight: var(--weight-bold);
   color: var(--text-primary);
 }
-.ff-sc__vis { font-size: 9px; letter-spacing: var(--tracking-wide); text-transform: uppercase; }
+.ff-sc__vis { font-size: var(--text-label); letter-spacing: var(--tracking-wide); text-transform: uppercase; }
 .ff-sc__vis--global { color: var(--ac); border-color: var(--ac); }
 .ff-sc__vis--private { color: var(--status-warning); border-color: var(--status-warning); }
 .ff-sc__key {

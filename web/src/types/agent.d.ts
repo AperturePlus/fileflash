@@ -105,6 +105,7 @@ export interface AgentExecutionResult {
   planJobId: string;
   executeJobId: string;
   summary: string;
+  answer?: string | null;
   appliedActions: number;
   skippedActions: number;
   warnings: string[];

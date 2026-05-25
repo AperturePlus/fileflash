@@ -66,4 +66,19 @@ describe('layout/StorageStatus', () => {
     const style = wrapper.find('.progress-bar-fill').attributes('style');
     expect(style).toContain('width: 100%;');
   });
+
+  it('converts ratio-like storagePercentage to percent when value is in (0, 1]', () => {
+    const wrapper = mount(StorageStatus, {
+      props: {
+        stats: buildStats({
+          storageUsed: 426,
+          storageLimit: 1000,
+          storageAvailable: 574,
+          storagePercentage: 0.426,
+        }),
+      },
+    });
+    const style = wrapper.find('.progress-bar-fill').attributes('style');
+    expect(style).toContain('width: 42.6%;');
+  });
 });

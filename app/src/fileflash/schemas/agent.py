@@ -116,6 +116,7 @@ class AgentExecutionResult(CamelModel):
     plan_job_id: str
     execute_job_id: str
     summary: str
+    answer: str | None = None
     applied_actions: int = Field(ge=0)
     skipped_actions: int = Field(ge=0)
     warnings: list[str] = Field(default_factory=list)

@@ -143,6 +143,8 @@ class AgentWorkerConsumer:
                 )
                 if job is None:
                     return
+                if job.status == "canceled" or job.cancel_requested_at is not None:
+                    return
                 now = datetime.now(UTC)
                 job.status = "succeeded"
                 job.result = jsonable_encoder(result)
@@ -160,6 +162,8 @@ class AgentWorkerConsumer:
                     select(BackgroundJob).where(BackgroundJob.job_id == job_id).with_for_update()
                 )
                 if job is None:
+                    return
+                if job.status == "canceled" or job.cancel_requested_at is not None:
                     return
                 now = datetime.now(UTC)
                 job.status = "failed"

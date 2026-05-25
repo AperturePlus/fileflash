@@ -59,7 +59,7 @@ const onTab = (v: string | number) =>
 }
 .agent-layout__brand {
   font-family: var(--font-mono);
-  font-size: var(--text-label);
+  font-size: var(--text-small);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--text-tertiary);

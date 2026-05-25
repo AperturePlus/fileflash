@@ -564,6 +564,14 @@ export type LocaleKey =
   | 'agent.v2.skills.import.resultsLabel'
   | 'agent.v2.skills.import.error.readFailed'
   | 'agent.v2.skills.import.error.emptyJson'
+  | 'agent.v2.confirm.highRisk.title'
+  | 'agent.v2.confirm.highRisk.message'
+  | 'agent.v2.confirm.highRisk.confirm'
+  | 'agent.v2.confirm.highRisk.cancel'
+  | 'agent.v2.confirm.deleteSession.title'
+  | 'agent.v2.confirm.deleteSession.message'
+  | 'agent.v2.confirm.deleteSession.confirm'
+  | 'agent.v2.confirm.deleteSession.cancel'
   | 'footer.termsOfService'
   | 'footer.privacyPolicy';
 
@@ -1136,6 +1144,14 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.skills.import.resultsLabel': '导入结果',
     'agent.v2.skills.import.error.readFailed': '读取文件失败。',
     'agent.v2.skills.import.error.emptyJson': '请先粘贴 JSON 或拖入文件。',
+    'agent.v2.confirm.highRisk.title': '高风险操作确认',
+    'agent.v2.confirm.highRisk.message': '本计划包含高风险动作，是否继续？',
+    'agent.v2.confirm.highRisk.confirm': '继续执行',
+    'agent.v2.confirm.highRisk.cancel': '取消',
+    'agent.v2.confirm.deleteSession.title': '删除会话',
+    'agent.v2.confirm.deleteSession.message': '将删除会话「{title}」及其全部回合，此操作无法撤销。',
+    'agent.v2.confirm.deleteSession.confirm': '删除',
+    'agent.v2.confirm.deleteSession.cancel': '取消',
     'footer.termsOfService': '使用条款',
     'footer.privacyPolicy': '隐私政策',
   },
@@ -1703,6 +1719,14 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.skills.import.resultsLabel': 'RESULTS',
     'agent.v2.skills.import.error.readFailed': 'Failed to read file.',
     'agent.v2.skills.import.error.emptyJson': 'Paste JSON or drop a file first.',
+    'agent.v2.confirm.highRisk.title': 'High-risk action',
+    'agent.v2.confirm.highRisk.message': 'This plan contains high-risk actions. Continue?',
+    'agent.v2.confirm.highRisk.confirm': 'Continue',
+    'agent.v2.confirm.highRisk.cancel': 'Cancel',
+    'agent.v2.confirm.deleteSession.title': 'Delete session',
+    'agent.v2.confirm.deleteSession.message': 'Delete session "{title}" and all of its turns? This cannot be undone.',
+    'agent.v2.confirm.deleteSession.confirm': 'Delete',
+    'agent.v2.confirm.deleteSession.cancel': 'Cancel',
     'footer.termsOfService': 'Terms of Service',
     'footer.privacyPolicy': 'Privacy Policy',
   },

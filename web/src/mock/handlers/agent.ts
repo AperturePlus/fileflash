@@ -15,6 +15,31 @@ const isTerminal = (status: string) => ['succeeded', 'failed', 'canceled'].inclu
 
 const pickPlanActions = (input: string): AgentProposedAction[] => {
   const normalized = input.toLowerCase();
+  if (
+    normalized.includes('多少') ||
+    normalized.includes('几部') ||
+    normalized.includes('how many') ||
+    normalized.includes('count')
+  ) {
+    return [
+      {
+        step: 1,
+        tool: 'drive.countFiles',
+        sideEffect: 'read',
+        riskLevel: 'low',
+        requiresConfirmation: false,
+        confirmationReason: null,
+        input: {
+          folderId: 'root',
+          recursive: true,
+          category:
+            normalized.includes('电影') || normalized.includes('视频') || normalized.includes('movie')
+              ? 'video'
+              : undefined,
+        },
+      },
+    ];
+  }
   if (normalized.includes('delete') || normalized.includes('删除')) {
     return [
       {
@@ -234,6 +259,7 @@ const scheduleExecuteLifecycle = (job: AgentBackgroundJob, plan: AgentPlanResult
       planJobId: plan.planJobId,
       executeJobId: job.jobId,
       summary: `Execution completed with ${plan.proposedActions.length} planned actions.`,
+      answer: mockExecutionAnswer(plan),
       appliedActions: plan.proposedActions.length,
       skippedActions: 0,
       warnings: [],
@@ -241,6 +267,15 @@ const scheduleExecuteLifecycle = (job: AgentBackgroundJob, plan: AgentPlanResult
     };
     finishJobSuccess(job, result, 'completed');
   }, 1900);
+};
+
+const mockExecutionAnswer = (plan: AgentPlanResult) => {
+  const countAction = plan.proposedActions.find((action) => action.tool === 'drive.countFiles');
+  if (!countAction) return null;
+  if (countAction.input.category === 'video') {
+    return '你上传了 7 部电影（按视频文件统计）。';
+  }
+  return '你上传了 12 个文件。';
 };
 
 export const setupAgentMocks = () => {

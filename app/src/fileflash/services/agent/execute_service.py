@@ -69,10 +69,31 @@ class ExecuteService:
                 data={"highRiskActions": high_risk_actions},
             )
 
+        idempotency_key = f"agent.execute:{plan_job_id}"
+        existing_execute = await self.db.scalar(
+            select(BackgroundJob).where(
+                and_(
+                    BackgroundJob.task_type == "agent.execute",
+                    BackgroundJob.idempotency_key == idempotency_key,
+                )
+            )
+        )
+        if existing_execute is not None:
+            raise ApiError(
+                status_code=409,
+                code=409,
+                message="Plan has already been executed",
+                data={
+                    "jobId": str(existing_execute.job_id),
+                    "status": str(existing_execute.status),
+                },
+            )
+
         job = await self.jobs.enqueue(
             self.db,
             task_type="agent.execute",
             payload=payload.model_dump(by_alias=True, mode="json"),
+            idempotency_key=idempotency_key,
             requested_by=user_id,
             max_attempts=1,
             priority=100,

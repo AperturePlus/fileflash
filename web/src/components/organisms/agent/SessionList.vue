@@ -51,7 +51,7 @@ const t = localeStore.t;
 }
 .ff-sl__label {
   font-family: var(--font-mono);
-  font-size: var(--text-label);
+  font-size: var(--text-small);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -61,7 +61,7 @@ const t = localeStore.t;
   padding: var(--sp-lg) var(--sp-md);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: var(--text-label);
+  font-size: var(--text-small);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   text-align: center;

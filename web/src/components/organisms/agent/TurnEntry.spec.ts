@@ -39,9 +39,44 @@ describe('organisms/agent/TurnEntry', () => {
     expect(w.text()).toContain('plan summary text');
   });
 
+  it('renders execution answer before the plan summary', () => {
+    const w = mount(TurnEntry, {
+      props: {
+        turn: baseTurn({
+          executeResult: {
+            planJobId: 'p-1',
+            executeJobId: 'e-1',
+            summary: 'execution summary text',
+            answer: '你上传了 3 部电影（按视频文件统计）。',
+            appliedActions: 1,
+            skippedActions: 0,
+            warnings: [],
+            finishedAt: '2026-05-20T00:01:00Z',
+          },
+        }),
+        policy: 'confirm',
+        focused: false,
+      },
+    });
+    expect(w.text()).toContain('3 部电影');
+    expect(w.text()).not.toContain('plan summary text');
+  });
+
   it('hides Execute button when policy=planOnly', () => {
     const w = mount(TurnEntry, {
       props: { turn: baseTurn(), policy: 'planOnly', focused: false },
+    });
+    const buttons = w.findAll('button').map((b) => b.text());
+    expect(buttons.some((label) => /execute|执行/i.test(label))).toBe(false);
+  });
+
+  it('hides Execute button once executeJobId is assigned', () => {
+    const w = mount(TurnEntry, {
+      props: {
+        turn: baseTurn({ executeJobId: 'exec-1' }),
+        policy: 'confirm',
+        focused: false,
+      },
     });
     const buttons = w.findAll('button').map((b) => b.text());
     expect(buttons.some((label) => /execute|执行/i.test(label))).toBe(false);

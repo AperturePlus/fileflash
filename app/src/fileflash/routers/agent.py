@@ -71,11 +71,10 @@ async def cancel_agent_job(
     canceled_at = datetime.now(UTC)
     if job.status not in {"succeeded", "failed", "canceled"}:
         job.cancel_requested_at = canceled_at
+        job.status = "canceled"
+        job.agent_phase = "canceled"
+        job.finished_at = canceled_at
         job.updated_at = canceled_at
-        if job.status in {"pending", "retrying"}:
-            job.status = "canceled"
-            job.agent_phase = "canceled"
-            job.finished_at = canceled_at
     await db.commit()
     await db.refresh(job)
 

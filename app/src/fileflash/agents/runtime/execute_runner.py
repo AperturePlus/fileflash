@@ -146,10 +146,12 @@ class ExecuteRunner:
             warnings.append(f"{skipped} action(s) were skipped.")
         await work_sessions.close_session(job_id=int(job.job_id), status="closed")
         await db.commit()
+        answer = _build_execution_answer(actions=actions, step_outputs=step_outputs)
         return AgentExecutionResult(
             plan_job_id=str(plan_job_id),
             execute_job_id=str(job.job_id),
             summary=f"Execution completed with {applied} applied action(s).",
+            answer=answer,
             applied_actions=applied,
             skipped_actions=skipped,
             warnings=warnings,
@@ -222,3 +224,37 @@ def _resolve_references(
             for key, item in value.items()
         }
     return value
+
+
+def _build_execution_answer(
+    *,
+    actions: list[AgentProposedAction],
+    step_outputs: dict[int, dict[str, Any]],
+) -> str | None:
+    for action in actions:
+        if action.tool != "drive.countFiles":
+            continue
+        output = step_outputs.get(action.step)
+        if not isinstance(output, dict):
+            continue
+        return _count_files_answer(output)
+
+    if actions and all(action.side_effect == "read" for action in actions):
+        return f"已完成 {len(step_outputs)} 个只读操作。"
+    return None
+
+
+def _count_files_answer(output: dict[str, Any]) -> str:
+    total_items = int(output.get("totalItems") or 0)
+    category = str(output.get("category") or "").strip().lower()
+    if category == "video":
+        return f"你上传了 {total_items} 部电影（按视频文件统计）。"
+    if category == "audio":
+        return f"你上传了 {total_items} 个音频文件。"
+    if category == "image":
+        return f"你上传了 {total_items} 张图片。"
+    if category == "document":
+        return f"你上传了 {total_items} 个文档。"
+    if category == "archive":
+        return f"你上传了 {total_items} 个压缩包。"
+    return f"你上传了 {total_items} 个文件。"

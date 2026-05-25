@@ -132,7 +132,7 @@ const onSubmit = () => {
 }
 .ff-sep__field { display: flex; flex-direction: column; gap: 6px; }
 .ff-sep__lbl {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-secondary);
 }
@@ -157,7 +157,7 @@ const onSubmit = () => {
 }
 .ff-sep__sum {
   cursor: pointer;
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
   padding: var(--sp-xs) 0;
