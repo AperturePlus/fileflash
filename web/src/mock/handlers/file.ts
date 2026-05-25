@@ -1,9 +1,16 @@
 import JSZip from 'jszip';
 import Mock from 'mockjs';
-import { addLog, addNotification, createMockId, mockJobs, mockShares } from '../state';
+import { addLog, addNotification, createMockId, mockJobs, mockShares, mockUsers } from '../state';
 import { STARRED_ITEMS_LIMIT, vfsApi, type VfsNode } from '../vfs';
 
 const MINIMAL_VALID_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA0NCA+PgpzdHJlYW0KQlQKL0YxIDI0IFRmCjEwMCA3MDAgVGQKKEhlbGxvLCBQREYhKSBUagpFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNzAgMDAwMDAgbiAKMDAwMDAwMDM2MyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQ0MwolJUVPRgo=';
+
+type MockPreviewPayload = {
+  __mockPreview: true;
+  mimeType: string;
+  content: string;
+  encoding: 'text' | 'base64';
+};
 
 function parseUrl(url: string) {
   return new URL(url, 'http://localhost');
@@ -78,6 +85,63 @@ function buildMockFileBlob(file: VfsNode) {
   }
 
   return new Blob([`Binary file: ${file.name}`], { type: file.mimeType || 'application/octet-stream' });
+}
+
+function buildMockPreviewPayload(file: VfsNode): MockPreviewPayload {
+  const mimeType = file.mimeType || 'application/octet-stream';
+
+  if (file.content) {
+    return {
+      __mockPreview: true,
+      mimeType,
+      content: file.content,
+      encoding: 'base64',
+    };
+  }
+
+  if (mimeType.startsWith('text/')) {
+    return {
+      __mockPreview: true,
+      mimeType,
+      content: `Mock content for ${file.name}`,
+      encoding: 'text',
+    };
+  }
+
+  if (mimeType.startsWith('image/')) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="100%" height="100%" fill="#1f2937"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#f9fafb" font-size="24">${file.name}</text></svg>`;
+    return {
+      __mockPreview: true,
+      mimeType: 'image/svg+xml',
+      content: svg,
+      encoding: 'text',
+    };
+  }
+
+  if (mimeType.startsWith('audio/') || mimeType.startsWith('video/')) {
+    return {
+      __mockPreview: true,
+      mimeType,
+      content: '',
+      encoding: 'text',
+    };
+  }
+
+  if (mimeType === 'application/pdf') {
+    return {
+      __mockPreview: true,
+      mimeType,
+      content: MINIMAL_VALID_PDF_BASE64,
+      encoding: 'base64',
+    };
+  }
+
+  return {
+    __mockPreview: true,
+    mimeType,
+    content: `Binary file: ${file.name}`,
+    encoding: 'text',
+  };
 }
 
 function nowIso() {
@@ -393,17 +457,111 @@ function paginateItems<T>(items: T[], page = 1, perPage = 20) {
 }
 
 function toAdminFileAuditItem(node: VfsNode) {
+  const objectFiles = getAdminObjectFiles(node);
+  const owners = getAdminObjectOwners(node);
+  const latestScan = getAdminLatestScan(node);
   return {
     id: node.id,
+    objectId: getAdminObjectId(node),
     name: node.name,
     size: node.size || 0,
     mimeType: node.mimeType || 'application/octet-stream',
-    hash: node.hash || `mock-hash-${node.id}`,
+    hash: getAdminObjectHash(node).slice(0, 16),
     virusStatus: node.virusStatus || 'pending',
-    isShared: mockShares.some((share) => share.itemType === 'file' && share.itemInfo.id === node.id),
-    ownerName: 'You',
+    isShared: objectFiles.some((file) =>
+      mockShares.some((share) => share.itemType === 'file' && share.itemInfo.id === file.id),
+    ),
+    ownerName: getAdminNodeOwner(node).username,
+    uploadCount: objectFiles.length,
+    ownerCount: owners.length,
+    scannedAt: latestScan?.scannedAt || null,
     updatedAt: node.updatedAt,
     createdAt: node.createdAt,
+  };
+}
+
+function getAdminObjectHash(node: VfsNode) {
+  return node.hash || `mock-hash-${node.id}`;
+}
+
+function getAdminObjectId(node: VfsNode) {
+  return `obj_${getAdminObjectHash(node).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24) || node.id}`;
+}
+
+function getAdminObjectFiles(node: VfsNode) {
+  const objectId = getAdminObjectId(node);
+  return Object.values(vfsApi.getAll()).filter((candidate) =>
+    candidate.type === 'file' &&
+    !candidate.isTrashed &&
+    getAdminObjectId(candidate) === objectId,
+  );
+}
+
+function getAdminNodeOwner(node: VfsNode) {
+  const charSum = node.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return mockUsers[charSum % mockUsers.length];
+}
+
+function getAdminObjectOwners(node: VfsNode) {
+  const grouped = new Map<string, {
+    userId: string;
+    username: string;
+    email: string;
+    fileCount: number;
+    firstUploadedAt: string;
+    lastUploadedAt: string;
+  }>();
+
+  getAdminObjectFiles(node).forEach((file) => {
+    const owner = getAdminNodeOwner(file);
+    const existing = grouped.get(owner.userId);
+    if (!existing) {
+      grouped.set(owner.userId, {
+        userId: owner.userId,
+        username: owner.username,
+        email: owner.email,
+        fileCount: 1,
+        firstUploadedAt: file.createdAt,
+        lastUploadedAt: file.createdAt,
+      });
+      return;
+    }
+    existing.fileCount += 1;
+    if (new Date(file.createdAt).getTime() < new Date(existing.firstUploadedAt).getTime()) {
+      existing.firstUploadedAt = file.createdAt;
+    }
+    if (new Date(file.createdAt).getTime() > new Date(existing.lastUploadedAt).getTime()) {
+      existing.lastUploadedAt = file.createdAt;
+    }
+  });
+
+  return Array.from(grouped.values()).sort((left, right) =>
+    new Date(right.lastUploadedAt).getTime() - new Date(left.lastUploadedAt).getTime(),
+  );
+}
+
+function getAdminLatestScan(node: VfsNode) {
+  return {
+    scanType: 'virus',
+    scanResult: node.virusStatus === 'flagged' ? 'infected' : node.virusStatus || 'pending',
+    virusStatus: node.virusStatus || 'pending',
+    scannedAt: node.updatedAt,
+    details: {
+      engine: 'mock-av',
+      objectId: getAdminObjectId(node),
+    },
+  };
+}
+
+function toAdminFileAuditDetail(node: VfsNode) {
+  const item = toAdminFileAuditItem(node);
+  return {
+    ...item,
+    objectHash: getAdminObjectHash(node),
+    hashAlgorithm: 'sha256',
+    storageStatus: 'active',
+    latestScan: getAdminLatestScan(node),
+    owners: getAdminObjectOwners(node),
   };
 }
 
@@ -452,7 +610,47 @@ export const setupFileMocks = () => {
     return {
       success: true,
       code: 200,
-      data: toAdminFileAuditItem(node),
+      data: toAdminFileAuditDetail(node),
+    };
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/files\/([^/]+)\/preview$/, 'get', (options) => {
+    const fileId = (options.url.match(/\/api\/v1\/admin\/files\/([^/]+)\/preview/) || [])[1];
+    const node = vfsApi.get(fileId);
+
+    if (!node || node.type !== 'file' || node.isTrashed) {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    return buildMockPreviewPayload(resolvePreviewNode(node));
+  });
+
+  Mock.mock(/\/api\/v1\/admin\/files\/([^/]+)\/preview-url$/, 'post', (options) => {
+    const fileId = (options.url.match(/\/api\/v1\/admin\/files\/([^/]+)\/preview-url/) || [])[1];
+    const node = vfsApi.get(fileId);
+
+    if (!node || node.type !== 'file' || node.isTrashed) {
+      return {
+        success: false,
+        code: 404,
+        message: 'File not found',
+        data: null,
+      };
+    }
+
+    const previewBlob = buildMockFileBlob(resolvePreviewNode(node));
+    return {
+      success: true,
+      code: 200,
+      data: {
+        url: URL.createObjectURL(previewBlob),
+        expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+      },
     };
   });
 
