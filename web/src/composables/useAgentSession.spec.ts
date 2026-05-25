@@ -12,6 +12,10 @@ vi.mock('../store/user', () => ({
   useUserStore: () => ({ user: { userId: 'u-1' } }),
 }));
 
+vi.mock('../store/locale', () => ({
+  useLocaleStore: () => ({ t: (key: string) => key }),
+}));
+
 import * as agentApi from '../api/agent';
 
 const STORAGE_KEY = 'fileflash.agent.sessions.v1';
@@ -26,10 +30,43 @@ const planResult = {
   costEstimate: { tokens: 10, toolCalls: 1, durationSecEstimate: 1 },
 };
 
+const readOnlyPlanResult = {
+  ...planResult,
+  proposedActions: [
+    {
+      step: 1,
+      tool: 'drive.countFiles',
+      input: { folderId: 'root', recursive: true, category: 'video' },
+      sideEffect: 'read',
+      riskLevel: 'low',
+      requiresConfirmation: false,
+      confirmationReason: null,
+    },
+  ],
+  requiresConfirmation: true,
+};
+
+const writePlanResult = {
+  ...planResult,
+  proposedActions: [
+    {
+      step: 1,
+      tool: 'drive.createFolder',
+      input: { parentFolderId: 'root', name: 'Movies' },
+      sideEffect: 'write',
+      riskLevel: 'medium',
+      requiresConfirmation: false,
+      confirmationReason: null,
+    },
+  ],
+  requiresConfirmation: true,
+};
+
 const execResult = {
   planJobId: 'job-1',
   executeJobId: 'job-2',
   summary: 'done',
+  answer: '你上传了 3 部电影（按视频文件统计）。',
   appliedActions: 1,
   skippedActions: 0,
   warnings: [],
@@ -39,6 +76,16 @@ const execResult = {
 const loadComposable = async () => {
   const mod = await import('./useAgentSession');
   return mod;
+};
+
+const deferred = <T>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 };
 
 describe('useAgentSession', () => {
@@ -218,6 +265,79 @@ describe('useAgentSession', () => {
     expect(turn.agent.status).toBe('succeeded');
   });
 
+  it('auto-executes read-only low-risk plans in confirm policy', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob)
+      .mockResolvedValueOnce({ jobId: 'job-1', status: 'succeeded', result: readOnlyPlanResult } as any)
+      .mockResolvedValueOnce({ jobId: 'job-2', status: 'succeeded', result: execResult } as any);
+    vi.mocked(agentApi.executeAgentPlan).mockResolvedValue({
+      jobId: 'job-2',
+      status: 'pending',
+      taskType: 'agent.execute',
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, activeTurns } = useAgentSession();
+    taskInput.value = '我上传了多少部电影？';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    expect(agentApi.executeAgentPlan).toHaveBeenCalled();
+    expect(turn.agent.executeResult?.answer).toContain('3 部电影');
+    expect(turn.agent.status).toBe('succeeded');
+  });
+
+  it('does not auto-execute write plans in confirm policy', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'succeeded',
+      result: writePlanResult,
+    } as any);
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, activeTurns } = useAgentSession();
+    taskInput.value = '整理电影';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    expect(agentApi.executeAgentPlan).not.toHaveBeenCalled();
+    expect(turn.agent.executeJobId).toBeUndefined();
+    expect(turn.agent.status).toBe('succeeded');
+  });
+
+  it('does not auto-execute read-only plans in planOnly policy', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'succeeded',
+      result: readOnlyPlanResult,
+    } as any);
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, policy, sendMessage, activeTurns } = useAgentSession();
+    policy.value = 'planOnly';
+    taskInput.value = '我上传了多少部电影？';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    expect(agentApi.executeAgentPlan).not.toHaveBeenCalled();
+    expect(turn.agent.executeResult).toBeUndefined();
+    expect(turn.agent.status).toBe('succeeded');
+  });
+
   it('runExecute surfaces backend response message when execute returns 409', async () => {
     vi.mocked(agentApi.planAgentTask).mockResolvedValue({
       jobId: 'job-1',
@@ -325,6 +445,73 @@ describe('useAgentSession', () => {
     await vi.advanceTimersByTimeAsync(3000);
     const callsAfter = vi.mocked(agentApi.getAgentJob).mock.calls.length;
     expect(callsAfter).toBe(callsBefore);
+  });
+
+  it('cancel before plan job id arrives keeps turn canceled and does not start polling', async () => {
+    const planGate = deferred<any>();
+    vi.mocked(agentApi.planAgentTask).mockReturnValue(planGate.promise);
+    vi.mocked(agentApi.cancelAgentJob).mockResolvedValue({
+      jobId: 'job-late',
+      status: 'canceled',
+      canceledAt: '2026-05-20T00:00:00Z',
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, cancel, activeTurns } = useAgentSession();
+    taskInput.value = 'hello';
+
+    const sendTask = sendMessage();
+    await Promise.resolve();
+    const turn = activeTurns.value[0];
+    await cancel(turn.agent);
+    expect(turn.agent.status).toBe('canceled');
+
+    planGate.resolve({
+      jobId: 'job-late',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    await sendTask;
+
+    expect(agentApi.getAgentJob).not.toHaveBeenCalled();
+    expect(agentApi.cancelAgentJob).toHaveBeenCalledWith('job-late');
+    expect(turn.agent.status).toBe('canceled');
+  });
+
+  it('in-flight poll response after cancel cannot overwrite canceled status', async () => {
+    const firstPoll = deferred<any>();
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockReturnValue(firstPoll.promise);
+    vi.mocked(agentApi.cancelAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'canceled',
+      canceledAt: '2026-05-20T00:00:00Z',
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, cancel, activeTurns } = useAgentSession();
+    taskInput.value = 'hello';
+
+    const sendTask = sendMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+    const turn = activeTurns.value[0];
+    await cancel(turn.agent);
+    expect(turn.agent.status).toBe('canceled');
+
+    firstPoll.resolve({
+      jobId: 'job-1',
+      status: 'running',
+    });
+    await sendTask;
+    await vi.advanceTimersByTimeAsync(3000);
+
+    expect(turn.agent.status).toBe('canceled');
+    expect(vi.mocked(agentApi.getAgentJob).mock.calls.length).toBe(1);
   });
 
   it('reload — sessions persist via localStorage', async () => {
