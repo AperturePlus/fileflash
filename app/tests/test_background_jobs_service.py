@@ -145,3 +145,27 @@ async def test_enqueue_transcode_job_uses_object_storage_payload():
     assert payload["outputObjectKey"].endswith(".mp4")
     assert payload["fileId"] == 999
     assert payload["requestedBy"] == 1
+
+
+@pytest.mark.asyncio
+async def test_enqueue_normalizes_payload_for_jsonb_storage():
+    session = DummySession()
+    queue = SimpleNamespace(publish=AsyncMock(return_value="1-0"))
+    service = BackgroundJobService(queue_publisher=queue)
+    confirmed_at = datetime(2026, 5, 25, 10, 0, tzinfo=UTC)
+
+    job = await service.enqueue(
+        session,  # type: ignore[arg-type]
+        task_type="agent.execute",
+        payload={
+            "planJobId": "46",
+            "approval": {"confirmedAt": confirmed_at},
+        },
+        requested_by=7,
+        max_attempts=1,
+        priority=100,
+        agent_phase="executing",
+    )
+
+    assert isinstance(job.payload["approval"]["confirmedAt"], str)
+    assert job.payload["approval"]["confirmedAt"] == confirmed_at.isoformat()

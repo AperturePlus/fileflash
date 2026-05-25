@@ -8,6 +8,9 @@ import pytest
 
 from fileflash.agents.harness.policy import PolicyGuard, classify_tool_risk
 from fileflash.agents.harness.router import ToolCall, ToolRouter
+from fileflash.agents.runtime import execute_runner as execute_module
+from fileflash.agents.runtime.execute_runner import ExecuteRunner
+from fileflash.agents.runtime import plan_runner as plan_module
 from fileflash.agents.runtime.llm import AnthropicPlannerClient
 from fileflash.agents.runtime.plan_runner import PlanRunner
 from fileflash.core.errors import ApiError
@@ -31,6 +34,7 @@ class DummyDb:
         self.add = AsyncMock()
         self.flush = AsyncMock()
         self.commit = AsyncMock()
+        self.rollback = AsyncMock()
         self.refresh = AsyncMock()
 
 
@@ -266,9 +270,46 @@ async def test_execute_rejects_high_risk_plan_without_confirmation():
 
 
 @pytest.mark.asyncio
-async def test_plan_runner_generates_stable_hash(monkeypatch: pytest.MonkeyPatch):
-    from fileflash.agents.runtime import plan_runner as plan_module
+async def test_execute_enqueue_serializes_approval_datetime_as_json_string():
+    db = DummyDb()
+    db.scalar.return_value = BackgroundJob(
+        job_id=99,
+        task_type="agent.plan",
+        status="succeeded",
+        payload={},
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    plans = AgentPlanRepository(db)  # type: ignore[arg-type]
+    plans.get_for_execute_binding = AsyncMock(return_value=SimpleNamespace(proposed_actions_json=[]))
+    jobs = FakeJobs()
+    service = ExecuteService(
+        db=db,
+        settings=settings(),
+        jobs=jobs,  # type: ignore[arg-type]
+        plans=plans,
+        work_sessions=AgentWorkSessionRepository(db),  # type: ignore[arg-type]
+    )
+    payload = ExecuteAgentRequest.model_validate(
+        {
+            "planJobId": "99",
+            "planHash": "sha256:test",
+            "approval": {"confirmedBy": "7", "confirmedAt": "2026-05-25T10:00:00Z"},
+        }
+    )
 
+    await service.enqueue_execute(user_id=7, payload=payload)
+
+    approval_payload = jobs.kwargs["payload"]["approval"]
+    assert isinstance(approval_payload["confirmedAt"], str)
+    assert approval_payload["confirmedAt"] == "2026-05-25T10:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_plan_runner_generates_stable_hash(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
     monkeypatch.setattr(
         plan_module,
@@ -340,6 +381,190 @@ async def test_plan_runner_generates_stable_hash(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
+async def test_plan_runner_commits_after_upsert(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+
+    planner = AsyncMock(return_value={"summary": "ok", "proposedActions": []})
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=planner),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "input": "organize",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+        }
+    )
+    job = BackgroundJob(
+        job_id=321,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db = DummyDb()
+
+    await runner.run(db=db, job=job)  # type: ignore[arg-type]
+
+    db.commit.assert_awaited_once()
+    db.rollback.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_plan_runner_rolls_back_when_commit_fails(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+
+    planner = AsyncMock(return_value={"summary": "ok", "proposedActions": []})
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=planner),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "input": "organize",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+        }
+    )
+    job = BackgroundJob(
+        job_id=322,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db = DummyDb()
+    db.commit.side_effect = RuntimeError("commit failed")
+
+    with pytest.raises(RuntimeError, match="commit failed"):
+        await runner.run(db=db, job=job)  # type: ignore[arg-type]
+
+    db.commit.assert_awaited_once()
+    db.rollback.assert_awaited_once()
+
+
+def test_normalize_actions_rejects_symbolic_placeholder_target_folder():
+    with pytest.raises(ApiError) as exc:
+        plan_module._normalize_actions(
+            llm_payload={
+                "summary": "organize movies",
+                "proposedActions": [
+                    {
+                        "step": 1,
+                        "tool": "drive.createFolder",
+                        "input": {"parentFolderId": "root", "name": "Movies"},
+                    },
+                    {
+                        "step": 2,
+                        "tool": "drive.moveFile",
+                        "input": {"fileId": "13", "targetFolderId": "newFolderId"},
+                    },
+                ],
+            },
+            allowed_tools=("drive.createFolder", "drive.moveFile"),
+            max_steps=10,
+        )
+
+    assert exc.value.status_code == 400
+    assert "step 2" in exc.value.message
+    assert "targetFolderId" in exc.value.message
+    assert "newFolderId" in exc.value.message
+
+
+def test_normalize_actions_accepts_previous_step_reference():
+    actions = plan_module._normalize_actions(
+        llm_payload={
+            "summary": "organize movies",
+            "proposedActions": [
+                {
+                    "step": 1,
+                    "tool": "drive.createFolder",
+                    "input": {"parentFolderId": "root", "name": "Movies"},
+                },
+                {
+                    "step": 2,
+                    "tool": "drive.moveFile",
+                    "input": {"fileId": "13", "targetFolderId": "$step1.folderId"},
+                },
+            ],
+        },
+        allowed_tools=("drive.createFolder", "drive.moveFile"),
+        max_steps=10,
+    )
+
+    assert len(actions) == 2
+    assert actions[1].input["targetFolderId"] == "$step1.folderId"
+
+
+def test_normalize_actions_rejects_future_step_reference():
+    with pytest.raises(ApiError) as exc:
+        plan_module._normalize_actions(
+            llm_payload={
+                "summary": "organize movies",
+                "proposedActions": [
+                    {
+                        "step": 3,
+                        "tool": "drive.moveFile",
+                        "input": {"fileId": "13", "targetFolderId": "$step4.folderId"},
+                    },
+                    {
+                        "step": 4,
+                        "tool": "drive.createFolder",
+                        "input": {"parentFolderId": "root", "name": "Movies"},
+                    },
+                ],
+            },
+            allowed_tools=("drive.createFolder", "drive.moveFile"),
+            max_steps=10,
+        )
+
+    assert exc.value.status_code == 400
+    assert "future step 4" in exc.value.message
+    assert "$step4.folderId" in exc.value.message
+
+
+def test_execute_reference_resolution_rejects_symbolic_placeholder():
+    with pytest.raises(ApiError) as exc:
+        execute_module._resolve_references(
+            {"targetFolderId": "newFolderId"},
+            step_outputs={},
+        )
+
+    assert exc.value.status_code == 409
+    assert "targetFolderId" in exc.value.message
+    assert "$stepN.field" in exc.value.message
+
+
+@pytest.mark.asyncio
 async def test_policy_guard_blocks_delete_without_confirmation():
     decision = await PolicyGuard().evaluate_tool_call(
         tool_name="drive.deleteFile",
@@ -354,7 +579,7 @@ async def test_tool_router_dispatches_move_file():
     router = ToolRouter(db=DummyDb(), user_id=7)  # type: ignore[arg-type]
     router.file_service.move_file = AsyncMock(
         return_value=SimpleNamespace(
-            model_dump=lambda by_alias: {"fileId": "1", "targetFolderId": "2"}
+            model_dump=lambda **kwargs: {"fileId": "1", "targetFolderId": "2"}
         )
     )
 
@@ -367,3 +592,83 @@ async def test_tool_router_dispatches_move_file():
 
     assert result == {"fileId": "1", "targetFolderId": "2"}
     router.file_service.move_file.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_execute_runner_normalizes_tool_output_before_action_log(monkeypatch: pytest.MonkeyPatch):
+    started = datetime.now(UTC)
+    output_time = datetime.now(UTC)
+    job = BackgroundJob(
+        job_id=600,
+        task_type="agent.execute",
+        status="running",
+        payload={
+            "planJobId": "500",
+            "planHash": "sha256:test",
+            "approval": {
+                "confirmedBy": "7",
+                "confirmedAt": started.isoformat(),
+                "highRiskConfirmed": False,
+            },
+        },
+        result={},
+        requested_by=7,
+        scheduled_at=started,
+        created_at=started,
+        updated_at=started,
+    )
+    action = {
+        "step": 1,
+        "tool": "drive.createFolder",
+        "input": {"parentFolderId": "root", "name": "Movies"},
+        "sideEffect": "write",
+        "riskLevel": "low",
+        "requiresConfirmation": False,
+    }
+    db = DummyDb()
+    db.refresh = AsyncMock()
+
+    mock_plan_repo = SimpleNamespace(
+        get_for_execute_binding=AsyncMock(
+            return_value=SimpleNamespace(
+                proposed_actions_json=[action],
+            )
+        )
+    )
+    monkeypatch.setattr(execute_module, "AgentPlanRepository", lambda _db: mock_plan_repo)
+
+    mock_work_sessions = SimpleNamespace(
+        create_for_job=AsyncMock(return_value=None),
+        close_session=AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(execute_module, "AgentWorkSessionRepository", lambda _db: mock_work_sessions)
+
+    captured_outputs: list[dict[str, object]] = []
+    mock_action_logs = SimpleNamespace(
+        append_step=AsyncMock(return_value=None),
+        finish_step=AsyncMock(
+            side_effect=lambda **kwargs: captured_outputs.append(dict(kwargs)) or None
+        ),
+    )
+    monkeypatch.setattr(execute_module, "AgentActionLogRepository", lambda _db: mock_action_logs)
+
+    mock_router = SimpleNamespace(
+        dispatch=AsyncMock(
+            return_value={
+                "id": "9",
+                "createdAt": output_time,
+                "updatedAt": output_time,
+            }
+        )
+    )
+    monkeypatch.setattr(execute_module, "ToolRouter", lambda **kwargs: mock_router)
+
+    result = await ExecuteRunner().run(db=db, job=job)  # type: ignore[arg-type]
+
+    assert result.applied_actions == 1
+    assert captured_outputs
+    success_call = next(item for item in captured_outputs if item.get("status") == "succeeded")
+    outputs_json = success_call["outputs_json"]
+    assert isinstance(outputs_json, dict)
+    assert isinstance(outputs_json["createdAt"], str)
+    assert outputs_json["createdAt"] == output_time.isoformat()

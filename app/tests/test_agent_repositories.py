@@ -360,6 +360,59 @@ async def test_agent_action_log_finish_refreshes_work_session_metrics():
 
 
 @pytest.mark.asyncio
+async def test_agent_action_log_append_step_normalizes_datetime_inputs():
+    session = DummySession()
+    session.scalar = AsyncMock(return_value=88)
+    captured: list[SimpleNamespace] = []
+
+    def add(entry: SimpleNamespace) -> None:
+        captured.append(entry)
+
+    session.add = Mock(side_effect=add)
+    repo = AgentActionLogRepository(session)
+    now = datetime.now(UTC)
+
+    await repo.append_step(
+        job_id=101,
+        step_no=1,
+        tool_name="drive.createFolder",
+        inputs_json={"createdAt": now},
+        status="running",
+    )
+
+    assert captured
+    saved = captured[0]
+    assert isinstance(saved.inputs_json["createdAt"], str)
+    assert saved.inputs_json["createdAt"] == now.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_agent_action_log_finish_step_normalizes_datetime_outputs():
+    session = DummySession()
+    entry = SimpleNamespace(
+        outputs_json={},
+        status="running",
+        duration_ms=None,
+        error_message=None,
+        finished_at=None,
+    )
+    session.scalar = AsyncMock(side_effect=[entry, 88])
+    repo = AgentActionLogRepository(session)
+    now = datetime.now(UTC)
+
+    await repo.finish_step(
+        job_id=101,
+        step_no=2,
+        outputs_json={"updatedAt": now},
+        status="succeeded",
+        duration_ms=5,
+    )
+
+    assert isinstance(entry.outputs_json["updatedAt"], str)
+    assert entry.outputs_json["updatedAt"] == now.isoformat()
+
+
+@pytest.mark.asyncio
 async def test_agent_work_session_refresh_metrics_executes_db_function():
     session = DummySession()
     work_session = SimpleNamespace(work_session_id=5)
