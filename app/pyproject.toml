@@ -19,6 +19,7 @@ dependencies = [
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.42.0",
     "python-multipart>=0.0.24",
+    "anthropic>=0.104.1",
 ]
 [project.scripts]
 fileflash = "fileflash.scripts.run_with_workers:main"
