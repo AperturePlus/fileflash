@@ -190,19 +190,19 @@ export const routes: Array<RouteRecordRaw> = [
       {
         path: "agent",
         component: AgentLayout,
-        meta: { navId: "agent" },
+        meta: { navId: "agent", fullscreen: true },
         children: [
           {
             path: "",
             name: "AgentWorkspace",
             component: () => import("../pages/agent/workspace/index.ts"),
-            meta: { navId: "agent" },
+            meta: { navId: "agent", fullscreen: true },
           },
           {
             path: "skills",
             name: "AgentSkills",
             component: () => import("../pages/agent/skills/index.ts"),
-            meta: { navId: "agent" },
+            meta: { navId: "agent", fullscreen: true },
           },
         ],
       },
