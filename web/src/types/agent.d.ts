@@ -2,6 +2,8 @@ import type { BackgroundJob } from './file';
 
 export type AgentExecutionPolicy = 'planOnly' | 'confirm' | 'autopilot';
 export type AgentActionSideEffect = 'read' | 'write';
+export type AgentActionRiskLevel = 'low' | 'medium' | 'high';
+export type AgentReasoningEffort = 'adaptive' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type AgentJobPhase =
   | 'planning'
   | 'awaiting_confirm'
@@ -21,6 +23,7 @@ export interface AgentHints {
   preferSkillId: string | null;
   maxSteps: number;
   budgetTokens: number;
+  reasoningEffort: AgentReasoningEffort;
 }
 
 export interface AgentPlanContext {
@@ -49,6 +52,9 @@ export interface AgentProposedAction {
   tool: string;
   input: Record<string, any>;
   sideEffect: AgentActionSideEffect;
+  riskLevel: AgentActionRiskLevel;
+  requiresConfirmation: boolean;
+  confirmationReason?: string | null;
 }
 
 export interface AgentCostEstimate {
@@ -78,6 +84,8 @@ export interface ExecuteAgentRequest {
   approval: {
     confirmedBy: string;
     confirmedAt: string;
+    highRiskConfirmed?: boolean;
+    highRiskConfirmedAt?: string;
   };
 }
 

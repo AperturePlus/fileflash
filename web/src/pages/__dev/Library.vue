@@ -214,6 +214,7 @@ const agActiveId = ref<string | null>('s1');
 
 const agTaskInput = ref('Sort by year then month');
 const agPolicy = ref<'planOnly' | 'confirm' | 'autopilot'>('confirm');
+const agReasoningEffort = ref<'adaptive' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>('adaptive');
 
 const makeTurn = (status: 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled', withPlan = true): AgentTurn => ({
   user: { id: `u-${status}`, role: 'user', content: 'Sort by year then month', status: 'succeeded', timestamp: '2026-05-20T00:00:00Z' },
@@ -225,8 +226,24 @@ const makeTurn = (status: 'pending' | 'running' | 'succeeded' | 'failed' | 'canc
       planJobId: 'job-' + status, planHash: 'h-' + status,
       chosenSkill: { id: 'sk', name: 'Tidy Photos' },
       proposedActions: [
-        { step: 1, tool: 'list', input: { path: '/photos' }, sideEffect: 'read' },
-        { step: 2, tool: 'move', input: { from: '/photos', to: '/photos/2026/05' }, sideEffect: 'write' },
+        {
+          step: 1,
+          tool: 'list',
+          input: { path: '/photos' },
+          sideEffect: 'read',
+          riskLevel: 'low',
+          requiresConfirmation: false,
+          confirmationReason: null,
+        },
+        {
+          step: 2,
+          tool: 'move',
+          input: { from: '/photos', to: '/photos/2026/05' },
+          sideEffect: 'write',
+          riskLevel: 'medium',
+          requiresConfirmation: false,
+          confirmationReason: null,
+        },
       ],
       summary: 'Group photos by year/month under /photos/YYYY/MM',
       requiresConfirmation: true,
@@ -636,8 +653,19 @@ const agImportResults: ImportAgentSkillResult[] = [
 
         <A.Text variant="label">TaskInputDock — idle + disabled</A.Text>
         <div class="agent-demo agent-demo--col">
-          <Ag.TaskInputDock v-model="agTaskInput" :policy="agPolicy" @update:policy="agPolicy = $event" />
-          <Ag.TaskInputDock v-model="agTaskInput" :policy="agPolicy" disabled />
+          <Ag.TaskInputDock
+            v-model="agTaskInput"
+            :policy="agPolicy"
+            :reasoning-effort="agReasoningEffort"
+            @update:policy="agPolicy = $event"
+            @update:reasoning-effort="agReasoningEffort = $event"
+          />
+          <Ag.TaskInputDock
+            v-model="agTaskInput"
+            :policy="agPolicy"
+            :reasoning-effort="agReasoningEffort"
+            disabled
+          />
         </div>
 
         <A.Text variant="label">SkillCard — global + private (editable)</A.Text>

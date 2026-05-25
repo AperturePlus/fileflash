@@ -10,7 +10,7 @@ import TaskInputDock from '../../../components/organisms/agent/TaskInputDock.vue
 import PlanInspector from '../../../components/organisms/agent/PlanInspector.vue';
 
 const {
-  sessions, activeSessionId, activeTurns, policy, taskInput, isSending,
+  sessions, activeSessionId, activeTurns, policy, reasoningEffort, taskInput, isSending,
   createSession, switchSession, deleteSession,
   sendMessage, runExecute, cancel,
 } = useAgentSession();
@@ -52,8 +52,10 @@ const onHint = (text: string) => { taskInput.value = text; sendMessage(); };
       <TaskInputDock
         v-model="taskInput"
         :policy="policy"
+        :reasoning-effort="reasoningEffort"
         :disabled="isSending"
         @update:policy="policy = $event"
+        @update:reasoning-effort="reasoningEffort = $event"
         @submit="sendMessage"
       />
     </div>

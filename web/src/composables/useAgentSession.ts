@@ -10,6 +10,7 @@ import type {
   AgentExecutionPolicy,
   AgentExecutionResult,
   AgentPlanResult,
+  AgentReasoningEffort,
   PlanAgentRequest,
 } from '../types/agent';
 
@@ -123,6 +124,7 @@ interface SessionState {
   sessions: Ref<Session[]>;
   activeSessionId: Ref<string | null>;
   policy: Ref<AgentExecutionPolicy>;
+  reasoningEffort: Ref<AgentReasoningEffort>;
   taskInput: Ref<string>;
   isSending: Ref<boolean>;
   pollTimers: Map<string, ReturnType<typeof setInterval>>;
@@ -136,6 +138,7 @@ const getState = (): SessionState => {
   const sessions = ref<Session[]>(loaded.sessions);
   const activeSessionId = ref<string | null>(sessions.value[0]?.id ?? null);
   const policy = ref<AgentExecutionPolicy>('confirm');
+  const reasoningEffort = ref<AgentReasoningEffort>('adaptive');
   const taskInput = ref<string>('');
   const isSending = ref<boolean>(false);
   const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
@@ -143,7 +146,7 @@ const getState = (): SessionState => {
   watch(sessions, (v) => persistSessions(v), { deep: true });
   if (loaded.shouldPersist) persistSessions(sessions.value);
 
-  _state = { sessions, activeSessionId, policy, taskInput, isSending, pollTimers };
+  _state = { sessions, activeSessionId, policy, reasoningEffort, taskInput, isSending, pollTimers };
   return _state;
 };
 
@@ -155,7 +158,11 @@ export const __resetForTests = () => {
   _state = null;
 };
 
-const buildPlanPayload = (input: string, policy: AgentExecutionPolicy): PlanAgentRequest => ({
+const buildPlanPayload = (
+  input: string,
+  policy: AgentExecutionPolicy,
+  reasoningEffort: AgentReasoningEffort,
+): PlanAgentRequest => ({
   input,
   context: {
     rootFolderId: 'root',
@@ -169,7 +176,7 @@ const buildPlanPayload = (input: string, policy: AgentExecutionPolicy): PlanAgen
     maxReadBytes: 1048576,
     allowedMimeTypes: ['*/*'],
   },
-  hints: { preferSkillId: null, maxSteps: 12, budgetTokens: 8000 },
+  hints: { preferSkillId: null, maxSteps: 12, budgetTokens: 8000, reasoningEffort },
 });
 
 export default function useAgentSession() {
@@ -268,7 +275,7 @@ export default function useAgentSession() {
         }
         if (isTerminalStatus(job.status)) {
           stopPolling(timerKey);
-          if (msg.planResult && s.policy.value === 'autopilot') {
+          if (msg.planResult && s.policy.value === 'autopilot' && !msg.planResult.requiresConfirmation) {
             await runExecute(msg);
           }
         }
@@ -341,7 +348,7 @@ export default function useAgentSession() {
     const reactiveAgent = session.messages[session.messages.length - 1];
 
     try {
-      const res = await planAgentTask(buildPlanPayload(input, s.policy.value));
+      const res = await planAgentTask(buildPlanPayload(input, s.policy.value, s.reasoningEffort.value));
       reactiveAgent.planJobId = res.jobId;
       reactiveAgent.status = 'pending';
       await pollPlanJob(reactiveAgent, res.jobId);
@@ -355,6 +362,16 @@ export default function useAgentSession() {
 
   async function runExecute(msg: ChatMessage): Promise<void> {
     if (!msg.planResult || !msg.planHash) return;
+    const highRisk = msg.planResult.proposedActions.some(
+      (action) => action.riskLevel === 'high' || action.requiresConfirmation,
+    );
+    const confirmedAt = new Date().toISOString();
+    if (highRisk) {
+      const reason =
+        msg.planResult.proposedActions.find((action) => action.riskLevel === 'high' || action.requiresConfirmation)
+          ?.confirmationReason || 'This plan contains high-risk actions. Continue?';
+      if (typeof window !== 'undefined' && !window.confirm(reason)) return;
+    }
     msg.status = 'running';
     msg.errorMessage = '';
     msg.executeResult = undefined;
@@ -365,7 +382,9 @@ export default function useAgentSession() {
         planHash: msg.planHash,
         approval: {
           confirmedBy: userStore.user?.userId || 'current-user',
-          confirmedAt: new Date().toISOString(),
+          confirmedAt,
+          highRiskConfirmed: highRisk,
+          highRiskConfirmedAt: highRisk ? confirmedAt : undefined,
         },
       });
       msg.executeJobId = res.jobId;
@@ -401,6 +420,7 @@ export default function useAgentSession() {
     activeSession,
     activeTurns,
     policy: s.policy,
+    reasoningEffort: s.reasoningEffort,
     taskInput: s.taskInput,
     isSending: s.isSending,
     createSession,
