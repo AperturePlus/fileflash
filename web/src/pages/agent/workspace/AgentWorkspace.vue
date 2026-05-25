@@ -8,12 +8,17 @@ import SessionList from '../../../components/organisms/agent/SessionList.vue';
 import TaskTimeline from '../../../components/organisms/agent/TaskTimeline.vue';
 import TaskInputDock from '../../../components/organisms/agent/TaskInputDock.vue';
 import PlanInspector from '../../../components/organisms/agent/PlanInspector.vue';
+import { useLocaleStore } from '../../../store/locale';
+import { ui } from '../../../utils/ui';
 
 const {
   sessions, activeSessionId, activeTurns, policy, reasoningEffort, taskInput, isSending,
   createSession, switchSession, deleteSession,
   sendMessage, runExecute, cancel,
 } = useAgentSession();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const focusedTurnId = ref<string | null>(null);
 
@@ -27,6 +32,18 @@ const turnOf = (id: string): ChatMessage | null =>
 const onExecute = (id: string) => { const m = turnOf(id); if (m) runExecute(m); };
 const onCancel  = (id: string) => { const m = turnOf(id); if (m) cancel(m); };
 const onHint = (text: string) => { taskInput.value = text; sendMessage(); };
+
+const onDeleteSession = async (id: string) => {
+  const target = sessions.value.find((s) => s.id === id);
+  const ok = await ui.confirm({
+    title: t('agent.v2.confirm.deleteSession.title'),
+    message: t('agent.v2.confirm.deleteSession.message').replace('{title}', target?.title || ''),
+    confirmText: t('agent.v2.confirm.deleteSession.confirm'),
+    cancelText: t('agent.v2.confirm.deleteSession.cancel'),
+    danger: true,
+  });
+  if (ok) deleteSession(id);
+};
 </script>
 
 <template>
@@ -37,7 +54,7 @@ const onHint = (text: string) => { taskInput.value = text; sendMessage(); };
       :active-id="activeSessionId"
       @select="switchSession"
       @create="createSession"
-      @delete="deleteSession"
+      @delete="onDeleteSession"
     />
     <div class="aw__center">
       <TaskTimeline

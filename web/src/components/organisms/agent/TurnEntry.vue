@@ -31,6 +31,10 @@ const isActive = computed(
   () => props.turn.agent.status === 'pending' || props.turn.agent.status === 'running',
 );
 
+const resultText = computed(
+  () => props.turn.agent.executeResult?.answer || props.turn.agent.executeResult?.summary || '',
+);
+
 const statusLabel = computed(() => {
   const key = `agent.v2.turn.status.${props.turn.agent.status}` as LocaleKey;
   return t(key);
@@ -67,11 +71,15 @@ const formatTime = (iso: string) => {
 
         <div v-if="isActive" class="ff-te__progress" />
 
-        <p v-if="turn.agent.planResult?.summary" class="ff-te__sum">
+        <p v-if="resultText" class="ff-te__sum ff-te__answer">
+          {{ resultText }}
+        </p>
+
+        <p v-else-if="turn.agent.planResult?.summary" class="ff-te__sum">
           {{ turn.agent.planResult.summary }}
         </p>
 
-        <section v-if="turn.agent.planResult?.proposedActions?.length" class="ff-te__actions">
+        <section v-if="!resultText && turn.agent.planResult?.proposedActions?.length" class="ff-te__actions">
           <PlanActionRow
             v-for="a in turn.agent.planResult.proposedActions"
             :key="a.step"
@@ -140,7 +148,7 @@ const formatTime = (iso: string) => {
 .ff-te__user-content { white-space: pre-wrap; color: var(--text-primary); }
 .ff-te__user-time {
   align-self: flex-end;
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   color: var(--text-tertiary); letter-spacing: var(--tracking-wide);
 }
 
@@ -156,12 +164,12 @@ const formatTime = (iso: string) => {
 
 .ff-te__agent-head { display: flex; align-items: center; justify-content: space-between; }
 .ff-te__role {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   text-transform: uppercase; letter-spacing: var(--tracking-wide);
   color: var(--text-tertiary);
 }
 .ff-te__status {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   text-transform: uppercase; letter-spacing: var(--tracking-wide);
 }
 .ff-te__status--pending, .ff-te__status--running { color: var(--ac); }
@@ -181,6 +189,7 @@ const formatTime = (iso: string) => {
 }
 
 .ff-te__sum { margin: 0; color: var(--text-primary); }
+.ff-te__answer { white-space: pre-wrap; }
 
 .ff-te__actions {
   border: 1px solid var(--border-subtle);
@@ -189,7 +198,7 @@ const formatTime = (iso: string) => {
 
 .ff-te__cost {
   display: flex; gap: var(--sp-md); align-items: baseline;
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }
@@ -202,7 +211,7 @@ const formatTime = (iso: string) => {
 }
 .ff-te__warn { border-color: var(--status-warning); color: var(--status-warning); }
 .ff-te__warn-label {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
 }
 .ff-te__warn ul { margin: 4px 0 0; padding-left: 16px; }
