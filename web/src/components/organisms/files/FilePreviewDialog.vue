@@ -2,11 +2,26 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import FileDetailPanel from './FileDetailPanel.vue';
 import VideoPreviewDialog from './VideoPreviewDialog.vue';
+import { downloadFile, getPreviewUrl, previewFile } from '../../../api/file';
 import { useLocaleStore } from '../../../store/locale';
 import { getPreviewCapabilities } from '../../../utils/preview';
-import type { FileItem } from '../../../types/file';
+import type { FileItem, FilePreviewUrlResponse } from '../../../types/file';
 
-const props = defineProps<{ file: FileItem | null }>();
+type BlobLoader = (fileId: string) => Promise<Blob>;
+type PreviewUrlLoader = (fileId: string) => Promise<FilePreviewUrlResponse>;
+
+const props = withDefaults(defineProps<{
+  file: FileItem | null;
+  previewLoader?: BlobLoader;
+  previewUrlLoader?: PreviewUrlLoader;
+  downloadLoader?: BlobLoader;
+  showDownload?: boolean;
+}>(), {
+  previewLoader: previewFile,
+  previewUrlLoader: getPreviewUrl,
+  downloadLoader: downloadFile,
+  showDownload: true,
+});
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const localeStore = useLocaleStore();
@@ -41,6 +56,9 @@ const onOverlayClick = (ev: MouseEvent) => {
   <VideoPreviewDialog
     v-if="isVideoFile"
     :file="file"
+    :preview-url-loader="previewUrlLoader"
+    :download-loader="downloadLoader"
+    :show-download="showDownload"
     @close="emit('close')"
   />
   <Teleport v-else to="body">
@@ -65,7 +83,12 @@ const onOverlayClick = (ev: MouseEvent) => {
           &times;
         </button>
         <div class="file-preview-dialog__body">
-          <FileDetailPanel :file="file" />
+          <FileDetailPanel
+            :file="file"
+            :preview-loader="previewLoader"
+            :download-loader="downloadLoader"
+            :show-download="showDownload"
+          />
         </div>
       </div>
     </div>

@@ -11,7 +11,18 @@ import type { FileItem } from '../../../types/file';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-const props = defineProps<{ file: FileItem | null }>();
+type BlobLoader = (fileId: string) => Promise<Blob>;
+
+const props = withDefaults(defineProps<{
+  file: FileItem | null;
+  previewLoader?: BlobLoader;
+  downloadLoader?: BlobLoader;
+  showDownload?: boolean;
+}>(), {
+  previewLoader: previewFile,
+  downloadLoader: downloadFile,
+  showDownload: true,
+});
 
 const localeStore = useLocaleStore();
 const t = localeStore.t;
@@ -227,7 +238,7 @@ const loadPreview = async () => {
 
   isLoading.value = true;
   try {
-    const blob = await previewFile(props.file.id);
+    const blob = await props.previewLoader(props.file.id);
 
     if (isText.value) {
       textContent.value = await blob.text();
@@ -286,7 +297,7 @@ const downloadSelectedFile = async () => {
   if (!props.file) return;
 
   try {
-    const blob = await downloadFile(props.file.id);
+    const blob = await props.downloadLoader(props.file.id);
     const object = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = object;
@@ -320,7 +331,7 @@ onUnmounted(() => {
       </header>
 
       <div class="detail__actions">
-        <button class="detail__action" @click="downloadSelectedFile">{{ t('files.preview.detail.download') }}</button>
+        <button v-if="showDownload" class="detail__action" @click="downloadSelectedFile">{{ t('files.preview.detail.download') }}</button>
         <button class="detail__action" @click="loadPreview">{{ t('files.preview.detail.reload') }}</button>
       </div>
 

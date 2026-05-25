@@ -64,4 +64,30 @@ describe('VideoPreviewDialog', () => {
 
     wrapper.unmount();
   });
+
+  it('uses injected admin preview URL loader and hides download control', async () => {
+    const previewUrlLoader = vi.fn().mockResolvedValue({
+      url: 'http://testserver/api/v1/admin/files/v1/preview-stream?token=signed',
+      expiresAt: '2026-01-01T04:00:00Z',
+    });
+    const wrapper = mount(VideoPreviewDialog, {
+      props: {
+        file: videoFile as any,
+        previewUrlLoader,
+        showDownload: false,
+      },
+      attachTo: document.body,
+    });
+
+    await flushPromises();
+
+    expect(previewUrlLoader).toHaveBeenCalledWith('v1');
+    expect(mocks.getPreviewUrl).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain('Download');
+    expect(mocks.mountVideo).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'http://testserver/api/v1/admin/files/v1/preview-stream?token=signed',
+    }));
+
+    wrapper.unmount();
+  });
 });
