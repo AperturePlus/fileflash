@@ -29,6 +29,7 @@ class BackgroundJobService:
         requested_by: int | None = None,
         max_attempts: int = 5,
         priority: int = 100,
+        agent_phase: str | None = None,
     ) -> BackgroundJob:
         now = datetime.now(UTC)
         job = BackgroundJob(
@@ -42,6 +43,7 @@ class BackgroundJobService:
             scheduled_at=now,
             trace_id=str(uuid.uuid4()),
             idempotency_key=idempotency_key,
+            agent_phase=agent_phase,
             requested_by=requested_by,
             priority=priority,
         )
