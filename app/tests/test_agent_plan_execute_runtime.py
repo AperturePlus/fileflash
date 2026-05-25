@@ -272,7 +272,7 @@ async def test_execute_rejects_high_risk_plan_without_confirmation():
 @pytest.mark.asyncio
 async def test_execute_enqueue_serializes_approval_datetime_as_json_string():
     db = DummyDb()
-    db.scalar.return_value = BackgroundJob(
+    plan_job = BackgroundJob(
         job_id=99,
         task_type="agent.plan",
         status="succeeded",
@@ -283,6 +283,7 @@ async def test_execute_enqueue_serializes_approval_datetime_as_json_string():
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
+    db.scalar = AsyncMock(side_effect=[plan_job, None])
     plans = AgentPlanRepository(db)  # type: ignore[arg-type]
     plans.get_for_execute_binding = AsyncMock(return_value=SimpleNamespace(proposed_actions_json=[]))
     jobs = FakeJobs()
@@ -306,6 +307,61 @@ async def test_execute_enqueue_serializes_approval_datetime_as_json_string():
     approval_payload = jobs.kwargs["payload"]["approval"]
     assert isinstance(approval_payload["confirmedAt"], str)
     assert approval_payload["confirmedAt"] == "2026-05-25T10:00:00Z"
+    assert jobs.kwargs["idempotency_key"] == "agent.execute:99"
+
+
+@pytest.mark.asyncio
+async def test_execute_rejects_repeat_when_existing_execute_job_exists():
+    db = DummyDb()
+    plan_job = BackgroundJob(
+        job_id=99,
+        task_type="agent.plan",
+        status="succeeded",
+        payload={},
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    existing_execute = BackgroundJob(
+        job_id=200,
+        task_type="agent.execute",
+        status="running",
+        payload={},
+        result={},
+        requested_by=7,
+        idempotency_key="agent.execute:99",
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db.scalar = AsyncMock(side_effect=[plan_job, existing_execute])
+    plans = AgentPlanRepository(db)  # type: ignore[arg-type]
+    plans.get_for_execute_binding = AsyncMock(return_value=SimpleNamespace(proposed_actions_json=[]))
+    jobs = FakeJobs()
+    service = ExecuteService(
+        db=db,
+        settings=settings(),
+        jobs=jobs,  # type: ignore[arg-type]
+        plans=plans,
+        work_sessions=AgentWorkSessionRepository(db),  # type: ignore[arg-type]
+    )
+    payload = ExecuteAgentRequest.model_validate(
+        {
+            "planJobId": "99",
+            "planHash": "sha256:test",
+            "approval": {"confirmedBy": "7", "confirmedAt": "2026-05-25T10:00:00Z"},
+        }
+    )
+
+    with pytest.raises(ApiError) as exc:
+        await service.enqueue_execute(user_id=7, payload=payload)
+
+    assert exc.value.status_code == 409
+    assert "already been executed" in exc.value.message.lower() or "already" in exc.value.message.lower()
+    assert exc.value.data["jobId"] == "200"
+    assert jobs.kwargs == {}
 
 
 @pytest.mark.asyncio
