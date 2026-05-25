@@ -21,7 +21,10 @@ vi.mock('../utils/uploader', () => ({
 
 vi.mock('../api/file', () => ({
   cancelUploadSession: (uploadId: string) => cancelUploadSessionMock(uploadId),
+  downloadFile: vi.fn(() => Promise.resolve(new Blob(['ok'], { type: 'text/plain' }))),
   getRecoverableUploads: () => getRecoverableUploadsMock(),
+  getPreviewUrl: vi.fn(() => Promise.resolve({ previewUrl: '/preview/mock', expiresAt: '2026-05-25T00:00:00Z' })),
+  previewFile: vi.fn(() => Promise.resolve(new Blob(['ok'], { type: 'text/plain' }))),
 }));
 
 vi.mock('../utils/ui', () => ({

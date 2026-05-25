@@ -28,6 +28,9 @@ vi.mock('../../composables/useFilePreview', () => ({
 }));
 
 vi.mock('../../api/file', () => ({
+  downloadFile: vi.fn(() => Promise.resolve(new Blob(['ok'], { type: 'text/plain' }))),
+  getPreviewUrl: vi.fn(() => Promise.resolve({ previewUrl: '/preview/mock', expiresAt: '2026-05-25T00:00:00Z' })),
+  previewFile: vi.fn(() => Promise.resolve(new Blob(['ok'], { type: 'text/plain' }))),
   toggleFileStar: toggleFileStarMock,
 }));
 
