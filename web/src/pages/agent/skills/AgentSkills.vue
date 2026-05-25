@@ -88,7 +88,7 @@ onMounted(() => { s.loadMarketplace(); s.loadMySkills(); });
 .as__grid { display: grid; gap: var(--sp-md); grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 .as__empty {
   grid-column: 1 / -1; padding: var(--sp-xl); text-align: center;
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }

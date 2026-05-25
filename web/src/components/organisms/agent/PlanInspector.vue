@@ -2,12 +2,15 @@
 import { computed, ref } from 'vue';
 import StatBlock from '../../molecules/StatBlock.vue';
 import { useLocaleStore } from '../../../store/locale';
+import { useUserStore } from '../../../store/user';
 import type { AgentTurn } from '../../../composables/useAgentSession';
 
 const props = defineProps<{ turn?: AgentTurn | null }>();
 
 const localeStore = useLocaleStore();
 const t = localeStore.t;
+const userStore = useUserStore();
+const isAdmin = computed(() => userStore.isAdmin);
 
 const plan = computed(() => props.turn?.agent.planResult ?? null);
 const skillName = computed(() => plan.value?.chosenSkill?.name ?? '—');
@@ -38,7 +41,7 @@ const copyHash = async () => {
         <span class="ff-pi__key">{{ t('agent.v2.inspector.skill') }}</span>
         <span class="ff-pi__val">{{ skillName }}</span>
       </section>
-      <section class="ff-pi__sect">
+      <section v-if="isAdmin" class="ff-pi__sect">
         <span class="ff-pi__key">{{ t('agent.v2.inspector.planHash') }}</span>
         <button
           type="button"
@@ -82,21 +85,21 @@ const copyHash = async () => {
 .ff-pi__label {
   padding: var(--sp-sm) var(--sp-lg);
   border-bottom: 1px solid var(--border-default);
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }
 .ff-pi__empty {
   padding: var(--sp-xl) var(--sp-lg);
   color: var(--text-tertiary);
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   text-align: center;
 }
 .ff-pi__body { padding: var(--sp-lg); display: flex; flex-direction: column; gap: var(--sp-md); }
 .ff-pi__sect { display: flex; flex-direction: column; gap: 2px; }
 .ff-pi__key {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }
@@ -119,7 +122,7 @@ const copyHash = async () => {
 .ff-pi__hash:disabled { opacity: 0.5; cursor: not-allowed; }
 .ff-pi__hash:hover:not(:disabled) { border-color: var(--ac); }
 .ff-pi__copied {
-  font-size: 9px; color: var(--ac);
+  font-size: var(--text-small); color: var(--ac);
   letter-spacing: var(--tracking-wide);
 }
 .ff-pi__cost {

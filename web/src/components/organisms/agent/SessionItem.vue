@@ -67,7 +67,7 @@ const relativeTime = (iso: string): string => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ff-si__time {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   color: var(--text-tertiary);
   letter-spacing: var(--tracking-wide);
 }

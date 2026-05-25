@@ -17,10 +17,23 @@ const isLoading = ref(false);
 
 const storageData = computed(() => props.stats || localStats.value);
 const progressPercentage = computed(() => {
-  if (!storageData.value) return 0;
-  const raw = Number(storageData.value.storagePercentage);
-  if (!Number.isFinite(raw)) return 0;
-  return Math.min(100, Math.max(0, raw));
+  const stats = storageData.value;
+  if (!stats) return 0;
+
+  const raw = Number(stats.storagePercentage);
+  let normalizedPercentage: number;
+
+  if (Number.isFinite(raw)) {
+    normalizedPercentage = raw > 0 && raw <= 1 && stats.storageUsed > 0
+      ? raw * 100
+      : raw;
+  } else if (stats.storageLimit > 0) {
+    normalizedPercentage = (stats.storageUsed / stats.storageLimit) * 100;
+  } else {
+    normalizedPercentage = 0;
+  }
+
+  return Math.min(100, Math.max(0, normalizedPercentage));
 });
 const progressWidthPercentage = computed(() => {
   const stats = storageData.value;
@@ -105,17 +118,19 @@ onUnmounted(() => {
   padding: var(--spacing-sm) 0;
 }
 .progress-bar-wrapper {
+  margin-bottom: var(--spacing-sm);
+}
+.progress-bar {
   width: 100%;
   height: 12px;
   background-color: var(--color-bg-tertiary);
   border-radius: 6px;
   overflow: hidden;
-  margin-bottom: var(--spacing-sm);
 }
 .progress-bar-fill {
   height: 100%;
   background-color: var(--color-primary);
-  border-radius: 6px;
+  border-radius: inherit;
   transition: width 0.5s ease-in-out;
 }
 .stats-text {

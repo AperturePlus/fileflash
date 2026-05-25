@@ -79,7 +79,7 @@ watch(
   padding: var(--sp-sm) var(--sp-lg);
   background: var(--surface-base);
   border-bottom: 1px solid var(--border-default);
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }
@@ -90,7 +90,7 @@ watch(
 .ff-tt__hint {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-label);
+  font-size: var(--text-small);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--text-tertiary);

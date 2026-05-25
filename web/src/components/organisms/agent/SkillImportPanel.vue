@@ -101,7 +101,7 @@ const onSubmit = () => {
   display: flex; align-items: center; justify-content: space-between; gap: var(--sp-sm);
 }
 .ff-sip__label, .ff-sip__lbl {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }

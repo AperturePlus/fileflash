@@ -185,7 +185,8 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: border-color var(--mo-duration-fast) var(--mo-easing);
 }
-.ff-select--sm .ff-select__trigger { height: 24px; font-size: 9px; }
+.ff-select--sm { font-size: var(--text-small); }
+.ff-select--sm .ff-select__trigger { height: 24px; }
 .ff-select--md .ff-select__trigger { height: 32px; }
 .ff-select__trigger:hover:not(:disabled),
 .ff-select.is-open .ff-select__trigger { border-color: var(--ac); }

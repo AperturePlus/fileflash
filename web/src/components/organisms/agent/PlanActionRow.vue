@@ -35,7 +35,7 @@ const expanded = ref(false);
   cursor: pointer;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: var(--text-label);
+  font-size: var(--text-small);
   letter-spacing: var(--tracking-wide);
   text-align: left;
 }
@@ -45,7 +45,7 @@ const expanded = ref(false);
   min-width: 20px;
 }
 .ff-par__tool { flex: 1; color: var(--text-primary); }
-.ff-par__se { font-size: 9px; padding: 1px 6px; }
+.ff-par__se { font-size: var(--text-small); padding: 1px 6px; }
 .ff-par__se--write { color: var(--status-warning); border-color: var(--status-warning); }
 .ff-par__input {
   margin: 0;

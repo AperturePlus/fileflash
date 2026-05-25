@@ -1,22 +1,22 @@
 /* web/src/styles/tokens/type.css
  * Font stacks + size scale + weight + line-height + letter-spacing.
  * Sizes follow a deliberate non-linear ratio aligned to the Industrial
- * Dashboard identity. Body 13.5px is the anchor; everything else scales
+ * Dashboard identity. Body 14px is the anchor; everything else scales
  * around it.
  */
 
 :root {
   --font-sans: 'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Sans SC', 'PingFang SC', 'Consolas', 'Monaco', 'Courier New', monospace;
 
   /* Size scale */
   --text-display:   32px;
   --text-h1:        22px;
   --text-h2:        17px;
-  --text-body:      13.5px;
-  --text-small:     12px;
-  --text-label:     10px;
-  --text-data:      12px;
+  --text-body:      14px;
+  --text-small:     12.5px;
+  --text-label:     10.5px;
+  --text-data:      12.5px;
   --text-data-big:  22px;
 
   /* Weight scale */
