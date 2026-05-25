@@ -49,6 +49,12 @@ class StubDb:
         return None
 
 
+class RunningJobDb(StubDb):
+    def __init__(self) -> None:
+        super().__init__()
+        self.job.status = "running"
+
+
 def _user() -> User:
     return User(user_id=7, username="u7", email="u7@example.com", password_hash="x")
 
@@ -61,6 +67,17 @@ def _client() -> TestClient:
     app.dependency_overrides[get_agent_plan_service] = lambda: StubPlanService()
     app.dependency_overrides[get_agent_execute_service] = lambda: StubExecuteService()
     app.dependency_overrides[get_db] = lambda: StubDb()
+    return TestClient(app)
+
+
+def _client_with_running_job() -> TestClient:
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    app.add_exception_handler(ApiError, api_error_handler)
+    app.dependency_overrides[get_current_user] = _user
+    app.dependency_overrides[get_agent_plan_service] = lambda: StubPlanService()
+    app.dependency_overrides[get_agent_execute_service] = lambda: StubExecuteService()
+    app.dependency_overrides[get_db] = lambda: RunningJobDb()
     return TestClient(app)
 
 
@@ -123,3 +140,13 @@ def test_cancel_route_returns_response_shell():
     assert body["data"]["jobId"] == "12"
     assert body["data"]["status"] == "canceled"
     assert body["data"]["canceledAt"]
+
+
+def test_cancel_route_marks_running_job_as_canceled():
+    response = _client_with_running_job().post("/api/v1/agent/cancel/12")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["jobId"] == "12"
+    assert body["data"]["status"] == "canceled"
