@@ -179,6 +179,26 @@ const buildPlanPayload = (
   hints: { preferSkillId: null, maxSteps: 12, budgetTokens: 8000, reasoningEffort },
 });
 
+const extractErrorMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === 'object') {
+    const response = (error as { response?: { data?: { message?: unknown } } }).response;
+    const responseMessage = response?.data?.message;
+    if (typeof responseMessage === 'string' && responseMessage.trim()) {
+      return responseMessage.trim();
+    }
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (error && typeof error === 'object') {
+    const plainMessage = (error as { message?: unknown }).message;
+    if (typeof plainMessage === 'string' && plainMessage.trim()) {
+      return plainMessage.trim();
+    }
+  }
+  return fallback;
+};
+
 export default function useAgentSession() {
   const s = getState();
   const userStore = useUserStore();
@@ -352,9 +372,9 @@ export default function useAgentSession() {
       reactiveAgent.planJobId = res.jobId;
       reactiveAgent.status = 'pending';
       await pollPlanJob(reactiveAgent, res.jobId);
-    } catch {
+    } catch (error) {
       reactiveAgent.status = 'failed';
-      reactiveAgent.errorMessage = 'Plan failed.';
+      reactiveAgent.errorMessage = extractErrorMessage(error, 'Plan failed.');
     } finally {
       s.isSending.value = false;
     }
@@ -389,9 +409,9 @@ export default function useAgentSession() {
       });
       msg.executeJobId = res.jobId;
       await pollExecuteJob(msg, res.jobId);
-    } catch {
+    } catch (error) {
       msg.status = 'failed';
-      msg.errorMessage = 'Execute failed.';
+      msg.errorMessage = extractErrorMessage(error, 'Execute failed.');
     }
   }
 
@@ -403,8 +423,8 @@ export default function useAgentSession() {
     try {
       await cancelAgentJob(jobId);
       msg.status = 'canceled';
-    } catch {
-      msg.errorMessage = 'Cancel failed.';
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Cancel failed.');
     }
   }
 
