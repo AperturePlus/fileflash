@@ -99,3 +99,32 @@ def decode_file_preview_token(token: str, settings: Settings) -> dict[str, Any]:
     if token_type != "file_preview" or scope != "file.preview":
         raise jwt.InvalidTokenError("Invalid token type")
     return payload
+
+
+def create_admin_file_preview_token(
+    *,
+    admin_user_id: int,
+    file_id: int,
+    settings: Settings,
+    expires_at: datetime,
+) -> str:
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "sub": str(admin_user_id),
+        "typ": "admin_file_preview",
+        "scope": "admin.file.preview",
+        "fileId": str(file_id),
+        "iat": int(now.timestamp()),
+        "exp": int(expires_at.timestamp()),
+        "jti": str(uuid.uuid4()),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_admin_file_preview_token(token: str, settings: Settings) -> dict[str, Any]:
+    payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    token_type = payload.get("typ")
+    scope = payload.get("scope")
+    if token_type != "admin_file_preview" or scope != "admin.file.preview":
+        raise jwt.InvalidTokenError("Invalid token type")
+    return payload
