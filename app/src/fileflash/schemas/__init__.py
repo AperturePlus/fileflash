@@ -19,8 +19,15 @@ from .agent_skill import (
     UpdateAgentSkillRequest,
 )
 from .common import ApiResponse, CamelModel, PageQuery, PaginatedData, PaginationMeta
-from .file import (
+from .admin.files import (
+    AdminFileAuditDetail,
     AdminFileAuditItem,
+    AdminFileAuditOwner,
+    AdminFileLatestScan,
+    ListAdminFilesQuery,
+    RescanResponse,
+)
+from .file import (
     BatchDownloadRequest,
     BatchMoveItemResult,
     BatchFilesRequest,
@@ -150,7 +157,10 @@ __all__ = [
     "ActivityItem",
     "AddGroupMemberRequest",
     "AddGroupMemberResponse",
+    "AdminFileAuditDetail",
     "AdminFileAuditItem",
+    "AdminFileAuditOwner",
+    "AdminFileLatestScan",
     "ApiResponse",
     "BatchFilesRequest",
     "BatchFilesResponse",
@@ -200,6 +210,7 @@ __all__ = [
     "LoginRequest",
     "LogItem",
     "LogsList",
+    "ListAdminFilesQuery",
     "MarkAllAsReadResponse",
     "MarkAsReadResponse",
     "MergeChunksRequest",
@@ -226,6 +237,7 @@ __all__ = [
     "RenameFileRequest",
     "RenameFolderRequest",
     "RescanAdminFileResponse",
+    "RescanResponse",
     "ResolveViolationResponse",
     "ResetPasswordRequest",
     "RestoreRecycleItemRequest",

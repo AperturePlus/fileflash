@@ -27,12 +27,70 @@ import type {
   MergeChunksResponse,
   CancelUploadResponse,
   AdminFileAuditItem,
+  AdminFileAuditDetail,
   GetAdminFilesRequest,
   ArchiveExtractRequest,
   BackgroundJob,
   JobResultArchiveExtract,
   JobResultArchivePreview,
 } from '../types/file';
+
+type MockPreviewPayload = {
+  __mockPreview: true;
+  mimeType: string;
+  content: string;
+  encoding: 'text' | 'base64';
+};
+
+function isBlobLike(value: unknown): value is Blob {
+  return value instanceof Blob || Object.prototype.toString.call(value) === '[object Blob]';
+}
+
+function base64ToBytes(content: string) {
+  const decoded = atob(content);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function isMockPreviewPayload(value: unknown): value is MockPreviewPayload {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const payload = value as Partial<MockPreviewPayload>;
+  return payload.__mockPreview === true && typeof payload.content === 'string';
+}
+
+function normalizePreviewBlob(response: Blob | MockPreviewPayload | string): Blob {
+  if (isBlobLike(response)) {
+    return response;
+  }
+
+  let payload: MockPreviewPayload | null = null;
+  if (isMockPreviewPayload(response)) {
+    payload = response;
+  } else if (typeof response === 'string') {
+    try {
+      const parsed = JSON.parse(response);
+      if (isMockPreviewPayload(parsed)) {
+        payload = parsed;
+      }
+    } catch {
+      return new Blob([response], { type: 'text/plain' });
+    }
+  }
+
+  if (!payload) {
+    return new Blob([], { type: 'application/octet-stream' });
+  }
+
+  const content = payload.encoding === 'base64'
+    ? base64ToBytes(payload.content)
+    : payload.content;
+  return new Blob([content], { type: payload.mimeType || 'application/octet-stream' });
+}
 
 // 上传相关API
 export const preflightUpload = (data: UploadPreflightRequest) => {
@@ -235,6 +293,23 @@ export const getAdminFiles = (params: GetAdminFilesRequest) => {
   return http.get<PaginatedData<AdminFileAuditItem>>('/admin/files', params);
 };
 
+export const getAdminFileDetail = (fileId: string) => {
+  return http.get<AdminFileAuditDetail>(`/admin/files/${fileId}`);
+};
+
 export const rescanAdminFile = (fileId: string) => {
   return http.post<{ fileId: string; virusStatus: 'clean' | 'pending' | 'flagged'; scannedAt: string }>(`/admin/files/${fileId}/rescan`);
+};
+
+export const previewAdminFile = async (fileId: string) => {
+  const response = await http.get<Blob | MockPreviewPayload | string>(
+    `/admin/files/${fileId}/preview`,
+    undefined,
+    { responseType: 'blob' },
+  );
+  return normalizePreviewBlob(response);
+};
+
+export const getAdminPreviewUrl = (fileId: string) => {
+  return http.post<FilePreviewUrlResponse>(`/admin/files/${fileId}/preview-url`);
 };

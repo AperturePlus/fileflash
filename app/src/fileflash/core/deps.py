@@ -143,8 +143,9 @@ def get_admin_storage_service(
 def get_admin_files_service(
     db: AsyncSession = Depends(get_db),
     event_publisher: InProcessAuthEventPublisher = Depends(get_event_publisher),
+    storage: MinioObjectStorageClient = Depends(get_object_storage),
 ) -> AdminFilesService:
-    return AdminFilesService(db=db, publisher=event_publisher)
+    return AdminFilesService(db=db, publisher=event_publisher, storage=storage)
 
 
 def get_admin_moderation_service(

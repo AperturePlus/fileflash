@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from fileflash.core.security import (
+    create_admin_file_preview_token,
     create_access_token,
     create_file_preview_token,
     create_refresh_token,
+    decode_admin_file_preview_token,
     decode_access_token,
     decode_file_preview_token,
     get_password_hash,
@@ -51,6 +53,24 @@ def test_file_preview_token_round_trip():
     assert payload["fileId"] == "99"
     assert payload["scope"] == "file.preview"
     assert payload["typ"] == "file_preview"
+
+
+def test_admin_file_preview_token_round_trip():
+    settings = Settings(
+        JWT_SECRET_KEY="unit-test-secret-key-1234567890abcd",
+        FF_DB_URI="postgresql://u:p@localhost:5432/db",
+    )
+    token = create_admin_file_preview_token(
+        admin_user_id=7,
+        file_id=99,
+        settings=settings,
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
+    )
+    payload = decode_admin_file_preview_token(token=token, settings=settings)
+    assert payload["sub"] == "7"
+    assert payload["fileId"] == "99"
+    assert payload["scope"] == "admin.file.preview"
+    assert payload["typ"] == "admin_file_preview"
 
 
 def test_refresh_token_hash_is_deterministic():

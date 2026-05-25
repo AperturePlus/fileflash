@@ -529,6 +529,7 @@ export interface GetRecycleBinRequest {
 
 export interface AdminFileAuditItem {
   id: string;
+  objectId: string;
   name: string;
   size: number;
   mimeType: string;
@@ -536,8 +537,36 @@ export interface AdminFileAuditItem {
   virusStatus: 'clean' | 'pending' | 'flagged';
   isShared: boolean;
   ownerName: string;
+  uploadCount: number;
+  ownerCount: number;
+  scannedAt?: string | null;
   updatedAt: string;
   createdAt: string;
+}
+
+export interface AdminFileLatestScan {
+  scanType: string;
+  scanResult: string;
+  virusStatus: 'clean' | 'pending' | 'flagged';
+  scannedAt: string;
+  details?: Record<string, any> | null;
+}
+
+export interface AdminFileAuditOwner {
+  userId: string;
+  username: string;
+  email: string;
+  fileCount: number;
+  firstUploadedAt: string;
+  lastUploadedAt: string;
+}
+
+export interface AdminFileAuditDetail extends AdminFileAuditItem {
+  objectHash?: string | null;
+  hashAlgorithm: string;
+  storageStatus: string;
+  latestScan?: AdminFileLatestScan | null;
+  owners: AdminFileAuditOwner[];
 }
 
 export interface GetAdminFilesRequest {

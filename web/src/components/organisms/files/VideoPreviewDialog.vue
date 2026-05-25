@@ -4,9 +4,21 @@ import { downloadFile, getPreviewUrl } from '../../../api/file';
 import { getPreviewCapabilities } from '../../../utils/preview';
 import { useLocaleStore } from '../../../store/locale';
 import { useVideoPlayer } from '../../../composables/useVideoPlayer';
-import type { FileItem } from '../../../types/file';
+import type { FileItem, FilePreviewUrlResponse } from '../../../types/file';
 
-const props = defineProps<{ file: FileItem | null }>();
+type BlobLoader = (fileId: string) => Promise<Blob>;
+type PreviewUrlLoader = (fileId: string) => Promise<FilePreviewUrlResponse>;
+
+const props = withDefaults(defineProps<{
+  file: FileItem | null;
+  previewUrlLoader?: PreviewUrlLoader;
+  downloadLoader?: BlobLoader;
+  showDownload?: boolean;
+}>(), {
+  previewUrlLoader: getPreviewUrl,
+  downloadLoader: downloadFile,
+  showDownload: true,
+});
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const localeStore = useLocaleStore();
@@ -44,7 +56,7 @@ const load = async () => {
 
   isLoading.value = true;
   try {
-    const preview = await getPreviewUrl(props.file.id);
+    const preview = await props.previewUrlLoader(props.file.id);
     streamUrl.value = preview.url;
     isLoading.value = false;
     await nextTick();
@@ -65,7 +77,7 @@ const load = async () => {
 const downloadCurrent = async () => {
   if (!props.file) return;
   try {
-    const blob = await downloadFile(props.file.id);
+    const blob = await props.downloadLoader(props.file.id);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -128,7 +140,13 @@ watch(() => props.file, () => {
             </p>
           </div>
           <div class="video-preview-dialog__actions">
-            <button class="video-preview-dialog__btn" @click="downloadCurrent">{{ t('files.preview.detail.download') }}</button>
+            <button
+              v-if="showDownload"
+              class="video-preview-dialog__btn"
+              @click="downloadCurrent"
+            >
+              {{ t('files.preview.detail.download') }}
+            </button>
             <button
               class="video-preview-dialog__close"
               :aria-label="t('files.preview.close')"

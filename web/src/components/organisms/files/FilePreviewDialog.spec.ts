@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '../../../test/mount';
+import { flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import FilePreviewDialog from './FilePreviewDialog.vue';
 
@@ -94,6 +95,16 @@ describe('FilePreviewDialog', () => {
     await nextTick();
     expect(document.body.querySelector('.video-preview-dialog')).toBeTruthy();
     expect(document.body.querySelector('.file-preview-dialog')).toBeNull();
+    w.unmount();
+  });
+
+  it('hides download controls when showDownload is false', async () => {
+    const w = mount(FilePreviewDialog, {
+      props: { file: sampleFile as any, showDownload: false },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    expect(document.body.textContent).not.toContain('Download');
     w.unmount();
   });
 });
