@@ -15,24 +15,55 @@ const isTerminal = (status: string) => ['succeeded', 'failed', 'canceled'].inclu
 
 const pickPlanActions = (input: string): AgentProposedAction[] => {
   const normalized = input.toLowerCase();
+  if (normalized.includes('delete') || normalized.includes('删除')) {
+    return [
+      {
+        step: 1,
+        tool: 'drive.listFolder',
+        sideEffect: 'read',
+        riskLevel: 'low',
+        requiresConfirmation: false,
+        confirmationReason: null,
+        input: { folderId: 'root' },
+      },
+      {
+        step: 2,
+        tool: 'drive.deleteFile',
+        sideEffect: 'write',
+        riskLevel: 'high',
+        requiresConfirmation: true,
+        confirmationReason: 'Deleting files is high risk and requires explicit confirmation.',
+        input: { fileId: 'file_001' },
+      },
+    ];
+  }
   if (normalized.includes('整理') || normalized.includes('organize')) {
     return [
       {
         step: 1,
         tool: 'drive.listFolder',
         sideEffect: 'read',
+        riskLevel: 'low',
+        requiresConfirmation: false,
+        confirmationReason: null,
         input: { folderId: 'root' },
       },
       {
         step: 2,
         tool: 'drive.createFolder',
         sideEffect: 'write',
+        riskLevel: 'medium',
+        requiresConfirmation: false,
+        confirmationReason: null,
         input: { parentFolderId: 'root', name: 'Organized' },
       },
       {
         step: 3,
         tool: 'drive.moveFile',
         sideEffect: 'write',
+        riskLevel: 'medium',
+        requiresConfirmation: false,
+        confirmationReason: null,
         input: { fileId: 'file_001', targetFolderId: '$step2.folderId' },
       },
     ];
@@ -43,18 +74,27 @@ const pickPlanActions = (input: string): AgentProposedAction[] => {
       step: 1,
       tool: 'drive.resolvePath',
       sideEffect: 'read',
+      riskLevel: 'low',
+      requiresConfirmation: false,
+      confirmationReason: null,
       input: { path: '/My Files' },
     },
     {
       step: 2,
       tool: 'drive.listFolder',
       sideEffect: 'read',
+      riskLevel: 'low',
+      requiresConfirmation: false,
+      confirmationReason: null,
       input: { folderId: '$step1.folderId' },
     },
     {
       step: 3,
       tool: 'drive.renameFile',
       sideEffect: 'write',
+      riskLevel: 'medium',
+      requiresConfirmation: false,
+      confirmationReason: null,
       input: { fileId: 'file_002', fileName: 'renamed-by-agent.txt' },
     },
   ];
@@ -141,7 +181,8 @@ const planResultByJobId = new Map<string, AgentPlanResult>();
 const schedulePlanLifecycle = (job: AgentBackgroundJob, payload: PlanAgentRequest) => {
   const failure = shouldSimulateFailure(payload.input);
   const proposedActions = pickPlanActions(payload.input);
-  const requiresConfirmation = payload.executionPolicy !== 'autopilot';
+  const hasHighRiskAction = proposedActions.some((action) => action.riskLevel === 'high' || action.requiresConfirmation);
+  const requiresConfirmation = payload.executionPolicy !== 'autopilot' || hasHighRiskAction;
   const planHash = `sha256:${Mock.Random.string('hex', 16)}`;
   const result: AgentPlanResult = {
     planJobId: job.jobId,
@@ -260,6 +301,15 @@ export const setupAgentMocks = () => {
         code: 409,
         message: 'planHash mismatch',
         data: null,
+      };
+    }
+    const highRiskActions = planResult.proposedActions.filter((action) => action.riskLevel === 'high' || action.requiresConfirmation);
+    if (highRiskActions.length && !payload.approval?.highRiskConfirmed) {
+      return {
+        success: false,
+        code: 409,
+        message: 'High-risk action requires confirmation',
+        data: { highRiskActions },
       };
     }
 

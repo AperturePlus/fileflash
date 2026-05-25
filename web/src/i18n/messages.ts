@@ -501,6 +501,12 @@ export type LocaleKey =
   | 'agent.v2.input.policy.planOnly'
   | 'agent.v2.input.policy.confirm'
   | 'agent.v2.input.policy.autopilot'
+  | 'agent.v2.input.reasoning.adaptive'
+  | 'agent.v2.input.reasoning.low'
+  | 'agent.v2.input.reasoning.medium'
+  | 'agent.v2.input.reasoning.high'
+  | 'agent.v2.input.reasoning.xhigh'
+  | 'agent.v2.input.reasoning.max'
   | 'agent.v2.turn.role'
   | 'agent.v2.turn.status.pending'
   | 'agent.v2.turn.status.running'
@@ -1067,6 +1073,12 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.input.policy.planOnly': '仅生成计划',
     'agent.v2.input.policy.confirm': '确认执行',
     'agent.v2.input.policy.autopilot': '自动执行',
+    'agent.v2.input.reasoning.adaptive': '自适应推理',
+    'agent.v2.input.reasoning.low': '低推理',
+    'agent.v2.input.reasoning.medium': '中推理',
+    'agent.v2.input.reasoning.high': '高推理',
+    'agent.v2.input.reasoning.xhigh': '超高推理',
+    'agent.v2.input.reasoning.max': '最大推理',
     'agent.v2.turn.role': 'AGENT',
     'agent.v2.turn.status.pending': '等待中',
     'agent.v2.turn.status.running': '运行中',
@@ -1628,6 +1640,12 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.input.policy.planOnly': 'PLAN ONLY',
     'agent.v2.input.policy.confirm': 'CONFIRM',
     'agent.v2.input.policy.autopilot': 'AUTOPILOT',
+    'agent.v2.input.reasoning.adaptive': 'ADAPTIVE',
+    'agent.v2.input.reasoning.low': 'LOW',
+    'agent.v2.input.reasoning.medium': 'MEDIUM',
+    'agent.v2.input.reasoning.high': 'HIGH',
+    'agent.v2.input.reasoning.xhigh': 'XHIGH',
+    'agent.v2.input.reasoning.max': 'MAX',
     'agent.v2.turn.role': 'AGENT',
     'agent.v2.turn.status.pending': 'pending',
     'agent.v2.turn.status.running': 'running',

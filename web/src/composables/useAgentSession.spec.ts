@@ -162,6 +162,83 @@ describe('useAgentSession', () => {
     expect(turn.agent.status).toBe('succeeded');
   });
 
+  it('runExecute surfaces backend response message when execute returns 409', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'succeeded',
+      result: planResult,
+    } as any);
+    vi.mocked(agentApi.executeAgentPlan).mockRejectedValue({
+      response: { data: { message: 'planHash mismatch' } },
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, runExecute, activeTurns } = useAgentSession();
+    taskInput.value = 'hello';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    await runExecute(turn.agent);
+
+    expect(turn.agent.status).toBe('failed');
+    expect(turn.agent.errorMessage).toBe('planHash mismatch');
+  });
+
+  it('runExecute falls back to Error.message when backend message is missing', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'succeeded',
+      result: planResult,
+    } as any);
+    vi.mocked(agentApi.executeAgentPlan).mockRejectedValue(new Error('network timeout'));
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, runExecute, activeTurns } = useAgentSession();
+    taskInput.value = 'hello';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    await runExecute(turn.agent);
+
+    expect(turn.agent.status).toBe('failed');
+    expect(turn.agent.errorMessage).toBe('network timeout');
+  });
+
+  it('runExecute falls back to default message when error has no message', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'succeeded',
+      result: planResult,
+    } as any);
+    vi.mocked(agentApi.executeAgentPlan).mockRejectedValue({});
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, runExecute, activeTurns } = useAgentSession();
+    taskInput.value = 'hello';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    await runExecute(turn.agent);
+
+    expect(turn.agent.status).toBe('failed');
+    expect(turn.agent.errorMessage).toBe('Execute failed.');
+  });
+
   it('cancel calls cancelAgentJob and clears polling for that turn', async () => {
     vi.mocked(agentApi.planAgentTask).mockResolvedValue({
       jobId: 'job-1',

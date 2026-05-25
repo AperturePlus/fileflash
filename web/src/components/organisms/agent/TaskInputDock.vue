@@ -3,17 +3,19 @@ import { computed } from 'vue';
 import Button from '../../molecules/Button.vue';
 import Select from '../../molecules/Select.vue';
 import { useLocaleStore } from '../../../store/locale';
-import type { AgentExecutionPolicy } from '../../../types/agent';
+import type { AgentExecutionPolicy, AgentReasoningEffort } from '../../../types/agent';
 
 defineProps<{
   modelValue: string;
   policy: AgentExecutionPolicy;
+  reasoningEffort: AgentReasoningEffort;
   disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
   'update:policy': [value: AgentExecutionPolicy];
+  'update:reasoningEffort': [value: AgentReasoningEffort];
   submit: [];
 }>();
 
@@ -24,6 +26,15 @@ const POLICY_OPTIONS = computed(() => [
   { value: 'planOnly', label: t('agent.v2.input.policy.planOnly') },
   { value: 'confirm', label: t('agent.v2.input.policy.confirm') },
   { value: 'autopilot', label: t('agent.v2.input.policy.autopilot') },
+]);
+
+const REASONING_OPTIONS = computed(() => [
+  { value: 'adaptive', label: t('agent.v2.input.reasoning.adaptive') },
+  { value: 'low', label: t('agent.v2.input.reasoning.low') },
+  { value: 'medium', label: t('agent.v2.input.reasoning.medium') },
+  { value: 'high', label: t('agent.v2.input.reasoning.high') },
+  { value: 'xhigh', label: t('agent.v2.input.reasoning.xhigh') },
+  { value: 'max', label: t('agent.v2.input.reasoning.max') },
 ]);
 
 const onInput = (e: Event) => {
@@ -55,6 +66,12 @@ const onKey = (e: KeyboardEvent) => {
         :model-value="policy"
         :options="POLICY_OPTIONS"
         @update:model-value="(v) => $emit('update:policy', v as AgentExecutionPolicy)"
+      />
+      <Select
+        size="sm"
+        :model-value="reasoningEffort"
+        :options="REASONING_OPTIONS"
+        @update:model-value="(v) => $emit('update:reasoningEffort', v as AgentReasoningEffort)"
       />
       <Button
         variant="primary"

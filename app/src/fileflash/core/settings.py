@@ -142,8 +142,8 @@ class Settings(BaseSettings):
     agent_user_concurrent_limit: int = Field(default=2, alias="AGENT_USER_CONCURRENT_LIMIT")
     agent_staging_ttl_sec: int = Field(default=86400, alias="AGENT_STAGING_TTL_SEC")
     agent_sse_enabled: bool = Field(default=False, alias="AGENT_SSE_ENABLED")
-    agent_llm_provider: str = Field(default="anthropic", alias="AGENT_LLM_PROVIDER")
     agent_llm_model: str = Field(default="claude-sonnet-4-6", alias="AGENT_LLM_MODEL")
+    agent_llm_base_url: str | None = Field(default=None, alias="AGENT_LLM_BASE_URL")
     agent_llm_api_key: str | None = Field(default=None, alias="AGENT_LLM_API_KEY")
     agent_mcp_endpoints_raw: str = Field(default="[]", alias="AGENT_MCP_ENDPOINTS")
 

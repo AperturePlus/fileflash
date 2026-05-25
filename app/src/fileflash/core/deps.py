@@ -251,6 +251,7 @@ def get_agent_work_session_repository(db: AsyncSession = Depends(get_db)) -> Age
 
 def get_agent_plan_service(
     db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
     jobs: BackgroundJobService = Depends(get_agent_background_job_service),
     plans: AgentPlanRepository = Depends(get_agent_plan_repository),
     settings_repo: AgentSettingsRepository = Depends(get_agent_settings_repository),
@@ -258,21 +259,24 @@ def get_agent_plan_service(
 ) -> PlanService:
     return PlanService(
         db=db,
+        settings=settings,
         jobs=jobs,
         plans=plans,
-        settings=settings_repo,
+        settings_repo=settings_repo,
         work_sessions=work_sessions,
     )
 
 
 def get_agent_execute_service(
     db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
     jobs: BackgroundJobService = Depends(get_agent_background_job_service),
     plans: AgentPlanRepository = Depends(get_agent_plan_repository),
     work_sessions: AgentWorkSessionRepository = Depends(get_agent_work_session_repository),
 ) -> ExecuteService:
     return ExecuteService(
         db=db,
+        settings=settings,
         jobs=jobs,
         plans=plans,
         work_sessions=work_sessions,
