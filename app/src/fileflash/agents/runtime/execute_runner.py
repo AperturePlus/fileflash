@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.errors import ApiError
@@ -16,6 +16,7 @@ from ...repositories import (
 from ...schemas.agent import AgentExecutionResult, AgentProposedAction, ExecuteAgentRequest
 from ..harness.policy import PolicyGuard
 from ..harness.router import ToolCall, ToolRouter
+from .reference_rules import is_symbolic_id_placeholder, parse_step_reference
 
 
 class AgentJobCanceled(Exception):
@@ -127,16 +128,17 @@ class ExecuteRunner:
                 await db.commit()
                 raise
 
+            safe_output = jsonable_encoder(output)
             duration_ms = int((datetime.now(UTC) - started).total_seconds() * 1000)
             await action_logs.finish_step(
                 job_id=int(job.job_id),
                 step_no=action.step,
-                outputs_json=output,
+                outputs_json=safe_output,
                 status="succeeded",
                 duration_ms=duration_ms,
             )
             await db.commit()
-            step_outputs[action.step] = output
+            step_outputs[action.step] = safe_output
             applied += 1
 
         skipped = max(0, len(actions) - applied)
@@ -165,31 +167,58 @@ def _parse_job_id(raw: str) -> int:
     return value
 
 
-_STEP_REF = re.compile(r"^\$step(?P<step>\d+)\.(?P<path>[A-Za-z0-9_.-]+)$")
-
-
-def _resolve_references(value: Any, step_outputs: dict[int, dict[str, Any]]) -> Any:
+def _resolve_references(
+    value: Any,
+    step_outputs: dict[int, dict[str, Any]],
+    *,
+    field_name: str | None = None,
+    field_path: str = "input",
+) -> Any:
     if isinstance(value, str):
-        match = _STEP_REF.match(value)
-        if not match:
-            return value
-        step = int(match.group("step"))
-        path = match.group("path").split(".")
-        current: Any = step_outputs.get(step)
-        for part in path:
-            if isinstance(current, dict):
-                current = current.get(part)
-            else:
-                current = None
-            if current is None:
-                raise ApiError(
-                    status_code=409,
-                    code=409,
-                    message=f"Unable to resolve tool reference: {value}",
-                )
-        return current
+        reference = parse_step_reference(value)
+        if reference is not None:
+            step, path = reference
+            current: Any = step_outputs.get(step)
+            for part in path:
+                if isinstance(current, dict):
+                    current = current.get(part)
+                else:
+                    current = None
+                if current is None:
+                    raise ApiError(
+                        status_code=409,
+                        code=409,
+                        message=f"Unable to resolve tool reference: {value}",
+                    )
+            return current
+        if is_symbolic_id_placeholder(value=value, field_name=field_name):
+            raise ApiError(
+                status_code=409,
+                code=409,
+                message=(
+                    f"Invalid tool input at '{field_path}': unresolved placeholder '{value}'. "
+                    "Use '$stepN.field' references."
+                ),
+            )
+        return value
     if isinstance(value, list):
-        return [_resolve_references(item, step_outputs) for item in value]
+        return [
+            _resolve_references(
+                item,
+                step_outputs,
+                field_name=field_name,
+                field_path=f"{field_path}[{index}]",
+            )
+            for index, item in enumerate(value)
+        ]
     if isinstance(value, dict):
-        return {key: _resolve_references(item, step_outputs) for key, item in value.items()}
+        return {
+            key: _resolve_references(
+                item,
+                step_outputs,
+                field_name=key,
+                field_path=f"{field_path}.{key}",
+            )
+            for key, item in value.items()
+        }
     return value

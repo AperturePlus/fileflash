@@ -25,6 +25,7 @@ from ...schemas.agent import (
 )
 from ..harness.policy import classify_tool_side_effect, normalize_action_risk
 from .llm import AnthropicPlannerClient, PlannerClient
+from .reference_rules import is_symbolic_id_placeholder, parse_step_reference
 
 DEFAULT_AGENT_TOOLS = (
     "drive.listFolder",
@@ -111,6 +112,11 @@ class PlanRunner:
             request=request,
             result=result,
         )
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
         return result
 
 
@@ -351,7 +357,9 @@ def _system_prompt() -> str:
     return (
         "You are FileFlash Agent Planner. Return only JSON. "
         "Plan file-organization actions using the provided tools and metadata. "
-        "Do not read or infer file contents. Deletions are high risk and must be explicit."
+        "Do not read or infer file contents. Deletions are high risk and must be explicit. "
+        "Cross-step dependencies must use '$stepN.field' references only and never symbolic placeholders "
+        "like 'newFolderId'."
     )
 
 
@@ -370,6 +378,26 @@ def _user_prompt(
         "skill": _skill_payload(skill),
         "allowedTools": list(allowed_tools),
         "toolSchemas": _tool_schemas(allowed_tools),
+        "referenceContract": {
+            "syntax": "$stepN.field",
+            "rules": [
+                "If an action needs data from a previous action, use only '$stepN.field'.",
+                "N must refer to an existing previous step number.",
+                "Never invent symbolic placeholders such as 'newFolderId'.",
+            ],
+            "requiredExample": [
+                {
+                    "step": 1,
+                    "tool": "drive.createFolder",
+                    "input": {"parentFolderId": "root", "name": "Movies"},
+                },
+                {
+                    "step": 2,
+                    "tool": "drive.moveFile",
+                    "input": {"fileId": "13", "targetFolderId": "$step1.folderId"},
+                },
+            ],
+        },
         "fileMetadata": metadata,
         "outputSchema": {
             "summary": "string",
@@ -475,7 +503,83 @@ def _normalize_actions(
             confirmation_reason=raw_action.get("confirmationReason"),
         )
         normalized.append(normalize_action_risk(action))
-    return sorted(normalized, key=lambda action: action.step)
+    sorted_actions = sorted(normalized, key=lambda action: action.step)
+    _validate_action_inputs(sorted_actions)
+    return sorted_actions
+
+
+def _validate_action_inputs(actions: list[AgentProposedAction]) -> None:
+    steps = {action.step for action in actions}
+    for action in actions:
+        _validate_action_input_value(
+            value=action.input,
+            action_step=action.step,
+            known_steps=steps,
+            field_name=None,
+            field_path="input",
+        )
+
+
+def _validate_action_input_value(
+    *,
+    value: Any,
+    action_step: int,
+    known_steps: set[int],
+    field_name: str | None,
+    field_path: str,
+) -> None:
+    if isinstance(value, str):
+        reference = parse_step_reference(value)
+        if reference is not None:
+            ref_step, _ = reference
+            if ref_step not in known_steps:
+                raise ApiError(
+                    status_code=400,
+                    code=400,
+                    message=(
+                        f"Invalid plan action at step {action_step}: field '{field_path}' references "
+                        f"missing step {ref_step} via '{value}'."
+                    ),
+                )
+            if ref_step >= action_step:
+                raise ApiError(
+                    status_code=400,
+                    code=400,
+                    message=(
+                        f"Invalid plan action at step {action_step}: field '{field_path}' references "
+                        f"future step {ref_step} via '{value}'. Use only previous-step references."
+                    ),
+                )
+            return
+        if is_symbolic_id_placeholder(value=value, field_name=field_name):
+            raise ApiError(
+                status_code=400,
+                code=400,
+                message=(
+                    f"Invalid plan action at step {action_step}: field '{field_path}' uses "
+                    f"unresolved placeholder '{value}'. Use '$stepN.field' references."
+                ),
+            )
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_action_input_value(
+                value=item,
+                action_step=action_step,
+                known_steps=known_steps,
+                field_name=field_name,
+                field_path=f"{field_path}[{index}]",
+            )
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _validate_action_input_value(
+                value=item,
+                action_step=action_step,
+                known_steps=known_steps,
+                field_name=key,
+                field_path=f"{field_path}.{key}",
+            )
 
 
 def _cost_estimate(
