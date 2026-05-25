@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     app_env: str = Field(default="production", alias="APP_ENV")
 
+    default_admin_username: str | None = Field(default=None, alias="DEFAULT_ADMIN_USERNAME")
+    default_admin_email: str | None = Field(default=None, alias="DEFAULT_ADMIN_EMAIL")
+    default_admin_password: str | None = Field(default=None, alias="DEFAULT_ADMIN_PASSWORD")
+
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     ff_db_uri: str | None = Field(default=None, alias="FF_DB_URI")
 
@@ -72,11 +76,20 @@ class Settings(BaseSettings):
     object_storage_secure: bool = Field(default=False, alias="OBJECT_STORAGE_SECURE")
     object_storage_region: str | None = Field(default=None, alias="OBJECT_STORAGE_REGION")
 
-    upload_chunk_size_default: int = Field(default=5 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_DEFAULT")
+    upload_chunk_size_default: int = Field(
+        default=5 * 1024 * 1024,
+        alias="UPLOAD_CHUNK_SIZE_DEFAULT",
+    )
     upload_chunk_size_min: int = Field(default=1 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_MIN")
     upload_chunk_size_max: int = Field(default=16 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_MAX")
-    upload_single_file_size_max: int = Field(default=5 * 1024 * 1024 * 1024, alias="UPLOAD_SINGLE_FILE_SIZE_MAX")
-    upload_verify_merged_object_hash: bool = Field(default=False, alias="UPLOAD_VERIFY_MERGED_OBJECT_HASH")
+    upload_single_file_size_max: int = Field(
+        default=5 * 1024 * 1024 * 1024,
+        alias="UPLOAD_SINGLE_FILE_SIZE_MAX",
+    )
+    upload_verify_merged_object_hash: bool = Field(
+        default=False,
+        alias="UPLOAD_VERIFY_MERGED_OBJECT_HASH",
+    )
     starred_items_limit: int = Field(default=20, alias="STARRED_ITEMS_LIMIT")
     upload_session_ttl_hours: int = Field(default=24, alias="UPLOAD_SESSION_TTL_HOURS")
     upload_temp_prefix: str = Field(default="tmp", alias="UPLOAD_TEMP_PREFIX")
@@ -189,6 +202,25 @@ class Settings(BaseSettings):
         token_hash_secret = (self.token_hash_secret or "").strip()
         if token_hash_secret and len(token_hash_secret.encode("utf-8")) < self.MIN_SECRET_LENGTH:
             issues.append(f"TOKEN_HASH_SECRET must be at least {self.MIN_SECRET_LENGTH} bytes")
+        issues.extend(self.default_admin_configuration_issues)
+        return tuple(issues)
+
+    @property
+    def default_admin_configuration_issues(self) -> tuple[str, ...]:
+        if not self.is_production_env:
+            return ()
+
+        issues: list[str] = []
+        if not (self.default_admin_username or "").strip():
+            issues.append("DEFAULT_ADMIN_USERNAME is required in production")
+        if not (self.default_admin_email or "").strip():
+            issues.append("DEFAULT_ADMIN_EMAIL is required in production")
+
+        password = (self.default_admin_password or "").strip()
+        if not password:
+            issues.append("DEFAULT_ADMIN_PASSWORD is required in production")
+        elif len(password.encode("utf-8")) < self.MIN_SECRET_LENGTH:
+            issues.append(f"DEFAULT_ADMIN_PASSWORD must be at least {self.MIN_SECRET_LENGTH} bytes")
         return tuple(issues)
 
     def assert_runtime_security(self) -> None:
