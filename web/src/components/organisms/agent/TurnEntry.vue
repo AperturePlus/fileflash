@@ -23,7 +23,8 @@ const canExecute = computed(
   () =>
     Boolean(props.turn.agent.planHash) &&
     props.turn.agent.status === 'succeeded' &&
-    props.policy !== 'planOnly',
+    props.policy !== 'planOnly' &&
+    !props.turn.agent.executeJobId,
 );
 
 const isActive = computed(

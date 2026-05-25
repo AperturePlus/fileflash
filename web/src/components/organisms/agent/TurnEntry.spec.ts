@@ -47,6 +47,18 @@ describe('organisms/agent/TurnEntry', () => {
     expect(buttons.some((label) => /execute|执行/i.test(label))).toBe(false);
   });
 
+  it('hides Execute button once executeJobId is assigned', () => {
+    const w = mount(TurnEntry, {
+      props: {
+        turn: baseTurn({ executeJobId: 'exec-1' }),
+        policy: 'confirm',
+        focused: false,
+      },
+    });
+    const buttons = w.findAll('button').map((b) => b.text());
+    expect(buttons.some((label) => /execute|执行/i.test(label))).toBe(false);
+  });
+
   it('Cancel button present when running, clicking emits cancel', async () => {
     const w = mount(TurnEntry, {
       props: { turn: baseTurn({ status: 'running' }), policy: 'confirm', focused: false },
