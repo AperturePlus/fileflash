@@ -135,6 +135,62 @@ describe('useAgentSession', () => {
     expect(agentApi.planAgentTask).toHaveBeenCalled();
   });
 
+  it('runExecute is a no-op when executeJobId is already set', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'succeeded',
+      result: planResult,
+    } as any);
+    vi.mocked(agentApi.executeAgentPlan).mockResolvedValue({
+      jobId: 'job-2',
+      status: 'pending',
+      taskType: 'agent.execute',
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, runExecute, activeTurns } = useAgentSession();
+    taskInput.value = 'hello';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    turn.agent.executeJobId = 'already-exec-1';
+    await runExecute(turn.agent);
+    expect(agentApi.executeAgentPlan).not.toHaveBeenCalled();
+  });
+
+  it('runExecute is a no-op when the turn is not in succeeded state', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.getAgentJob).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'succeeded',
+      result: planResult,
+    } as any);
+    vi.mocked(agentApi.executeAgentPlan).mockResolvedValue({
+      jobId: 'job-2',
+      status: 'pending',
+      taskType: 'agent.execute',
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, runExecute, activeTurns } = useAgentSession();
+    taskInput.value = 'hello';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    turn.agent.status = 'running';
+    await runExecute(turn.agent);
+    expect(agentApi.executeAgentPlan).not.toHaveBeenCalled();
+  });
+
   it('runExecute calls executeAgentPlan and polls to succeeded', async () => {
     vi.mocked(agentApi.planAgentTask).mockResolvedValue({
       jobId: 'job-1',

@@ -382,6 +382,8 @@ export default function useAgentSession() {
 
   async function runExecute(msg: ChatMessage): Promise<void> {
     if (!msg.planResult || !msg.planHash) return;
+    if (msg.executeJobId) return;
+    if (msg.status !== 'succeeded') return;
     const highRisk = msg.planResult.proposedActions.some(
       (action) => action.riskLevel === 'high' || action.requiresConfirmation,
     );
