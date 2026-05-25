@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,10 +33,11 @@ class BackgroundJobService:
         agent_phase: str | None = None,
     ) -> BackgroundJob:
         now = datetime.now(UTC)
+        normalized_payload = jsonable_encoder(payload)
         job = BackgroundJob(
             task_type=task_type,
             status="pending",
-            payload=payload,
+            payload=normalized_payload,
             result={},
             error_message=None,
             attempt=0,

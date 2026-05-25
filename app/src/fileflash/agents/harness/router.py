@@ -52,7 +52,7 @@ class ToolRouter:
                     user_id=self.user_id,
                     query=query,
                 )
-            return result.model_dump(by_alias=True)
+            return result.model_dump(by_alias=True, mode="json")
 
         if tool == "drive.createFolder":
             name = _required_text(args, "name", "folderName")
@@ -61,7 +61,7 @@ class ToolRouter:
                 user_id=self.user_id,
                 payload=CreateFolderRequest(folder_name=name, parent_folder_id=str(parent_id)),
             )
-            data = result.model_dump(by_alias=True)
+            data = result.model_dump(by_alias=True, mode="json")
             data.setdefault("folderId", data.get("id"))
             return data
 
@@ -76,7 +76,7 @@ class ToolRouter:
                     share_handling=str(args.get("shareHandling") or "keep"),
                 ),
             )
-            return result.model_dump(by_alias=True)
+            return result.model_dump(by_alias=True, mode="json")
 
         if tool == "drive.moveFolder":
             folder_id = _required_text(args, "folderId", "id")
@@ -89,7 +89,7 @@ class ToolRouter:
                     share_handling=str(args.get("shareHandling") or "keep"),
                 ),
             )
-            return result.model_dump(by_alias=True)
+            return result.model_dump(by_alias=True, mode="json")
 
         if tool == "drive.renameFile":
             file_id = _required_text(args, "fileId", "id")
@@ -99,7 +99,7 @@ class ToolRouter:
                 file_id=file_id,
                 payload=RenameFileRequest(file_name=file_name),
             )
-            return result.model_dump(by_alias=True)
+            return result.model_dump(by_alias=True, mode="json")
 
         if tool == "drive.renameFolder":
             folder_id = _required_text(args, "folderId", "id")
@@ -109,12 +109,12 @@ class ToolRouter:
                 folder_id=folder_id,
                 payload=RenameFolderRequest(folder_name=folder_name),
             )
-            return result.model_dump(by_alias=True)
+            return result.model_dump(by_alias=True, mode="json")
 
         if tool == "drive.deleteFile":
             file_id = _required_text(args, "fileId", "id")
             result = await self.file_service.delete_file(user_id=self.user_id, file_id=file_id)
-            return result.model_dump(by_alias=True)
+            return result.model_dump(by_alias=True, mode="json")
 
         if tool == "drive.deleteFolder":
             folder_id = _required_text(args, "folderId", "id")
@@ -122,7 +122,7 @@ class ToolRouter:
                 user_id=self.user_id,
                 folder_id=folder_id,
             )
-            return result.model_dump(by_alias=True)
+            return result.model_dump(by_alias=True, mode="json")
 
         raise ApiError(status_code=400, code=400, message=f"Unsupported agent tool: {tool}")
 

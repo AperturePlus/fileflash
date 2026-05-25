@@ -72,7 +72,7 @@ class ExecuteService:
         job = await self.jobs.enqueue(
             self.db,
             task_type="agent.execute",
-            payload=payload.model_dump(by_alias=True),
+            payload=payload.model_dump(by_alias=True, mode="json"),
             requested_by=user_id,
             max_attempts=1,
             priority=100,
