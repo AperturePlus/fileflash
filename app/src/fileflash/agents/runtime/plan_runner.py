@@ -29,6 +29,7 @@ from .reference_rules import is_symbolic_id_placeholder, parse_step_reference
 
 DEFAULT_AGENT_TOOLS = (
     "drive.listFolder",
+    "drive.countFiles",
     "drive.createFolder",
     "drive.moveFile",
     "drive.moveFolder",
@@ -63,17 +64,26 @@ class PlanRunner:
         )
         metadata = await _collect_context_metadata(db, user_id=user_id, request=request)
         allowed_tools = _skill_tool_whitelist(skill)
-        llm_payload = await self.planner_client.create_plan(
-            system_prompt=_system_prompt(),
-            user_prompt=_user_prompt(
+        try:
+            llm_payload = await self.planner_client.create_plan(
+                system_prompt=_system_prompt(),
+                user_prompt=_user_prompt(
+                    request=request,
+                    skill=skill,
+                    allowed_tools=allowed_tools,
+                    metadata=metadata,
+                ),
+                max_tokens=request.hints.budget_tokens,
+                reasoning_effort=request.hints.reasoning_effort,
+            )
+        except ApiError as exc:
+            if exc.status_code != 502:
+                raise
+            llm_payload = _safe_fallback_payload(
                 request=request,
-                skill=skill,
-                allowed_tools=allowed_tools,
                 metadata=metadata,
-            ),
-            max_tokens=request.hints.budget_tokens,
-            reasoning_effort=request.hints.reasoning_effort,
-        )
+                allowed_tools=allowed_tools,
+            )
 
         actions = _normalize_actions(
             llm_payload=llm_payload,
@@ -182,7 +192,10 @@ def _skill_tool_whitelist(skill: AgentSkill | AgentSkillCatalogEntry | None) -> 
     elif skill is not None:
         raw = skill.tool_whitelist_json
     if isinstance(raw, list) and raw:
-        return tuple(str(item) for item in raw if str(item).strip())
+        tools = tuple(str(item) for item in raw if str(item).strip())
+        if "drive.countFiles" not in tools:
+            return (*tools, "drive.countFiles")
+        return tools
     return DEFAULT_AGENT_TOOLS
 
 
@@ -356,7 +369,8 @@ def _folder_metadata(row: Folder) -> dict[str, Any]:
 def _system_prompt() -> str:
     return (
         "You are FileFlash Agent Planner. Return only JSON. "
-        "Plan file-organization actions using the provided tools and metadata. "
+        "Plan file-management actions or read-only answers using the provided tools and metadata. "
+        "For count/how many questions, prefer drive.countFiles over listing folders. "
         "Do not read or infer file contents. Deletions are high risk and must be explicit. "
         "Cross-step dependencies must use '$stepN.field' references only and never symbolic placeholders "
         "like 'newFolderId'."
@@ -437,6 +451,10 @@ def _skill_payload(skill: AgentSkill | AgentSkillCatalogEntry | None) -> dict[st
 def _tool_schemas(allowed_tools: tuple[str, ...]) -> list[dict[str, Any]]:
     descriptions = {
         "drive.listFolder": "List direct folder contents by folderId.",
+        "drive.countFiles": (
+            "Count files under folderId. Supports recursive=true and category values "
+            "video, audio, image, document, archive, other. Use category=video for movie/电影 questions."
+        ),
         "drive.createFolder": "Create a folder under parentFolderId with name.",
         "drive.moveFile": "Move fileId into targetFolderId.",
         "drive.moveFolder": "Move folderId into targetParentId.",
@@ -446,6 +464,74 @@ def _tool_schemas(allowed_tools: tuple[str, ...]) -> list[dict[str, Any]]:
         "drive.deleteFolder": "Soft-delete folderId into recycle bin. High risk.",
     }
     return [{"tool": tool, "description": descriptions.get(tool, "")} for tool in allowed_tools]
+
+
+def _safe_fallback_payload(
+    *,
+    request: PlanAgentRequest,
+    metadata: dict[str, Any],
+    allowed_tools: tuple[str, ...],
+) -> dict[str, Any]:
+    fallback_actions: list[dict[str, Any]] = []
+    if "drive.countFiles" in allowed_tools and _looks_like_count_question(request.input):
+        fallback_actions.append(
+            {
+                "step": 1,
+                "tool": "drive.countFiles",
+                "input": {
+                    "folderId": metadata.get("rootFolderId") or request.context.root_folder_id or "root",
+                    "recursive": True,
+                    "category": _fallback_count_category(request.input),
+                },
+                "sideEffect": "read",
+                "riskLevel": "low",
+                "requiresConfirmation": False,
+            }
+        )
+        return {
+            "summary": "Planner fallback mode: generated a safe read-only count plan.",
+            "proposedActions": fallback_actions,
+        }
+    if "drive.listFolder" in allowed_tools:
+        root_folder_id = str(
+            metadata.get("rootFolderId")
+            or request.context.root_folder_id
+            or "root"
+        )
+        fallback_actions.append(
+            {
+                "step": 1,
+                "tool": "drive.listFolder",
+                "input": {"folderId": root_folder_id},
+                "sideEffect": "read",
+                "riskLevel": "low",
+                "requiresConfirmation": False,
+            }
+        )
+    return {
+        "summary": "Planner fallback mode: generated a safe read-only plan.",
+        "proposedActions": fallback_actions,
+    }
+
+
+def _looks_like_count_question(text: str) -> bool:
+    normalized = text.lower()
+    return any(token in normalized for token in ("多少", "几个", "几部", "count", "how many", "number of"))
+
+
+def _fallback_count_category(text: str) -> str | None:
+    normalized = text.lower()
+    if any(token in normalized for token in ("电影", "影片", "视频", "movie", "film", "video")):
+        return "video"
+    if any(token in normalized for token in ("图片", "照片", "image", "photo", "picture")):
+        return "image"
+    if any(token in normalized for token in ("音频", "音乐", "audio", "music")):
+        return "audio"
+    if any(token in normalized for token in ("文档", "document", "doc")):
+        return "document"
+    if any(token in normalized for token in ("压缩", "archive", "zip")):
+        return "archive"
+    return None
 
 
 def _normalize_actions(
