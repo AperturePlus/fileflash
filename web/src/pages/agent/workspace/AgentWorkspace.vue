@@ -71,6 +71,7 @@ const onHint = (text: string) => { taskInput.value = text; sendMessage(); };
   min-width: 0;
   overflow: hidden;
   background: var(--surface-base);
+  position: relative;
 }
 .aw__left { min-height: 0; min-width: 0; }
 .aw__center {
@@ -85,10 +86,11 @@ const onHint = (text: string) => { taskInput.value = text; sendMessage(); };
 @media (max-width: 1280px) {
   .aw { grid-template-columns: 240px 1fr; }
   .aw__right {
-    position: fixed; right: 0; top: 48px; bottom: 0;
+    position: absolute; right: 0; top: 0; bottom: 0;
+    width: 320px;
     z-index: 50;
     transform: translateX(100%);
-    transition: transform 200ms var(--mo-easing);
+    transition: transform var(--mo-duration-mid) var(--mo-easing);
     background: var(--surface-base);
     border-left: 1px solid var(--border-default);
   }
