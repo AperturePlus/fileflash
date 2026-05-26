@@ -217,9 +217,22 @@ const agPolicy = ref<'planOnly' | 'confirm' | 'autopilot'>('confirm');
 const agReasoningEffort = ref<'adaptive' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'>('adaptive');
 
 const makeTurn = (status: 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled', withPlan = true): AgentTurn => ({
-  user: { id: `u-${status}`, role: 'user', content: 'Sort by year then month', status: 'succeeded', timestamp: '2026-05-20T00:00:00Z' },
+  user: { id: `u-${status}`, role: 'user', content: 'Sort by year then month', status: 'succeeded', events: [], timestamp: '2026-05-20T00:00:00Z' },
   agent: {
     id: `a-${status}`, role: 'agent', content: '', status,
+    events: [
+      {
+        id: `e-${status}-1`,
+        jobId: `job-${status}`,
+        taskType: 'agent.execute',
+        type: 'job.running',
+        status: 'running',
+        agentPhase: 'executing',
+        message: '正在执行计划。',
+        data: {},
+        timestamp: '2026-05-20T00:00:00Z',
+      },
+    ],
     timestamp: '2026-05-20T00:00:00Z',
     planHash: withPlan && status !== 'pending' ? 'h-' + status : undefined,
     planResult: withPlan && status !== 'pending' ? {

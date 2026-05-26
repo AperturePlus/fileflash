@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from fileflash.core.deps import get_admin_users_service, require_admin
 from fileflash.core.errors import ApiError, api_error_handler
 from fileflash.routers.admin_users import router as admin_users_router
-from fileflash.schemas.admin.users import AdminUserItem, UpdateUserStatusResponse
+from fileflash.schemas.admin.users import AdminUserItem, AdminUserUsageStats, UpdateUserStatusResponse
 from fileflash.schemas.common import PaginatedData, PaginationMeta
 
 
@@ -29,6 +29,7 @@ class StubService:
             last_login_at=None,
             last_active_at=None,
             created_at=datetime.now(UTC),
+            usage_stats=AdminUserUsageStats(traffic_bytes=1024, agent_tokens=42),
         )
         return PaginatedData(
             items=[item],
@@ -73,12 +74,39 @@ def test_admin_can_list_users() -> None:
     body = resp.json()
     assert body["success"] is True
     assert body["data"]["items"][0]["username"] == "alice"
+    assert body["data"]["items"][0]["usageStats"] == {"trafficBytes": 1024, "agentTokens": 42}
 
 
 def test_non_admin_gets_403() -> None:
     with _client(admin=False) as c:
         resp = c.get("/api/v1/admin/users")
     assert resp.status_code == 403
+
+
+def test_usage_window_requires_both_bounds() -> None:
+    with _client(admin=True) as c:
+        resp = c.get("/api/v1/admin/users?usageFrom=2026-01-01T00:00:00Z")
+    assert resp.status_code == 400
+
+
+def test_usage_window_rejects_reversed_bounds() -> None:
+    with _client(admin=True) as c:
+        resp = c.get(
+            "/api/v1/admin/users"
+            "?usageFrom=2026-02-01T00:00:00Z"
+            "&usageTo=2026-01-01T00:00:00Z"
+        )
+    assert resp.status_code == 400
+
+
+def test_usage_window_rejects_more_than_90_days() -> None:
+    with _client(admin=True) as c:
+        resp = c.get(
+            "/api/v1/admin/users"
+            "?usageFrom=2026-01-01T00:00:00Z"
+            "&usageTo=2026-04-02T00:00:00Z"
+        )
+    assert resp.status_code == 400
 
 
 def test_admin_can_patch_status() -> None:

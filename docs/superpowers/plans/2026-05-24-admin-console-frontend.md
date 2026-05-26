@@ -87,6 +87,7 @@ web/src/pages/dashboard/index.ts
 ## Task 0: api / types / mock 对齐 Plan A 契约
 
 **Files:**
+
 - Modify: `web/src/api/storage.ts`, `web/src/api/log.ts`, `web/src/api/notification.ts`
 - Modify: `web/src/types/log.d.ts`, `web/src/types/notification.d.ts`
 - Modify: `web/src/mock/handlers/log.ts`, `web/src/mock/handlers/notification.ts`, `web/src/mock/handlers/storage.ts`
@@ -275,6 +276,7 @@ git commit -m "feat(web): align api+mock with Plan A admin contracts"
 ## Task 1: ConsoleLayout + Sidebar + 路由
 
 **Files:**
+
 - Create: `web/src/pages/console/ConsoleLayout.vue`, `ConsoleSidebar.vue`, `index.ts`
 - Modify: `web/src/router/routes.ts`
 
@@ -472,6 +474,7 @@ git commit -m "feat(web): scaffold Console layout, sidebar, and 9 subpage routes
 ## Task 2: 共享组件（components/console/）
 
 **Files:**
+
 - Create: `web/src/components/console/KpiCard.vue`, `StatusBadge.vue`, `FilterBar.vue`, `AdminTable.vue`, `TrendChart.vue`, `BroadcastComposer.vue`, `QuotaEditor.vue`, `index.ts`
 
 - [ ] **Step 2.1: KpiCard.vue**
@@ -840,6 +843,7 @@ git commit -m "feat(web): add Console shared components (KpiCard, AdminTable, et
 ## Task 3: Overview 子页
 
 **Files:**
+
 - Replace placeholder: `web/src/pages/console/overview/OverviewPage.vue`
 
 - [ ] **Step 3.1: 实现 OverviewPage**
@@ -1825,6 +1829,7 @@ git commit -m "feat(web): Console Rules page (registration email domains)"
 ## Task 12: 主框架集成、删除旧 Dashboard、i18n
 
 **Files:**
+
 - Modify: `web/src/components/organisms/shell/UserMenu.vue`
 - Modify: `web/src/i18n/messages.ts`
 - Delete: `web/src/pages/dashboard/Dashboard.vue`, `web/src/pages/dashboard/index.ts`
@@ -1856,9 +1861,10 @@ Edit `web/src/i18n/messages.ts`：
   | 'console.nav.rules'
 ```
 
-2. 中英 messages 表中，把原 `'header.menu.dashboard': '仪表盘'` 改为 `'header.menu.console': '控制台'`（en-US 改为 `'Console'`）。追加：
+1. 中英 messages 表中，把原 `'header.menu.dashboard': '仪表盘'` 改为 `'header.menu.console': '控制台'`（en-US 改为 `'Console'`）。追加：
 
 中文表：
+
 ```
     'console.title': '控制台',
     'console.nav.overview': '概览',
@@ -1873,6 +1879,7 @@ Edit `web/src/i18n/messages.ts`：
 ```
 
 英文表：
+
 ```
     'console.title': 'Console',
     'console.nav.overview': 'Overview',
@@ -1924,6 +1931,7 @@ git commit -m "feat(web): wire Console into MainLayout, drop legacy Dashboard, a
 ```bash
 cd web && bun run check
 ```
+
 Expected: 0 errors。
 
 - [ ] **Step 13.2: 全量构建**
@@ -1931,6 +1939,7 @@ Expected: 0 errors。
 ```bash
 cd web && bun run build
 ```
+
 Expected: dist/ 生成、无错误。
 
 - [ ] **Step 13.3: dev server 手动巡检**

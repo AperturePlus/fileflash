@@ -3,6 +3,8 @@ import { createMockId, getCurrentUser, mockJobs } from '../state';
 import type {
   AgentBackgroundJob,
   AgentExecutionResult,
+  AgentInboxMessageRequest,
+  AgentInboxMessageResponse,
   AgentPlanResult,
   AgentProposedAction,
   ExecuteAgentRequest,
@@ -12,6 +14,52 @@ import type {
 const nowIso = () => new Date().toISOString();
 
 const isTerminal = (status: string) => ['succeeded', 'failed', 'canceled'].includes(status);
+
+const extractCountSearch = (input: string) => {
+  let text = input.replace(/[?？!！。.,，;；:：]/g, ' ').trim();
+  [
+    '我上传了多少部',
+    '我上传了多少个',
+    '我上传了几部',
+    '我上传了几个',
+    '上传了多少部',
+    '上传了多少个',
+    '上传了几部',
+    '上传了几个',
+    '有多少部',
+    '有多少个',
+    '有几部',
+    '有几个',
+  ].forEach((phrase) => {
+    text = text.split(phrase).join(' ');
+  });
+  [
+    '我',
+    '上传',
+    '了',
+    '有',
+    '多少',
+    '几个',
+    '几部',
+    '多少部',
+    '多少个',
+    '部',
+    '个',
+    '文件',
+    '电影',
+    '影片',
+    '视频',
+    '音频',
+    '音乐',
+    '图片',
+    '照片',
+    '文档',
+    '压缩包',
+  ].forEach((token) => {
+    text = text.split(token).join(' ');
+  });
+  return text.split(/\s+/).filter(Boolean).join(' ') || undefined;
+};
 
 const pickPlanActions = (input: string): AgentProposedAction[] => {
   const normalized = input.toLowerCase();
@@ -33,9 +81,10 @@ const pickPlanActions = (input: string): AgentProposedAction[] => {
           folderId: 'root',
           recursive: true,
           category:
-            normalized.includes('电影') || normalized.includes('视频') || normalized.includes('movie')
+            normalized.includes('电影') || normalized.includes('视频') || normalized.includes('几部') || normalized.includes('movie')
               ? 'video'
               : undefined,
+          search: extractCountSearch(input),
         },
       },
     ];
@@ -194,6 +243,21 @@ const finishJobCanceled = (job: AgentBackgroundJob) => {
   job.updatedAt = timestamp;
 };
 
+const pauseJob = (job: AgentBackgroundJob) => {
+  if (isTerminal(job.status)) return;
+  const timestamp = nowIso();
+  job.status = 'paused';
+  job.agentPhase = 'executing';
+  job.updatedAt = timestamp;
+};
+
+const resumeJob = (job: AgentBackgroundJob) => {
+  if (isTerminal(job.status)) return;
+  const timestamp = nowIso();
+  job.status = 'running';
+  job.updatedAt = timestamp;
+};
+
 const getJobById = (jobId: string) => (mockJobs[jobId] || null) as AgentBackgroundJob | null;
 
 const shouldSimulateFailure = (input: string) => {
@@ -224,6 +288,24 @@ const schedulePlanLifecycle = (job: AgentBackgroundJob, payload: PlanAgentReques
       toolCalls: proposedActions.length,
       durationSecEstimate: proposedActions.length * 4,
     },
+    planningEvidence: [
+      {
+        step: 1,
+        tool: 'drive.searchFiles',
+        input: {
+          folderId: payload.context.rootFolderId || 'root',
+          query: payload.input,
+          category: 'video',
+        },
+        outputPreview: {
+          totalItems: 2,
+          items: [
+            { fileId: '19', name: '银翼杀手1982.mp4' },
+            { fileId: '20', name: '银翼杀手2049.mp4' },
+          ],
+        },
+      },
+    ],
   };
 
   setTimeout(() => {
@@ -272,10 +354,13 @@ const scheduleExecuteLifecycle = (job: AgentBackgroundJob, plan: AgentPlanResult
 const mockExecutionAnswer = (plan: AgentPlanResult) => {
   const countAction = plan.proposedActions.find((action) => action.tool === 'drive.countFiles');
   if (!countAction) return null;
+  const search = String(countAction.input.search || '').trim();
+  const qualifier = search ? `名称包含“${search}”的` : '';
   if (countAction.input.category === 'video') {
-    return '你上传了 7 部电影（按视频文件统计）。';
+    const total = search === '银翼杀手' ? 2 : 7;
+    return `你上传了 ${total} 部${qualifier}电影（按视频文件统计）。`;
   }
-  return '你上传了 12 个文件。';
+  return `你上传了 12 个${qualifier}文件。`;
 };
 
 export const setupAgentMocks = () => {
@@ -369,8 +454,8 @@ export const setupAgentMocks = () => {
     };
   });
 
-  Mock.mock(/\/api\/v1\/agent\/cancel\/([^/?]+)$/, 'post', (options) => {
-    const jobId = (options.url.match(/\/api\/v1\/agent\/cancel\/([^/?]+)/) || [])[1];
+  Mock.mock(/\/api\/v1\/agent\/jobs\/([^/?]+)\/messages$/, 'post', (options) => {
+    const jobId = (options.url.match(/\/api\/v1\/agent\/jobs\/([^/?]+)\/messages/) || [])[1];
     const job = jobId ? getJobById(jobId) : null;
     if (!job) {
       return {
@@ -381,19 +466,26 @@ export const setupAgentMocks = () => {
       };
     }
 
-    if (!isTerminal(job.status)) {
+    const payload = JSON.parse(options.body || '{}') as AgentInboxMessageRequest;
+    if (payload.kind === 'control.cancel') {
       finishJobCanceled(job);
+    } else if (payload.kind === 'control.pause') {
+      pauseJob(job);
+    } else if (payload.kind === 'control.resume') {
+      resumeJob(job);
     }
+
+    const response: AgentInboxMessageResponse = {
+      inboxMessageId: createMockId('inbox'),
+      kind: payload.kind,
+      acceptedAt: nowIso(),
+    };
 
     return {
       success: true,
       code: 200,
-      message: 'Job canceled',
-      data: {
-        jobId: job.jobId,
-        status: job.status,
-        canceledAt: job.cancelRequestedAt || nowIso(),
-      },
+      message: 'Agent message accepted',
+      data: response,
     };
   });
 };

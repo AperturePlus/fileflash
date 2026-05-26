@@ -12,6 +12,22 @@ export type AgentJobPhase =
   | 'completed'
   | 'failed'
   | 'canceled';
+export type AgentJobEventType =
+  | 'job.queued'
+  | 'job.running'
+  | 'plan.ready'
+  | 'tool.started'
+  | 'tool.succeeded'
+  | 'tool.failed'
+  | 'tool.partial'
+  | 'agent.thinking'
+  | 'agent.progress'
+  | 'agent.ask'
+  | 'agent.paused'
+  | 'agent.resumed'
+  | 'job.succeeded'
+  | 'job.failed'
+  | 'job.canceled';
 
 export interface AgentDataPolicy {
   allowFileContent: boolean;
@@ -68,6 +84,13 @@ export interface AgentChosenSkill {
   name: string;
 }
 
+export interface AgentPlanningEvidence {
+  step: number;
+  tool: string;
+  input: Record<string, any>;
+  outputPreview: Record<string, any>;
+}
+
 export interface AgentPlanResult {
   planJobId: string;
   planHash: string;
@@ -76,6 +99,7 @@ export interface AgentPlanResult {
   summary: string;
   requiresConfirmation: boolean;
   costEstimate: AgentCostEstimate;
+  planningEvidence?: AgentPlanningEvidence[] | null;
 }
 
 export interface ExecuteAgentRequest {
@@ -95,12 +119,6 @@ export interface ExecuteAgentResponse {
   taskType: 'agent.execute';
 }
 
-export interface CancelAgentResponse {
-  jobId: string;
-  status: string;
-  canceledAt: string;
-}
-
 export interface AgentExecutionResult {
   planJobId: string;
   executeJobId: string;
@@ -112,7 +130,69 @@ export interface AgentExecutionResult {
   finishedAt: string;
 }
 
+export interface AgentJobEvent {
+  id: string;
+  jobId: string;
+  taskType: string;
+  type: AgentJobEventType;
+  status: string;
+  agentPhase?: AgentJobPhase | string | null;
+  message: string;
+  data: Record<string, any>;
+  timestamp: string;
+}
+
 export type AgentBackgroundJob<T = Record<string, any>> = BackgroundJob<T> & {
   agentPhase?: AgentJobPhase | null;
   cancelRequestedAt?: string | null;
 };
+
+// ----------------- Inbox (upstream channel) -----------------
+
+export type AgentInboxMessageKind =
+  | 'reply'
+  | 'control.pause'
+  | 'control.resume'
+  | 'control.approve'
+  | 'control.deny'
+  | 'control.skip'
+  | 'control.cancel';
+
+export interface AgentInboxMessageRequest {
+  kind: AgentInboxMessageKind;
+  replyTo?: string;
+  value?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentInboxMessageResponse {
+  inboxMessageId: string;
+  kind: AgentInboxMessageKind;
+  acceptedAt: string;
+}
+
+// ----------------- New event payloads -----------------
+
+export interface AgentAskPayload {
+  messageId: string;
+  prompt: string;
+  schema: Record<string, unknown>;
+  timeoutSec: number;
+}
+
+export interface AgentProgressPayload {
+  step: number;
+  total: number;
+  message?: string;
+  percent?: number;
+}
+
+export interface AgentThinkingPayload {
+  text: string;
+}
+
+export interface AgentToolPartialPayload {
+  step: number;
+  tool: string;
+  chunk: unknown;
+}

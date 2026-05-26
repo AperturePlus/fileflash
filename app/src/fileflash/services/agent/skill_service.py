@@ -23,6 +23,7 @@ from ...schemas.agent_skill import (
     UpdateAgentSkillRequest,
 )
 from ...schemas.common import PaginatedData, PaginationMeta
+from ...agents.harness.tool_registry import REGISTRY
 
 
 class SkillService:
@@ -65,6 +66,19 @@ class SkillService:
         if isinstance(raw, list):
             return [str(item) for item in raw if isinstance(item, (str, int, float))]
         return []
+
+    @staticmethod
+    def _validate_tool_whitelist(raw: list[str]) -> list[str]:
+        tools = [str(item).strip() for item in raw if str(item).strip()]
+        unknown = REGISTRY.unknown_names(tools)
+        if unknown:
+            raise ApiError(
+                status_code=422,
+                code=422,
+                message="Unknown agent tool in toolWhitelist",
+                data={"unknownTools": sorted(unknown)},
+            )
+        return tools
 
     @classmethod
     def _to_item(cls, entity: AgentSkill) -> AgentSkillItem:
@@ -140,13 +154,14 @@ class SkillService:
 
     async def create_custom_skill(self, *, user_id: int, payload: CreateAgentSkillRequest) -> AgentSkillItem:
         skill_key = await self._generate_unique_user_skill_key(user_id=user_id, name=payload.name)
+        tool_whitelist = self._validate_tool_whitelist(payload.tool_whitelist)
         entity = await self.skills.create(
             values={
                 "skill_key": skill_key,
                 "name": payload.name,
                 "description": payload.description,
                 "triggers_text": payload.triggers_text,
-                "tool_whitelist_json": payload.tool_whitelist,
+                "tool_whitelist_json": tool_whitelist,
                 "plan_template_json": payload.plan_template,
                 "inputs_schema_json": payload.inputs_schema,
                 "outputs_schema_json": payload.outputs_schema,
@@ -178,7 +193,9 @@ class SkillService:
         if "triggers_text" in fields_set:
             values["triggers_text"] = payload.triggers_text
         if "tool_whitelist" in fields_set:
-            values["tool_whitelist_json"] = payload.tool_whitelist or []
+            values["tool_whitelist_json"] = self._validate_tool_whitelist(
+                payload.tool_whitelist or []
+            )
         if "plan_template" in fields_set:
             values["plan_template_json"] = payload.plan_template or {}
         if "inputs_schema" in fields_set:
@@ -232,12 +249,13 @@ class SkillService:
 
         results: list[ImportAgentSkillResult] = []
         for item in payload.items:
+            tool_whitelist = self._validate_tool_whitelist(item.tool_whitelist)
             existing = existing_by_key.get(item.skill_key)
             values = {
                 "name": item.name,
                 "description": item.description,
                 "triggers_text": item.triggers_text,
-                "tool_whitelist_json": item.tool_whitelist,
+                "tool_whitelist_json": tool_whitelist,
                 "plan_template_json": item.plan_template,
                 "inputs_schema_json": item.inputs_schema,
                 "outputs_schema_json": item.outputs_schema,

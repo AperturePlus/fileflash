@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import Button from '../../molecules/Button.vue';
 import MonoNumber from '../../atoms/MonoNumber.vue';
 import PlanActionRow from './PlanActionRow.vue';
+import AskPrompt from './AskPrompt.vue';
+import ControlBar from './ControlBar.vue';
 import { useLocaleStore } from '../../../store/locale';
 import type { LocaleKey } from '../../../i18n/messages';
-import type { AgentExecutionPolicy } from '../../../types/agent';
+import type { AgentExecutionPolicy, AgentPlanningEvidence } from '../../../types/agent';
 import type { AgentTurn } from '../../../composables/useAgentSession';
 
 const props = defineProps<{
@@ -14,7 +16,17 @@ const props = defineProps<{
   focused: boolean;
 }>();
 
-defineEmits<{ execute: []; cancel: []; focus: [] }>();
+defineEmits<{
+  execute: [];
+  cancel: [];
+  focus: [];
+  reply: [value: unknown];
+  pause: [];
+  resume: [];
+  skip: [];
+  approve: [];
+  deny: [];
+}>();
 
 const localeStore = useLocaleStore();
 const t = localeStore.t;
@@ -28,17 +40,60 @@ const canExecute = computed(
 );
 
 const isActive = computed(
-  () => props.turn.agent.status === 'pending' || props.turn.agent.status === 'running',
+  () =>
+    props.turn.agent.status === 'pending' ||
+    props.turn.agent.status === 'running' ||
+    props.turn.agent.status === 'paused' ||
+    props.turn.agent.status === 'waiting_for_user',
 );
 
 const resultText = computed(
   () => props.turn.agent.executeResult?.answer || props.turn.agent.executeResult?.summary || '',
 );
 
+const activityEvents = computed(() =>
+  (props.turn.agent.events || [])
+    .filter(
+      (event) =>
+        event.message &&
+        event.type !== 'job.succeeded' &&
+        event.type !== 'agent.thinking' &&
+        event.type !== 'agent.progress' &&
+        event.type !== 'tool.partial',
+    )
+    .slice(-4),
+);
+
+const hasPlanRiskStep = computed(() =>
+  Boolean(
+    props.turn.agent.planResult?.proposedActions?.some(
+      (action) => action.riskLevel === 'high' || action.requiresConfirmation,
+    ),
+  ),
+);
+
+const thinkingExpanded = ref(false);
+
 const statusLabel = computed(() => {
   const key = `agent.v2.turn.status.${props.turn.agent.status}` as LocaleKey;
   return t(key);
 });
+
+const planningEvidence = computed(
+  () => props.turn.agent.planResult?.planningEvidence?.filter(Boolean) ?? [],
+);
+const visibleEvidence = computed(() => planningEvidence.value.slice(0, 3));
+const hiddenEvidence = computed(() => planningEvidence.value.slice(3));
+
+const formatEvidencePreview = (evidence: AgentPlanningEvidence) =>
+  JSON.stringify(
+    {
+      input: evidence.input || {},
+      outputPreview: evidence.outputPreview || {},
+    },
+    null,
+    2,
+  );
 
 const formatTime = (iso: string) => {
   try {
@@ -69,7 +124,42 @@ const formatTime = (iso: string) => {
           }}</span>
         </header>
 
-        <div v-if="isActive" class="ff-te__progress" />
+        <div v-if="turn.agent.status === 'running' || turn.agent.status === 'paused'" class="ff-te__progress" />
+
+        <div v-if="turn.agent.progress" class="ff-te__progress-meta">
+          <span class="ff-te__progress-label">{{ t('agent.v2.turn.progress.label') }}</span>
+          <span class="ff-te__progress-num">
+            <MonoNumber :value="`${turn.agent.progress.step}/${turn.agent.progress.total}`" />
+          </span>
+          <span v-if="turn.agent.progress.message" class="ff-te__progress-msg">
+            {{ turn.agent.progress.message }}
+          </span>
+        </div>
+
+        <details
+          v-if="turn.agent.thinking"
+          class="ff-te__thinking"
+          :open="thinkingExpanded"
+          @toggle="(event) => (thinkingExpanded = (event.target as HTMLDetailsElement).open)"
+        >
+          <summary :title="t('agent.v2.turn.thinking.toggle')">
+            {{ t('agent.v2.turn.thinking.label') }}
+          </summary>
+          <pre class="ff-te__thinking-body">{{ turn.agent.thinking }}</pre>
+        </details>
+
+        <ol v-if="activityEvents.length" class="ff-te__events">
+          <li v-for="event in activityEvents" :key="event.id" class="ff-te__event">
+            <span class="ff-te__event-dot" />
+            <span>{{ event.message }}</span>
+          </li>
+        </ol>
+
+        <AskPrompt
+          v-if="turn.agent.pendingAsk"
+          :ask="turn.agent.pendingAsk"
+          @reply="(value) => $emit('reply', value)"
+        />
 
         <p v-if="resultText" class="ff-te__sum ff-te__answer">
           {{ resultText }}
@@ -78,6 +168,29 @@ const formatTime = (iso: string) => {
         <p v-else-if="turn.agent.planResult?.summary" class="ff-te__sum">
           {{ turn.agent.planResult.summary }}
         </p>
+
+        <section v-if="planningEvidence.length" class="ff-te__evidence">
+          <p class="ff-te__evidence-label">{{ t('agent.v2.turn.evidence.label') }}</p>
+          <ol class="ff-te__evidence-list">
+            <li v-for="item in visibleEvidence" :key="`evidence-${item.step}-${item.tool}`" class="ff-te__evidence-item">
+              <span class="ff-te__evidence-head">#{{ item.step }} · {{ item.tool }}</span>
+              <pre class="ff-te__evidence-json">{{ formatEvidencePreview(item) }}</pre>
+            </li>
+          </ol>
+          <details v-if="hiddenEvidence.length" class="ff-te__evidence-more">
+            <summary>+{{ hiddenEvidence.length }} {{ t('agent.v2.turn.evidence.more') }}</summary>
+            <ol class="ff-te__evidence-list">
+              <li
+                v-for="item in hiddenEvidence"
+                :key="`evidence-hidden-${item.step}-${item.tool}`"
+                class="ff-te__evidence-item"
+              >
+                <span class="ff-te__evidence-head">#{{ item.step }} · {{ item.tool }}</span>
+                <pre class="ff-te__evidence-json">{{ formatEvidencePreview(item) }}</pre>
+              </li>
+            </ol>
+          </details>
+        </section>
 
         <section v-if="!resultText && turn.agent.planResult?.proposedActions?.length" class="ff-te__actions">
           <PlanActionRow
@@ -116,12 +229,17 @@ const formatTime = (iso: string) => {
             size="sm"
             @click.stop="$emit('execute')"
           >{{ t('agent.v2.turn.execute') }}</Button>
-          <Button
+          <ControlBar
             v-if="isActive"
-            variant="ghost"
-            size="sm"
-            @click.stop="$emit('cancel')"
-          >{{ t('agent.v2.turn.cancel') }}</Button>
+            :status="turn.agent.status"
+            :has-plan-risk-step="hasPlanRiskStep"
+            @pause="$emit('pause')"
+            @resume="$emit('resume')"
+            @skip="$emit('skip')"
+            @approve="$emit('approve')"
+            @deny="$emit('deny')"
+            @cancel="$emit('cancel')"
+          />
         </div>
       </div>
     </div>
@@ -176,6 +294,8 @@ const formatTime = (iso: string) => {
 .ff-te__status--succeeded { color: var(--status-success); }
 .ff-te__status--failed { color: var(--status-error); }
 .ff-te__status--canceled { color: var(--text-tertiary); }
+.ff-te__status--waiting_for_user { color: var(--ac); }
+.ff-te__status--paused { color: var(--status-warning); }
 
 .ff-te__progress {
   height: 2px;
@@ -188,8 +308,114 @@ const formatTime = (iso: string) => {
   100% { background-position: -200% 0; }
 }
 
+.ff-te__progress-meta {
+  display: flex;
+  gap: var(--sp-md);
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.ff-te__progress-label { color: var(--text-tertiary); }
+.ff-te__progress-num { color: var(--text-secondary); }
+.ff-te__progress-msg {
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ff-te__thinking {
+  border: 1px dashed var(--border-default);
+  padding: var(--sp-sm) var(--sp-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+.ff-te__thinking summary {
+  cursor: pointer;
+  color: var(--text-tertiary);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.ff-te__thinking-body {
+  margin: var(--sp-sm) 0 0;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  max-height: 240px;
+  overflow: auto;
+}
+
 .ff-te__sum { margin: 0; color: var(--text-primary); }
 .ff-te__answer { white-space: pre-wrap; }
+
+.ff-te__events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ff-te__event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--text-tertiary);
+}
+.ff-te__event-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--ac);
+  flex: 0 0 auto;
+}
+
+.ff-te__evidence {
+  display: grid;
+  gap: var(--sp-xs);
+}
+.ff-te__evidence-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--text-tertiary);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.ff-te__evidence-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: var(--sp-xs);
+}
+.ff-te__evidence-item {
+  display: grid;
+  gap: 4px;
+}
+.ff-te__evidence-head {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+}
+.ff-te__evidence-json {
+  margin: 0;
+  padding: var(--sp-xs);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ff-te__evidence-more summary {
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
 
 .ff-te__actions {
   border: 1px solid var(--border-subtle);

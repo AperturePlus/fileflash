@@ -20,6 +20,23 @@ AgentJobPhase = Literal[
     "failed",
     "canceled",
 ]
+AgentJobEventType = Literal[
+    "job.queued",
+    "job.running",
+    "plan.ready",
+    "tool.started",
+    "tool.succeeded",
+    "tool.failed",
+    "tool.partial",
+    "agent.thinking",
+    "agent.progress",
+    "agent.ask",
+    "agent.paused",
+    "agent.resumed",
+    "job.succeeded",
+    "job.failed",
+    "job.canceled",
+]
 
 
 class AgentDataPolicy(CamelModel):
@@ -77,6 +94,13 @@ class AgentChosenSkill(CamelModel):
     name: str
 
 
+class AgentPlanningEvidence(CamelModel):
+    step: int = Field(ge=1)
+    tool: str = Field(min_length=1, max_length=120)
+    input: dict[str, Any] = Field(default_factory=dict)
+    output_preview: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentPlanResult(CamelModel):
     plan_job_id: str
     plan_hash: str
@@ -85,6 +109,7 @@ class AgentPlanResult(CamelModel):
     summary: str
     requires_confirmation: bool
     cost_estimate: AgentCostEstimate
+    planning_evidence: list[AgentPlanningEvidence] | None = None
 
 
 class AgentApproval(CamelModel):
@@ -123,6 +148,42 @@ class AgentExecutionResult(CamelModel):
     finished_at: datetime
 
 
+class AgentJobEvent(CamelModel):
+    id: str
+    job_id: str
+    task_type: str
+    type: AgentJobEventType
+    status: str
+    agent_phase: str | None = None
+    message: str
+    data: dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime
+
+
+AgentInboxMessageKind = Literal[
+    "reply",
+    "control.pause",
+    "control.resume",
+    "control.approve",
+    "control.deny",
+    "control.skip",
+    "control.cancel",
+]
+
+
+class AgentInboxMessageRequest(CamelModel):
+    kind: AgentInboxMessageKind
+    reply_to: str | None = None
+    value: Any = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentInboxMessageResponse(CamelModel):
+    inbox_message_id: str
+    kind: AgentInboxMessageKind
+    accepted_at: datetime
+
+
 __all__ = [
     "AgentActionSideEffect",
     "AgentApproval",
@@ -132,8 +193,14 @@ __all__ = [
     "AgentExecutionPolicy",
     "AgentExecutionResult",
     "AgentHints",
+    "AgentInboxMessageKind",
+    "AgentInboxMessageRequest",
+    "AgentInboxMessageResponse",
     "AgentJobPhase",
+    "AgentJobEvent",
+    "AgentJobEventType",
     "AgentPlanContext",
+    "AgentPlanningEvidence",
     "AgentPlanResult",
     "AgentProposedAction",
     "AgentReasoningEffort",

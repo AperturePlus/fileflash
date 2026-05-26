@@ -2,23 +2,46 @@
 import { onMounted, ref } from 'vue';
 import { getAdminUsers, updateUserStatus } from '../../../api/user';
 import { AdminTable, FilterBar, StatusBadge } from '../../../components/console';
+import type { AdminUserItem } from '../../../types/user';
 import { ui } from '../../../utils/ui';
 
-interface AdminUser {
-  userId: string;
-  username: string;
-  email: string;
-  role: string;
-  status: 'active' | 'suspended';
-  lastLoginAt: string | null;
-  createdAt: string;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function toDateInput(date: Date) {
+  return date.toISOString().slice(0, 10);
 }
 
-const items = ref<AdminUser[]>([]);
+function startOfUtcDay(value: string) {
+  return `${value}T00:00:00.000Z`;
+}
+
+function endOfUtcDay(value: string) {
+  return `${value}T23:59:59.999Z`;
+}
+
+function formatBytes(bytes: number) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = Math.max(0, bytes);
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+const today = new Date();
+const items = ref<AdminUserItem[]>([]);
 const totalPages = ref(1);
 const currentPage = ref(1);
 const search = ref('');
 const status = ref<'all' | 'active' | 'suspended'>('all');
+const usageFrom = ref(toDateInput(new Date(today.getTime() - 7 * DAY_MS)));
+const usageTo = ref(toDateInput(today));
 const loading = ref(false);
 
 async function load(page = 1) {
@@ -29,8 +52,12 @@ async function load(page = 1) {
       perPage: 20,
       ...(search.value ? { search: search.value.trim() } : {}),
       ...(status.value !== 'all' ? { status: status.value } : {}),
+      ...(usageFrom.value && usageTo.value ? {
+        usageFrom: startOfUtcDay(usageFrom.value),
+        usageTo: endOfUtcDay(usageTo.value),
+      } : {}),
     });
-    items.value = resp.items as AdminUser[];
+    items.value = resp.items;
     totalPages.value = resp.pagination.totalPages;
     currentPage.value = resp.pagination.currentPage;
   } finally {
@@ -38,7 +65,8 @@ async function load(page = 1) {
   }
 }
 
-async function toggleStatus(user: AdminUser) {
+async function toggleStatus(user: AdminUserItem) {
+  if (user.status !== 'active' && user.status !== 'suspended') return;
   const next = user.status === 'active' ? 'suspended' : 'active';
   await updateUserStatus(user.userId, next);
   user.status = next;
@@ -59,6 +87,14 @@ onMounted(() => load(1));
         <option value="active">Active</option>
         <option value="suspended">Suspended</option>
       </select>
+      <label class="filter-field">
+        <span>Usage from</span>
+        <input v-model="usageFrom" type="date" />
+      </label>
+      <label class="filter-field">
+        <span>Usage to</span>
+        <input v-model="usageTo" type="date" />
+      </label>
     </FilterBar>
 
     <AdminTable
@@ -71,16 +107,20 @@ onMounted(() => load(1));
       <template #row="{ row }">
         <div class="row">
           <div class="row__main">
-            <strong>{{ (row as AdminUser).username }}</strong>
-            <small>{{ (row as AdminUser).email }} · {{ (row as AdminUser).role }}</small>
+            <strong>{{ (row as AdminUserItem).username }}</strong>
+            <small>{{ (row as AdminUserItem).email }} · {{ (row as AdminUserItem).role }}</small>
+            <div class="row__usage">
+              <span>Uploaded {{ formatBytes((row as AdminUserItem).usageStats.trafficBytes) }}</span>
+              <span>Agent {{ formatNumber((row as AdminUserItem).usageStats.agentTokens) }} tokens</span>
+            </div>
           </div>
           <div class="row__actions">
             <StatusBadge
-              :value="(row as AdminUser).status"
-              :tone="(row as AdminUser).status === 'active' ? 'positive' : 'danger'"
+              :value="(row as AdminUserItem).status"
+              :tone="(row as AdminUserItem).status === 'active' ? 'positive' : 'danger'"
             />
-            <button class="row__btn" @click="toggleStatus(row as AdminUser)">
-              {{ (row as AdminUser).status === 'active' ? 'Suspend' : 'Activate' }}
+            <button class="row__btn" @click="toggleStatus(row as AdminUserItem)">
+              {{ (row as AdminUserItem).status === 'active' ? 'Suspend' : 'Activate' }}
             </button>
           </div>
         </div>
@@ -103,6 +143,14 @@ onMounted(() => load(1));
   font-weight: var(--weight-medium);
   letter-spacing: var(--tracking-snug);
 }
+.filter-field {
+  display: flex;
+  gap: var(--sp-xs);
+  align-items: center;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
 .row {
   display: flex;
   justify-content: space-between;
@@ -120,6 +168,15 @@ onMounted(() => load(1));
 }
 .row__main small {
   color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+}
+.row__usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-sm);
+  margin-top: 6px;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: var(--text-small);
 }

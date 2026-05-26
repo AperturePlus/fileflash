@@ -89,6 +89,7 @@ app/src/fileflash/
 ## Task 0: 基础设施（admin 包 + 状态映射）
 
 **Files:**
+
 - Create: `app/src/fileflash/schemas/admin/__init__.py`
 - Create: `app/src/fileflash/services/admin/__init__.py`
 - Create: `app/src/fileflash/services/admin/_status.py`
@@ -214,6 +215,7 @@ git commit -m "feat(admin): scaffold admin packages and user status mapping"
 ## Task 1: Admin Users — schemas + service
 
 **Files:**
+
 - Create: `app/src/fileflash/schemas/admin/users.py`
 - Create: `app/src/fileflash/services/admin/users.py`
 - Test: `app/tests/test_admin_users_service.py`
@@ -602,6 +604,7 @@ git commit -m "feat(admin): users service with list and set_status (last-admin g
 ## Task 2: Admin Users — router + deps + 注册
 
 **Files:**
+
 - Create: `app/src/fileflash/routers/admin_users.py`
 - Modify: `app/src/fileflash/core/deps.py`
 - Modify: `app/src/fileflash/routers/__init__.py`
@@ -785,6 +788,7 @@ git commit -m "feat(admin): /admin/users list + /admin/users/{id}/status routes"
 ## Task 3: Admin Storage（summary / users / quota / usage-trend）
 
 **Files:**
+
 - Create: `app/src/fileflash/schemas/admin/storage.py`
 - Create: `app/src/fileflash/services/admin/storage.py`
 - Create: `app/src/fileflash/routers/admin_storage.py`
@@ -1370,6 +1374,7 @@ git commit -m "feat(admin): /admin/storage summary, users, quota, usage-trend"
 ## Task 4: Admin Files（list + rescan）
 
 **Files:**
+
 - Create: `app/src/fileflash/schemas/admin/files.py`
 - Create: `app/src/fileflash/services/admin/files.py`
 - Create: `app/src/fileflash/routers/admin_files.py`
@@ -1836,6 +1841,7 @@ git commit -m "feat(admin): /admin/files list + /admin/files/{id}/rescan with ev
 ## Task 5: Admin Moderation（violations list + resolve）
 
 **Files:**
+
 - Create: `app/src/fileflash/schemas/admin/moderation.py`
 - Create: `app/src/fileflash/services/admin/moderation.py`
 - Create: `app/src/fileflash/routers/admin_moderation.py`
@@ -2201,6 +2207,7 @@ git commit -m "feat(admin): /admin/violations list + resolve via ModerationCase"
 ## Task 6: Admin Logs
 
 **Files:**
+
 - Create: `app/src/fileflash/schemas/admin/logs.py`
 - Create: `app/src/fileflash/services/admin/logs.py`
 - Create: `app/src/fileflash/routers/admin_logs.py`
@@ -2421,6 +2428,7 @@ git commit -m "feat(admin): /admin/logs list with filters"
 ## Task 7: Admin Notifications（list / broadcast / read / archive）
 
 **Files:**
+
 - Create: `app/src/fileflash/schemas/admin/notifications.py`
 - Create: `app/src/fileflash/services/admin/notifications.py`
 - Create: `app/src/fileflash/routers/admin_notifications.py`
@@ -2873,6 +2881,7 @@ git commit -m "feat(admin): /admin/notifications list, broadcast, archive"
 ## Task 8: Admin System（health + rate-limit）
 
 **Files:**
+
 - Create: `app/src/fileflash/schemas/admin/system.py`
 - Create: `app/src/fileflash/services/admin/system.py`
 - Create: `app/src/fileflash/routers/admin_system.py`

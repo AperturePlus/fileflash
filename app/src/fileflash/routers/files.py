@@ -9,7 +9,13 @@ from fastapi.responses import FileResponse, StreamingResponse
 from jwt import InvalidTokenError
 from starlette.background import BackgroundTask
 
-from ..core.deps import get_archive_service, get_current_user, get_file_service, get_settings_dep
+from ..core.deps import (
+    get_archive_service,
+    get_current_user,
+    get_download_rate_limit_service,
+    get_file_service,
+    get_settings_dep,
+)
 from ..core.errors import ApiError, api_success
 from ..core.security import create_file_preview_token, decode_file_preview_token
 from ..core.settings import Settings
@@ -26,9 +32,17 @@ from ..schemas.file import (
 )
 from ..schemas.job import to_background_job_response
 from ..services.archive import ArchiveService
+from ..services.download_rate_limit import DownloadRateLimitService
 from ..services.file import FileService
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+
+def _content_length(headers: dict[str, str]) -> int:
+    try:
+        return max(0, int(headers.get("Content-Length") or 0))
+    except ValueError:
+        return 0
 
 
 @router.get("")
@@ -112,11 +126,14 @@ async def batch_download_files(
     payload: BatchDownloadRequest,
     current_user: User = Depends(get_current_user),
     file_service: FileService = Depends(get_file_service),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
-    archive_path, archive_name = await file_service.create_batch_download_archive(
+    plan = await file_service.create_batch_download_plan(
         user_id=current_user.user_id,
         payload=payload,
     )
+    await download_limiter.enforce_user(user=current_user, bytes_count=plan.estimated_bytes)
+    archive_path, archive_name = await file_service.create_batch_download_archive_from_plan(plan=plan)
     return FileResponse(
         archive_path,
         media_type="application/zip",
@@ -146,12 +163,14 @@ async def download_file(
     range_header: str | None = Header(default=None, alias="Range"),
     current_user: User = Depends(get_current_user),
     file_service: FileService = Depends(get_file_service),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
     result = await file_service.get_download_stream(
         user_id=current_user.user_id,
         file_id=file_id,
         range_header=range_header,
     )
+    await download_limiter.enforce_user(user=current_user, bytes_count=_content_length(result.headers))
     return StreamingResponse(
         result.stream,
         media_type=result.content_type,
@@ -166,12 +185,14 @@ async def preview_file(
     range_header: str | None = Header(default=None, alias="Range"),
     current_user: User = Depends(get_current_user),
     file_service: FileService = Depends(get_file_service),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
     result = await file_service.get_preview_stream(
         user_id=current_user.user_id,
         file_id=file_id,
         range_header=range_header,
     )
+    await download_limiter.enforce_user(user=current_user, bytes_count=_content_length(result.headers))
     return StreamingResponse(
         result.stream,
         media_type=result.content_type,
@@ -216,6 +237,7 @@ async def preview_file_stream(
     range_header: str | None = Header(default=None, alias="Range"),
     file_service: FileService = Depends(get_file_service),
     settings: Settings = Depends(get_settings_dep),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
     try:
         payload = decode_file_preview_token(token, settings)
@@ -232,6 +254,7 @@ async def preview_file_stream(
         file_id=file_id,
         range_header=range_header,
     )
+    await download_limiter.enforce_user_id(user_id=user_id, bytes_count=_content_length(result.headers))
     return StreamingResponse(
         result.stream,
         media_type=result.content_type,

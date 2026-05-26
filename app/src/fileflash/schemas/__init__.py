@@ -1,12 +1,32 @@
-from .auth import (
-    ForgotPasswordRequest,
-    ForgotPasswordResponse,
-    LoginRequest,
-    RegisterResponseData,
-    RegisterRequest,
-    ResetPasswordRequest,
-    TokenResponse,
-    VerifyEmailRequest,
+from .admin.files import (
+    AdminFileAuditDetail,
+    AdminFileAuditItem,
+    AdminFileAuditOwner,
+    AdminFileLatestScan,
+    ListAdminFilesQuery,
+    RescanResponse,
+)
+from .agent import (
+    AgentApproval,
+    AgentChosenSkill,
+    AgentCostEstimate,
+    AgentDataPolicy,
+    AgentExecutionResult,
+    AgentHints,
+    AgentInboxMessageKind,
+    AgentInboxMessageRequest,
+    AgentInboxMessageResponse,
+    AgentJobEvent,
+    AgentPlanContext,
+    AgentPlanningEvidence,
+    AgentPlanResult,
+    AgentProposedAction,
+    AgentReasoningEffort,
+    CancelAgentResponse,
+    ExecuteAgentRequest,
+    ExecuteAgentResponse,
+    PlanAgentRequest,
+    PlanAgentResponse,
 )
 from .agent_skill import (
     AgentSkillItem,
@@ -18,37 +38,22 @@ from .agent_skill import (
     ListAgentSkillsQuery,
     UpdateAgentSkillRequest,
 )
-from .agent import (
-    AgentApproval,
-    AgentChosenSkill,
-    AgentCostEstimate,
-    AgentDataPolicy,
-    AgentExecutionResult,
-    AgentHints,
-    AgentPlanContext,
-    AgentPlanResult,
-    AgentProposedAction,
-    AgentReasoningEffort,
-    CancelAgentResponse,
-    ExecuteAgentRequest,
-    ExecuteAgentResponse,
-    PlanAgentRequest,
-    PlanAgentResponse,
+from .auth import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    LoginRequest,
+    RegisterRequest,
+    RegisterResponseData,
+    ResetPasswordRequest,
+    TokenResponse,
+    VerifyEmailRequest,
 )
 from .common import ApiResponse, CamelModel, PageQuery, PaginatedData, PaginationMeta
-from .admin.files import (
-    AdminFileAuditDetail,
-    AdminFileAuditItem,
-    AdminFileAuditOwner,
-    AdminFileLatestScan,
-    ListAdminFilesQuery,
-    RescanResponse,
-)
 from .file import (
     BatchDownloadRequest,
-    BatchMoveItemResult,
     BatchFilesRequest,
     BatchFilesResponse,
+    BatchMoveItemResult,
     ContentItem,
     CopyFileRequest,
     CopyFileResponse,
@@ -97,12 +102,6 @@ from .permission import (
     PermissionItem,
     UpdatePermissionRequest,
 )
-from .registration_email_domain_rule import (
-    CreateRegistrationEmailDomainRuleRequest,
-    ListRegistrationEmailDomainRulesQuery,
-    RegistrationEmailDomainRuleItem,
-    UpdateRegistrationEmailDomainRuleRequest,
-)
 from .recycle import (
     ClearRecycleBinResponse,
     GetRecycleBinQuery,
@@ -111,11 +110,17 @@ from .recycle import (
     RestoreRecycleItemRequest,
     RestoreRecycleItemResponse,
 )
+from .registration_email_domain_rule import (
+    CreateRegistrationEmailDomainRuleRequest,
+    ListRegistrationEmailDomainRulesQuery,
+    RegistrationEmailDomainRuleItem,
+    UpdateRegistrationEmailDomainRuleRequest,
+)
 from .share import (
+    AcceptSharedItemResponse,
     AccessShareRequest,
     AccessShareResponseData,
     AccessUrls,
-    AcceptSharedItemResponse,
     CreateShareRequest,
     DeleteShareResponse,
     GetSharedItemsQuery,
@@ -178,7 +183,12 @@ __all__ = [
     "AgentDataPolicy",
     "AgentExecutionResult",
     "AgentHints",
+    "AgentInboxMessageKind",
+    "AgentInboxMessageRequest",
+    "AgentInboxMessageResponse",
+    "AgentJobEvent",
     "AgentPlanContext",
+    "AgentPlanningEvidence",
     "AgentPlanResult",
     "AgentProposedAction",
     "AgentReasoningEffort",

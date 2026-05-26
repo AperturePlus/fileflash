@@ -5,6 +5,7 @@ import {
   getCurrentUser,
   mockLogs,
   mockRegistrationEmailDomainRules,
+  mockUsageEvents,
   mockUsers,
   paginate,
 } from '../state';
@@ -41,6 +42,32 @@ function isAllowedEmailDomain(email: string) {
       return false;
     }
   });
+}
+
+function usageWindow(url: URL) {
+  const usageFrom = url.searchParams.get('usageFrom');
+  const usageTo = url.searchParams.get('usageTo');
+  const now = Date.now();
+  const from = usageFrom ? Date.parse(usageFrom) : now - 7 * 24 * 60 * 60 * 1000;
+  const to = usageTo ? Date.parse(usageTo) : now;
+  return {
+    from: Number.isFinite(from) ? from : now - 7 * 24 * 60 * 60 * 1000,
+    to: Number.isFinite(to) ? to : now,
+  };
+}
+
+function usageStatsForUser(userId: string, window: { from: number; to: number }) {
+  return mockUsageEvents.reduce((stats, event) => {
+    if (event.userId !== userId) return stats;
+    const occurredAt = Date.parse(event.occurredAt);
+    if (!Number.isFinite(occurredAt) || occurredAt < window.from || occurredAt > window.to) {
+      return stats;
+    }
+    return {
+      trafficBytes: stats.trafficBytes + event.trafficBytes,
+      agentTokens: stats.agentTokens + event.agentTokens,
+    };
+  }, { trafficBytes: 0, agentTokens: 0 });
 }
 
 export const setupUserMocks = () => {
@@ -80,6 +107,7 @@ export const setupUserMocks = () => {
     const search = (url.searchParams.get('search') || '').toLowerCase();
     const statusFilter = url.searchParams.get('status');
     const roleFilter = url.searchParams.get('role');
+    const window = usageWindow(url);
 
     const filtered = mockUsers.filter((user) => {
       if (search) {
@@ -88,7 +116,7 @@ export const setupUserMocks = () => {
         if (!hit) return false;
       }
       if (statusFilter && user.status !== statusFilter) return false;
-      if (roleFilter && user.role !== roleFilter) return false;
+      if (roleFilter && user.role.toUpperCase() !== roleFilter.toUpperCase()) return false;
       return true;
     });
 
@@ -101,8 +129,10 @@ export const setupUserMocks = () => {
       emailVerified: user.emailVerified,
       emailVerifiedAt: user.emailVerifiedAt,
       createdAt: user.createdAt,
-      role: user.role,
+      role: user.role.toUpperCase(),
       status: user.status,
+      usagePercentage: Number(((user.storageUsed / user.storageLimit) * 100).toFixed(2)),
+      usageStats: usageStatsForUser(user.userId, window),
       lastActiveAt: new Date(Date.now() - Mock.Random.integer(1, 72) * 3600000).toISOString(),
       lastLoginAt: new Date(Date.now() - Mock.Random.integer(1, 240) * 3600000).toISOString(),
     }));

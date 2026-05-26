@@ -21,13 +21,17 @@ class RedisRateLimiter:
         return self._redis
 
     async def allow(self, key: str, limit: int, window_seconds: int) -> bool:
+        return await self.allow_weighted(key=key, limit=limit, window_seconds=window_seconds, weight=1)
+
+    async def allow_weighted(self, key: str, limit: int, window_seconds: int, weight: int) -> bool:
         client = await self._client()
         if client is None:
             return True
 
+        normalized_weight = max(0, int(weight))
         try:
-            current = await client.incr(key)
-            if current == 1:
+            current = await client.incrby(key, normalized_weight)
+            if current == normalized_weight:
                 await client.expire(key, window_seconds)
             return current <= limit
         except RedisError:

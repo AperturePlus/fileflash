@@ -32,7 +32,16 @@ def test_agent_related_settings_defaults():
     assert settings.agent_queue_stream == "fileflash:agents"
     assert settings.agent_job_timeout_sec == 600
     assert settings.agent_tool_timeout_sec == 30
+    assert settings.agent_llm_plan_max_tokens == 8192
     assert settings.agent_mcp_endpoints == ()
+
+
+def test_auth_risk_control_defaults():
+    settings = make_settings()
+    assert settings.register_rate_limit == 12
+    assert settings.login_rate_limit == 30
+    assert settings.max_failed_login_attempts == 8
+    assert settings.account_lock_minutes == 5
 
 
 def test_app_env_detection():

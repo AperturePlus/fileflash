@@ -77,6 +77,29 @@ async def test_update_custom_skill_requires_owner_private():
 
 
 @pytest.mark.asyncio
+async def test_create_custom_skill_rejects_unknown_tool():
+    session = DummySession()
+    session.scalar.return_value = None
+
+    repo = AgentSkillRepository(session)
+    service = SkillService(db=session, skills=repo)
+
+    with pytest.raises(ApiError) as exc:
+        await service.create_custom_skill(
+            user_id=7,
+            payload=CreateAgentSkillRequest(
+                name="Unsafe",
+                description="bad tool",
+                tool_whitelist=["drive.listFolder", "files.list"],
+            ),
+        )
+
+    assert exc.value.status_code == 422
+    assert exc.value.data == {"unknownTools": ["files.list"]}
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_delete_custom_skill_requires_owner_private():
     session = DummySession()
     session.scalar.return_value = None
@@ -88,6 +111,33 @@ async def test_delete_custom_skill_requires_owner_private():
         await service.delete_custom_skill(user_id=7, skill_key="user:7:missing-abc123")
 
     assert exc.value.status_code == 404
+    session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_unknown_tool():
+    session = DummySession()
+    session.scalars.return_value = []
+
+    repo = AgentSkillRepository(session)
+    service = SkillService(db=session, skills=repo)
+
+    payload = ImportAgentSkillsRequest(
+        items=[
+            ImportAgentSkillItem(
+                skill_key="builtin:bad",
+                name="bad",
+                description="bad",
+                tool_whitelist=["drive.missing"],
+            )
+        ],
+    )
+
+    with pytest.raises(ApiError) as exc:
+        await service.import_global_skills(payload=payload)
+
+    assert exc.value.status_code == 422
+    assert exc.value.data == {"unknownTools": ["drive.missing"]}
     session.commit.assert_not_awaited()
 
 

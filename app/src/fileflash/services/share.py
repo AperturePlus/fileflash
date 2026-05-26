@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from math import ceil
 from pathlib import Path
@@ -422,6 +422,7 @@ class ShareService:
         range_header: str | None,
         ip_address: str,
         user_agent: str | None,
+        rate_limit_check: Callable[[int], Awaitable[None]] | None = None,
     ) -> tuple[AsyncIterator[bytes], str, str, int, dict[str, str]]:
         async def _operation() -> tuple[AsyncIterator[bytes], str, str, int, dict[str, str]]:
             await apply_local_lock_timeout(self.db)
@@ -448,6 +449,11 @@ class ShareService:
             object_size = int(storage_object.object_size or file_row.file_size or 0)
             if object_size <= 0:
                 raise ApiError(status_code=404, code=404, message="Shared file content not found")
+
+            byte_range = self._parse_range_header(range_header=range_header, file_size=object_size)
+            bytes_to_send = object_size if byte_range is None else byte_range[1] - byte_range[0] + 1
+            if rate_limit_check is not None:
+                await rate_limit_check(bytes_to_send)
 
             if action == "download":
                 await self.db.execute(
@@ -479,7 +485,6 @@ class ShareService:
                 ),
             }
 
-            byte_range = self._parse_range_header(range_header=range_header, file_size=object_size)
             if byte_range is None:
                 headers["Content-Length"] = str(object_size)
                 return (

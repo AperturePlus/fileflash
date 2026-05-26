@@ -11,9 +11,19 @@ from ..services.admin.users import AdminUsersService
 router = APIRouter(prefix="/admin/users", tags=["admin"])
 
 
+def get_list_admin_users_query(query: ListAdminUsersQuery = Depends()) -> ListAdminUsersQuery:
+    try:
+        query.resolve_usage_window()
+    except ValueError as exc:
+        from ..core.errors import ApiError
+
+        raise ApiError(status_code=400, code=400, message=str(exc)) from exc
+    return query
+
+
 @router.get("")
 async def list_admin_users(
-    query: ListAdminUsersQuery = Depends(),
+    query: ListAdminUsersQuery = Depends(get_list_admin_users_query),
     _: User = Depends(require_admin),
     service: AdminUsersService = Depends(get_admin_users_service),
 ):

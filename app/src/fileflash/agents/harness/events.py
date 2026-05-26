@@ -1,15 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from .event_bus import AgentEventBus as EventBus
+from .event_bus import AgentEventEnvelope as AgentEvent
 
-
-@dataclass(slots=True)
-class AgentEvent:
-    event_type: str
-    payload: dict[str, Any]
-
-
-class EventBus:
-    async def publish(self, event: AgentEvent) -> None:
-        raise NotImplementedError("EventBus is scaffolded only in this stage")
+__all__ = ["AgentEvent", "EventBus"]

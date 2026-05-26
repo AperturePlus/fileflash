@@ -13,7 +13,9 @@ import type {
     StorageStats, 
     ActivityLog,
     GetActivityLogRequest,
-    User
+    User,
+    AdminUserItem,
+    GetAdminUsersParams,
 } from '../types/user';
 import type { PaginatedData } from '../types/base';
 
@@ -144,14 +146,8 @@ export const getUsers = (params: { search?: string; page?: number; perPage?: num
   return http.get<PaginatedData<User>>('/users', params);
 };
 
-export const getAdminUsers = (params: {
-  page?: number;
-  perPage?: number;
-  search?: string;
-  status?: 'active' | 'suspended';
-  role?: 'user' | 'admin';
-}) => {
-  return http.get<PaginatedData<any>>('/admin/users', params);
+export const getAdminUsers = (params: GetAdminUsersParams) => {
+  return http.get<PaginatedData<AdminUserItem>>('/admin/users', params);
 };
 
 export const updateUserStatus = (userId: string, status: 'active' | 'suspended') => {

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ...schemas.agent import AgentProposedAction
+from .tool_registry import REGISTRY
 
 
 @dataclass(slots=True)
@@ -11,38 +12,18 @@ class PolicyDecision:
     reasons: list[str] = field(default_factory=list)
 
 
-HIGH_RISK_TOOLS = frozenset(
-    {
-        "drive.deleteFile",
-        "drive.deleteFolder",
-        "drive.batchDelete",
-        "recycle.clear",
-        "recycle.permanentDelete",
-    }
-)
-
-WRITE_TOOLS = frozenset(
-    {
-        "drive.createFolder",
-        "drive.moveFile",
-        "drive.moveFolder",
-        "drive.renameFile",
-        "drive.renameFolder",
-        *HIGH_RISK_TOOLS,
-    }
-)
-
-
 def classify_tool_side_effect(tool_name: str) -> str:
-    return "write" if tool_name in WRITE_TOOLS else "read"
+    try:
+        return REGISTRY.get(tool_name).side_effect
+    except KeyError:
+        return "write"
 
 
 def classify_tool_risk(tool_name: str) -> str:
-    if tool_name in HIGH_RISK_TOOLS or "delete" in tool_name.lower():
+    try:
+        return REGISTRY.get(tool_name).risk_level
+    except KeyError:
         return "high"
-    if classify_tool_side_effect(tool_name) == "write":
-        return "medium"
-    return "low"
 
 
 def normalize_action_risk(action: AgentProposedAction) -> AgentProposedAction:
@@ -70,6 +51,13 @@ class PolicyGuard:
         tool_name: str,
         high_risk_confirmed: bool = False,
     ) -> PolicyDecision:
+        try:
+            REGISTRY.get(tool_name)
+        except KeyError:
+            return PolicyDecision(
+                allowed=False,
+                reasons=[f"Unsupported agent tool: {tool_name}"],
+            )
         if classify_tool_risk(tool_name) == "high" and not high_risk_confirmed:
             return PolicyDecision(
                 allowed=False,
