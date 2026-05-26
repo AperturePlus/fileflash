@@ -3,7 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import StreamingResponse
 
-from ..core.deps import get_client_ip, get_share_service, get_user_agent, get_current_user, require_verified_user
+from ..core.deps import (
+    get_client_ip,
+    get_current_user,
+    get_download_rate_limit_service,
+    get_share_service,
+    get_user_agent,
+    require_verified_user,
+)
 from ..core.errors import api_success
 from ..core.http_headers import build_content_disposition
 from ..models.tables_identity import User
@@ -14,6 +21,7 @@ from ..schemas.share import (
     SaveShareRequest,
     UpdateShareSettingsRequest,
 )
+from ..services.download_rate_limit import DownloadRateLimitService
 from ..services.share import ShareService
 
 router = APIRouter(prefix="/shares", tags=["shares"])
@@ -83,6 +91,19 @@ def _sanitize_stream_headers(
     if not has_content_disposition:
         sanitized["Content-Disposition"] = fallback_content_disposition
     return sanitized
+
+
+def _content_length(headers: dict[str, str] | None) -> int:
+    if not headers:
+        return 0
+    for key, value in headers.items():
+        if key.lower() != "content-length":
+            continue
+        try:
+            return max(0, int(value))
+        except ValueError:
+            return 0
+    return 0
 
 
 @router.post("")
@@ -195,6 +216,7 @@ async def download_shared_file(
     client_ip: str = Depends(get_client_ip),
     user_agent: str | None = Depends(get_user_agent),
     share_service: ShareService = Depends(get_share_service),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
     token = _extract_bearer_token(authorization)
     if not token:
@@ -210,6 +232,10 @@ async def download_shared_file(
             range_header=range_header,
             ip_address=client_ip,
             user_agent=user_agent,
+            rate_limit_check=lambda bytes_count: download_limiter.enforce_share_ip(
+                client_ip=client_ip,
+                bytes_count=bytes_count,
+            ),
         )
     else:
         raw = await share_service.get_shared_file_stream(
@@ -220,6 +246,8 @@ async def download_shared_file(
             user_agent=user_agent,
         )
     stream, filename, content_type, status_code, headers = _extract_share_stream(tuple(raw))
+    if not hasattr(share_service, "get_shared_file_download_stream_response"):
+        await download_limiter.enforce_share_ip(client_ip=client_ip, bytes_count=_content_length(headers))
     response_headers = _sanitize_stream_headers(headers=headers, filename=filename, disposition="attachment")
     return StreamingResponse(stream, media_type=content_type, headers=response_headers, status_code=status_code)
 
@@ -232,6 +260,7 @@ async def preview_shared_file(
     client_ip: str = Depends(get_client_ip),
     user_agent: str | None = Depends(get_user_agent),
     share_service: ShareService = Depends(get_share_service),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
     token = _extract_bearer_token(authorization)
     if not token:
@@ -247,6 +276,10 @@ async def preview_shared_file(
             range_header=range_header,
             ip_address=client_ip,
             user_agent=user_agent,
+            rate_limit_check=lambda bytes_count: download_limiter.enforce_share_ip(
+                client_ip=client_ip,
+                bytes_count=bytes_count,
+            ),
         )
     else:
         raw = await share_service.get_shared_file_stream(
@@ -257,6 +290,8 @@ async def preview_shared_file(
             user_agent=user_agent,
         )
     stream, filename, content_type, status_code, headers = _extract_share_stream(tuple(raw))
+    if not hasattr(share_service, "get_shared_file_download_stream_response"):
+        await download_limiter.enforce_share_ip(client_ip=client_ip, bytes_count=_content_length(headers))
     response_headers = _sanitize_stream_headers(headers=headers, filename=filename, disposition="inline")
     return StreamingResponse(stream, media_type=content_type, headers=response_headers, status_code=status_code)
 

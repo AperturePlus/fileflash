@@ -28,6 +28,7 @@ from ..services.admin.notifications import AdminNotificationsService
 from ..services.admin.system import AdminSystemService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
+from ..services.download_rate_limit import DownloadRateLimitService
 from ..services.email_delivery import VerificationEmailDeliveryService
 from ..services.file import FileService
 from ..services.folder import FolderService
@@ -91,6 +92,14 @@ def get_agent_background_job_service(
 
 def get_settings_dep() -> Settings:
     return _settings
+
+
+def get_download_rate_limit_service(
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+    rate_limiter: RedisRateLimiter = Depends(get_rate_limiter),
+) -> DownloadRateLimitService:
+    return DownloadRateLimitService(db=db, settings=settings, rate_limiter=rate_limiter)
 
 
 def get_client_ip(request: Request) -> str:

@@ -1,15 +1,29 @@
 from __future__ import annotations
 
+import tempfile
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from fileflash.core.errors import ApiError
-from fileflash.models.enums import FileStatus, FolderStatus, FolderType, UploadStatus
+from fileflash.core.deps import get_current_user, get_download_rate_limit_service, get_file_service
+from fileflash.core.errors import ApiError, api_error_handler
+from fileflash.models.enums import (
+    FileStatus,
+    FolderStatus,
+    FolderType,
+    UploadStatus,
+    UserRole,
+    UserStatus,
+)
+from fileflash.models.tables_identity import User
 from fileflash.models.tables_storage import File, FileMediaMetadata, Folder, StorageObject
-from fileflash.schemas.file import BatchFilesRequest
-from fileflash.services.file import FileService
+from fileflash.routers.files import router as files_router
+from fileflash.schemas.file import BatchDownloadRequest, BatchFilesRequest
+from fileflash.services.file import BatchDownloadPlan, DownloadStreamResult, FileService
 
 
 class DummyStorage:
@@ -41,6 +55,14 @@ class DummySession:
         self.delete = AsyncMock()
 
 
+class ResultRows:
+    def __init__(self, rows) -> None:  # noqa: ANN001
+        self._rows = rows
+
+    def all(self):  # noqa: ANN201
+        return self._rows
+
+
 def make_file_row(*, file_id: int = 1, file_name: str = "demo.txt", folder_id: int = 10) -> File:
     return File(
         file_id=file_id,
@@ -68,6 +90,22 @@ def make_folder_row(*, folder_id: int = 10, folder_name: str = "Docs") -> Folder
         cached_size=1024,
         status=FolderStatus.ACTIVE,
         folder_type=FolderType.NORMAL,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+
+def make_user(*, role: UserRole = UserRole.USER) -> User:
+    return User(
+        user_id=1,
+        username="alice",
+        email="alice@example.com",
+        password_hash="x",
+        role=role,
+        status=UserStatus.ACTIVE,
+        email_verified=True,
+        storage_limit=1024,
+        storage_used=0,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -373,6 +411,145 @@ async def test_get_preview_stream_falls_back_to_source_when_transcoded_missing(m
     result = await service.get_preview_stream(user_id=1, file_id="12", range_header=None)
     assert result.status_code == 200
     assert result.headers["Content-Length"] == "512"
+
+
+@pytest.mark.asyncio
+async def test_batch_download_plan_estimates_source_file_size() -> None:
+    session = DummySession()
+    storage = DummyStorage()
+    service = FileService(db=session, storage=storage)
+    file_row = make_file_row(file_id=7, file_name="archive.bin")
+    file_row.storage_object_id = 99
+    storage_object = StorageObject(
+        object_id=99,
+        bucket_name="fileflash",
+        object_key="objects/u1/archive",
+        object_size=512,
+        upload_status=UploadStatus.ACTIVE,
+        content_type="application/octet-stream",
+    )
+    session.scalars = AsyncMock(return_value=[file_row])
+    session.execute = AsyncMock(return_value=ResultRows([(file_row, storage_object)]))
+
+    plan = await service.create_batch_download_plan(
+        user_id=1,
+        payload=BatchDownloadRequest(fileIds=["7"]),
+    )
+
+    assert plan.estimated_bytes == 512
+    assert plan.files[0][2] == "archive.bin"
+
+
+class StubDownloadLimiter:
+    def __init__(self, *, deny: bool = False) -> None:
+        self.deny = deny
+        self.calls: list[tuple[str, int]] = []
+
+    async def enforce_user(self, *, user: User, bytes_count: int) -> None:
+        self.calls.append((f"user:{user.user_id}", bytes_count))
+        if self.deny and user.role != UserRole.ADMIN:
+            raise ApiError(status_code=429, code=429, message="Download rate limit exceeded")
+
+    async def enforce_user_id(self, *, user_id: int, bytes_count: int) -> None:
+        self.calls.append((f"user:{user_id}", bytes_count))
+        if self.deny:
+            raise ApiError(status_code=429, code=429, message="Download rate limit exceeded")
+
+
+class StubFileRouteService:
+    async def get_download_stream(
+        self,
+        *,
+        user_id: int,  # noqa: ARG002
+        file_id: str,  # noqa: ARG002
+        range_header: str | None,
+    ) -> DownloadStreamResult:
+        async def _stream():
+            yield b"0123456789"
+
+        headers = {"Content-Length": "4" if range_header else "10", "Accept-Ranges": "bytes"}
+        if range_header:
+            headers["Content-Range"] = "bytes 0-3/10"
+        return DownloadStreamResult(
+            stream=_stream(),
+            filename="demo.txt",
+            content_type="text/plain",
+            status_code=206 if range_header else 200,
+            headers=headers,
+        )
+
+    async def get_preview_stream(self, **kwargs) -> DownloadStreamResult:  # noqa: ANN003
+        return await self.get_download_stream(**kwargs)
+
+    async def create_batch_download_plan(
+        self,
+        *,
+        user_id: int,  # noqa: ARG002
+        payload: BatchDownloadRequest,  # noqa: ARG002
+    ) -> BatchDownloadPlan:
+        return SimpleNamespace(estimated_bytes=10, files=[object()])  # type: ignore[return-value]
+
+    async def create_batch_download_archive_from_plan(self, *, plan: BatchDownloadPlan):  # noqa: ANN201, ARG002
+        tmp = tempfile.NamedTemporaryFile(prefix="fileflash-test-", suffix=".zip", delete=False)
+        tmp.write(b"zip")
+        tmp.close()
+        return tmp.name, "test.zip"
+
+
+def _files_client(*, role: UserRole, limiter: StubDownloadLimiter) -> TestClient:
+    app = FastAPI()
+    app.add_exception_handler(ApiError, api_error_handler)
+    app.include_router(files_router, prefix="/api/v1")
+    app.dependency_overrides[get_current_user] = lambda: make_user(role=role)
+    app.dependency_overrides[get_file_service] = lambda: StubFileRouteService()
+    app.dependency_overrides[get_download_rate_limit_service] = lambda: limiter
+    return TestClient(app)
+
+
+def test_download_route_returns_429_when_limiter_rejects_user() -> None:
+    limiter = StubDownloadLimiter(deny=True)
+    with _files_client(role=UserRole.USER, limiter=limiter) as client:
+        response = client.get("/api/v1/files/1/download")
+
+    assert response.status_code == 429
+    assert limiter.calls == [("user:1", 10)]
+
+
+def test_download_route_preserves_range_response_when_allowed() -> None:
+    limiter = StubDownloadLimiter()
+    with _files_client(role=UserRole.USER, limiter=limiter) as client:
+        response = client.get("/api/v1/files/1/download", headers={"Range": "bytes=0-3"})
+
+    assert response.status_code == 206
+    assert response.headers["content-range"] == "bytes 0-3/10"
+    assert limiter.calls == [("user:1", 4)]
+
+
+def test_admin_download_route_is_not_rejected_by_user_limiter() -> None:
+    limiter = StubDownloadLimiter(deny=True)
+    with _files_client(role=UserRole.ADMIN, limiter=limiter) as client:
+        response = client.get("/api/v1/files/1/download")
+
+    assert response.status_code == 200
+    assert limiter.calls == [("user:1", 10)]
+
+
+def test_batch_download_route_returns_429_before_archive_when_limited() -> None:
+    limiter = StubDownloadLimiter(deny=True)
+    with _files_client(role=UserRole.USER, limiter=limiter) as client:
+        response = client.post("/api/v1/files/batch-download", json={"fileIds": ["1"]})
+
+    assert response.status_code == 429
+    assert limiter.calls == [("user:1", 10)]
+
+
+def test_admin_batch_download_route_is_not_rejected_by_user_limiter() -> None:
+    limiter = StubDownloadLimiter(deny=True)
+    with _files_client(role=UserRole.ADMIN, limiter=limiter) as client:
+        response = client.post("/api/v1/files/batch-download", json={"fileIds": ["1"]})
+
+    assert response.status_code == 200
+    assert response.content == b"zip"
 
 
 @pytest.mark.asyncio

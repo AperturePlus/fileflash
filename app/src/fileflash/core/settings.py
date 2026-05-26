@@ -108,6 +108,12 @@ class Settings(BaseSettings):
     forgot_password_rate_window_seconds: int = 600
     resend_verification_rate_limit: int = 5
     resend_verification_rate_window_seconds: int = 600
+    download_rate_window_seconds: int = Field(default=600, alias="DOWNLOAD_RATE_WINDOW_SECONDS")
+    download_rate_limit_requests: int = Field(default=120, alias="DOWNLOAD_RATE_LIMIT_REQUESTS")
+    download_rate_limit_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        alias="DOWNLOAD_RATE_LIMIT_BYTES",
+    )
 
     worker_poll_interval_seconds: float = Field(
         default=2.0,
