@@ -1,25 +1,37 @@
 from __future__ import annotations
 
-import asyncio
 import json
-from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any, get_args
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.deps import get_agent_execute_service, get_agent_plan_service, get_current_user
+from ..agents.harness.event_bus import AgentEventBus, AgentEventEnvelope
+from ..agents.harness.inbox import AgentInbox
+from ..core.deps import (
+    get_agent_event_bus,
+    get_agent_execute_service,
+    get_agent_plan_service,
+    get_current_user,
+)
 from ..core.errors import ApiError, api_success
 from ..db.deps import get_db
 from ..models import AgentActionLog, BackgroundJob
+from ..models.enums import AgentInboxKind
 from ..models.tables_identity import User
-from ..schemas.agent import AgentJobEvent, CancelAgentResponse, ExecuteAgentRequest, PlanAgentRequest
+from ..schemas.agent import (
+    AgentInboxMessageRequest,
+    AgentInboxMessageResponse,
+    AgentJobEvent,
+    AgentJobEventType,
+    ExecuteAgentRequest,
+    PlanAgentRequest,
+)
 from ..services.agent import ExecuteService, PlanService
 
 router = APIRouter(prefix="/agent", tags=["agent"])
-AGENT_EVENT_POLL_INTERVAL_SEC = 0.6
 
 
 @router.post("/plan")
@@ -53,6 +65,7 @@ async def stream_agent_job_events(
     job_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    event_bus: Annotated[AgentEventBus, Depends(get_agent_event_bus)],
 ):
     parsed_job_id = _parse_job_id(job_id)
     initial_events, initial_terminal = await _agent_job_events_for_job(
@@ -68,20 +81,22 @@ async def stream_agent_job_events(
             yield _format_sse_event(event)
         if initial_terminal:
             return
-        while True:
-            events, terminal = await _agent_job_events_for_job(
-                db=db,
-                job_id=parsed_job_id,
-                user_id=int(current_user.user_id),
-            )
-            for event in events:
+        async with event_bus.subscribe(job_id=parsed_job_id) as stream:
+            while True:
+                try:
+                    envelope = await stream.next(timeout=30.0)
+                except TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
+                event = _envelope_to_job_event(envelope)
+                if event is None:
+                    continue
                 if event.id in seen:
                     continue
                 seen.add(event.id)
                 yield _format_sse_event(event)
-            if terminal:
-                break
-            await asyncio.sleep(AGENT_EVENT_POLL_INTERVAL_SEC)
+                if event.type in {"job.succeeded", "job.failed", "job.canceled"}:
+                    break
 
     return StreamingResponse(
         event_stream(),
@@ -93,16 +108,15 @@ async def stream_agent_job_events(
     )
 
 
-@router.post("/cancel/{job_id}")
-async def cancel_agent_job(
+@router.post("/jobs/{job_id}/messages")
+async def post_agent_job_message(
     job_id: str,
+    payload: AgentInboxMessageRequest,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    event_bus: Annotated[AgentEventBus, Depends(get_agent_event_bus)],
 ):
-    try:
-        parsed_job_id = int(job_id)
-    except ValueError as exc:
-        raise ApiError(status_code=400, code=400, message="Invalid jobId") from exc
+    parsed_job_id = _parse_job_id(job_id)
     job = await db.scalar(
         select(BackgroundJob)
         .where(
@@ -112,27 +126,45 @@ async def cancel_agent_job(
                 BackgroundJob.task_type.in_(["agent.plan", "agent.execute"]),
             )
         )
-        .with_for_update()
     )
     if job is None:
         raise ApiError(status_code=404, code=404, message="Job not found")
 
-    canceled_at = datetime.now(UTC)
-    if job.status not in {"succeeded", "failed", "canceled"}:
-        job.cancel_requested_at = canceled_at
-        job.status = "canceled"
-        job.agent_phase = "canceled"
-        job.finished_at = canceled_at
-        job.updated_at = canceled_at
-    await db.commit()
-    await db.refresh(job)
+    kind = AgentInboxKind(payload.kind)
+    reply_to_id: int | None = None
+    if payload.reply_to is not None:
+        try:
+            reply_to_id = int(payload.reply_to)
+        except ValueError as exc:
+            raise ApiError(status_code=400, code=400, message="Invalid replyTo") from exc
 
-    data = CancelAgentResponse(
-        job_id=str(job.job_id),
-        status=str(job.status),
-        canceled_at=job.cancel_requested_at or canceled_at,
+    inbox = AgentInbox(db=db, event_bus=event_bus)
+    try:
+        msg = await inbox.handle(
+            job_id=parsed_job_id,
+            kind=kind,
+            payload=_inbox_payload_from_request(payload),
+            reply_to_id=reply_to_id,
+        )
+    except ValueError as exc:
+        raise ApiError(status_code=400, code=400, message=str(exc)) from exc
+    await db.commit()
+
+    data = AgentInboxMessageResponse(
+        inbox_message_id=str(msg.inbox_message_id),
+        kind=payload.kind,
+        accepted_at=msg.created_at,
     )
-    return api_success(data=data.model_dump(by_alias=True), message="Job canceled")
+    return api_success(data=data.model_dump(by_alias=True), message="Message accepted")
+
+
+def _inbox_payload_from_request(req: AgentInboxMessageRequest) -> dict[str, Any]:
+    body: dict[str, Any] = {}
+    if req.value is not None:
+        body["value"] = req.value
+    if req.metadata:
+        body["metadata"] = req.metadata
+    return body
 
 
 def _parse_job_id(raw: str) -> int:
@@ -319,6 +351,26 @@ def _tool_event_data(action_log: AgentActionLog, *, include_output: bool) -> dic
     if action_log.error_message:
         data["errorMessage"] = action_log.error_message
     return data
+
+
+def _envelope_to_job_event(env: AgentEventEnvelope) -> AgentJobEvent | None:
+    if env.event_type.startswith("agent.inbox."):
+        return None
+    if env.event_type not in get_args(AgentJobEventType):
+        return None
+    payload = dict(env.payload or {})
+    data = payload.get("data")
+    return AgentJobEvent(
+        id=env.event_id or f"{env.job_id}:{env.event_type}:{env.emitted_at.isoformat()}",
+        job_id=str(env.job_id),
+        task_type=str(payload.get("taskType") or "agent.execute"),
+        type=env.event_type,  # type: ignore[arg-type]
+        status=str(payload.get("status") or "running"),
+        agent_phase=payload.get("agentPhase"),
+        message=str(payload.get("message") or ""),
+        data=dict(data) if isinstance(data, dict) else payload,
+        timestamp=env.emitted_at,
+    )
 
 
 def _format_sse_event(event: AgentJobEvent) -> str:
