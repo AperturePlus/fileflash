@@ -97,6 +97,7 @@ Task 6 (schemas)                Task 7 (EventBus)               Task 8 (Inbox se
 ## Task 1: 配置项与依赖
 
 **Files:**
+
 - Modify: `app/src/fileflash/core/settings.py`
 
 - [ ] **Step 1: 在 `Settings` 类合适位置（紧跟 `redis_url` 之后）增加 4 个配置项**
@@ -137,6 +138,7 @@ git commit -m "feat(agent): add inbox + event bus settings"
 ## Task 2: 新增 inbox 相关枚举
 
 **Files:**
+
 - Modify: `app/src/fileflash/models/enums.py`
 
 - [ ] **Step 1: 在 `AgentMcpVisibility` 之后追加三个枚举**
@@ -188,6 +190,7 @@ git commit -m "feat(agent): add inbox role/kind/status enums"
 ## Task 3: Flyway 迁移 V14（新表 + pg enums）
 
 **Files:**
+
 - Create: `docker/flyway/migrations/V14__agent_inbox.sql`
 
 - [ ] **Step 1: 写完整 SQL 迁移**
@@ -261,6 +264,7 @@ git commit -m "feat(agent): V14 add agent_inbox_message table"
 ## Task 4: ORM model `AgentInboxMessage`
 
 **Files:**
+
 - Modify: `app/src/fileflash/models/tables_agent.py`
 - Modify: `app/src/fileflash/models/__init__.py`
 
@@ -398,6 +402,7 @@ git commit -m "feat(agent): add AgentInboxMessage ORM model"
 ## Task 5: `AgentInboxMessageRepository`
 
 **Files:**
+
 - Create: `app/src/fileflash/repositories/agent/inbox.py`
 - Modify: `app/src/fileflash/repositories/__init__.py`
 - Create: `app/tests/test_agent_inbox_repository.py`
@@ -627,6 +632,7 @@ git commit -m "feat(agent): add AgentInboxMessageRepository"
 ## Task 6: 新事件类型与上行 message schemas
 
 **Files:**
+
 - Modify: `app/src/fileflash/schemas/agent.py`
 
 - [ ] **Step 1: 扩展 `AgentJobEventType` 字面量与新增上行 message 模型**
@@ -724,6 +730,7 @@ git commit -m "feat(agent): extend job event types and add inbox message schemas
 ## Task 7: `AgentEventBus`（Redis pub/sub 封装）
 
 **Files:**
+
 - Create: `app/src/fileflash/agents/harness/event_bus.py`
 - Modify: `app/src/fileflash/agents/harness/events.py` — 保留 `AgentEvent`，删除 `EventBus` scaffold
 - Create: `app/tests/test_agent_event_bus.py`
@@ -976,6 +983,7 @@ git commit -m "feat(agent): add AgentEventBus with in-memory and Redis impls"
 ## Task 8: `AgentInbox` 服务（写表 + publish）
 
 **Files:**
+
 - Create: `app/src/fileflash/agents/harness/inbox.py`
 - Create: `app/tests/test_agent_inbox.py`
 
@@ -1129,6 +1137,7 @@ git commit -m "feat(agent): add AgentInbox service"
 ## Task 9: `AskProtocol`（worker 等用户回答）
 
 **Files:**
+
 - Create: `app/src/fileflash/agents/harness/ask.py`
 - Create: `app/tests/test_agent_ask_protocol.py`
 
@@ -1376,6 +1385,7 @@ git commit -m "feat(agent): add AskProtocol for worker-to-user blocking ask"
 ## Task 10: `POST /agent/jobs/{job_id}/messages` 路由
 
 **Files:**
+
 - Modify: `app/src/fileflash/routers/agent.py`
 - Modify: `app/src/fileflash/core/deps.py`
 - Modify: `app/tests/test_agent_routes.py`
@@ -1531,6 +1541,7 @@ git commit -m "feat(agent): add POST /agent/jobs/{id}/messages upstream channel"
 ## Task 11: SSE 端点改为订阅 EventBus
 
 **Files:**
+
 - Modify: `app/src/fileflash/routers/agent.py`
 
 - [ ] **Step 1: 替换 `stream_agent_job_events` 与 `event_stream` 内部逻辑**
@@ -1690,6 +1701,7 @@ git commit -m "feat(agent): replace SSE polling with EventBus subscription"
 ## Task 12: 删除 `POST /agent/cancel/{job_id}`
 
 **Files:**
+
 - Modify: `app/src/fileflash/routers/agent.py`
 - Modify: `app/tests/test_agent_routes.py`
 
@@ -1724,6 +1736,7 @@ git commit -m "refactor(agent): drop legacy POST /agent/cancel route"
 ## Task 13: `ExecuteRunner` 接入 inbox（pause/resume/skip/approve/cancel）
 
 **Files:**
+
 - Modify: `app/src/fileflash/agents/runtime/execute_runner.py`
 - Modify: `app/tests/test_agent_plan_execute_runtime.py`
 
@@ -1956,6 +1969,7 @@ git commit -m "feat(agent): wire ExecuteRunner to inbox controls and event bus"
 ## Task 14: `PlanRunner` 接入 ask（基础占位 + 接口暴露）
 
 **Files:**
+
 - Modify: `app/src/fileflash/agents/runtime/plan_runner.py`
 - Modify: `app/tests/test_agent_plan_execute_runtime.py`
 
@@ -2060,6 +2074,7 @@ git commit -m "feat(agent): wire AskProtocol into PlanRunner and ExecuteRunner"
 ## Task 15: worker 装配 EventBus 与 runner 注入
 
 **Files:**
+
 - Modify: `app/src/fileflash/agents/worker.py`
 
 - [ ] **Step 1: 在 `AgentWorkerConsumer.__init__` 中创建 EventBus 单例并下发**
@@ -2154,6 +2169,7 @@ git commit -m "feat(agent): inject EventBus into worker and publish terminal eve
 ## Task 16: 端到端集成测试（POST 消息 → worker 收到 → publish → SSE 收到）
 
 **Files:**
+
 - Create: `app/tests/test_agent_a_end_to_end.py`
 
 - [ ] **Step 1: 写端到端测试**
