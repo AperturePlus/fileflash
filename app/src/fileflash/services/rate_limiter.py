@@ -6,6 +6,7 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 logger = logging.getLogger(__name__)
+_LOOP_RUNTIME_ERROR_MARKERS = ("different loop", "attached to a different loop", "event loop is closed")
 
 
 class RedisRateLimiter:
@@ -37,9 +38,41 @@ class RedisRateLimiter:
         except RedisError:
             logger.exception("Redis unavailable, rate limiter degraded for key=%s", key)
             return True
+        except RuntimeError as exc:
+            if not _is_loop_runtime_error(exc):
+                raise
+            logger.exception("Redis loop error, rate limiter degraded for key=%s", key)
+            await self._drop_cached_client()
+            return True
 
     async def close(self) -> None:
-        if self._redis is not None:
-            await self._redis.aclose()
-            self._redis = None
+        client = self._redis
+        self._redis = None
+        if client is None:
+            return
+        try:
+            await client.aclose()
+        except RuntimeError as exc:
+            if _is_loop_runtime_error(exc):
+                logger.warning("Ignore Redis close loop error: %s", exc)
+                return
+            raise
+
+    async def _drop_cached_client(self) -> None:
+        client = self._redis
+        self._redis = None
+        if client is None:
+            return
+        try:
+            await client.aclose()
+        except RuntimeError as exc:
+            if _is_loop_runtime_error(exc):
+                logger.warning("Ignore Redis reset loop error: %s", exc)
+                return
+            raise
+
+
+def _is_loop_runtime_error(exc: RuntimeError) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _LOOP_RUNTIME_ERROR_MARKERS)
 

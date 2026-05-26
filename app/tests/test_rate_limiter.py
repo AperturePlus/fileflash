@@ -13,12 +13,22 @@ from fileflash.services.rate_limiter import RedisRateLimiter
 
 
 class FakeRedis:
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail: bool = False,
+        runtime_error: RuntimeError | None = None,
+        close_runtime_error: RuntimeError | None = None,
+    ) -> None:
         self.fail = fail
+        self.runtime_error = runtime_error
+        self.close_runtime_error = close_runtime_error
         self.values: dict[str, int] = {}
         self.expired: list[tuple[str, int]] = []
 
     async def incrby(self, key: str, amount: int) -> int:
+        if self.runtime_error is not None:
+            raise self.runtime_error
         if self.fail:
             raise RedisError("down")
         self.values[key] = self.values.get(key, 0) + amount
@@ -26,6 +36,10 @@ class FakeRedis:
 
     async def expire(self, key: str, window_seconds: int) -> None:
         self.expired.append((key, window_seconds))
+
+    async def aclose(self) -> None:
+        if self.close_runtime_error is not None:
+            raise self.close_runtime_error
 
 
 @pytest.mark.asyncio
@@ -57,6 +71,36 @@ async def test_allow_weighted_degrades_open_when_redis_fails() -> None:
     limiter._redis = FakeRedis(fail=True)  # type: ignore[assignment]
 
     assert await limiter.allow_weighted("k", limit=1, window_seconds=60, weight=10) is True
+
+
+@pytest.mark.asyncio
+async def test_allow_weighted_degrades_open_and_resets_client_on_loop_runtime_error() -> None:
+    limiter = RedisRateLimiter("redis://example")
+    limiter._redis = FakeRedis(
+        runtime_error=RuntimeError("Future pending attached to a different loop")
+    )  # type: ignore[assignment]
+
+    assert await limiter.allow_weighted("k", limit=1, window_seconds=60, weight=10) is True
+    assert limiter._redis is None
+
+
+@pytest.mark.asyncio
+async def test_allow_weighted_reraises_non_loop_runtime_error() -> None:
+    limiter = RedisRateLimiter("redis://example")
+    limiter._redis = FakeRedis(runtime_error=RuntimeError("unexpected runtime failure"))  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="unexpected runtime failure"):
+        await limiter.allow_weighted("k", limit=1, window_seconds=60, weight=10)
+
+
+@pytest.mark.asyncio
+async def test_close_ignores_loop_runtime_error() -> None:
+    limiter = RedisRateLimiter("redis://example")
+    limiter._redis = FakeRedis(close_runtime_error=RuntimeError("Event loop is closed"))  # type: ignore[assignment]
+
+    await limiter.close()
+
+    assert limiter._redis is None
 
 
 class FakeRateLimiter:
