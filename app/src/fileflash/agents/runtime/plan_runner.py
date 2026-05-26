@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,21 +23,13 @@ from ...schemas.agent import (
     AgentProposedAction,
     PlanAgentRequest,
 )
+from ..harness.ask import AskProtocol
+from ..harness.event_bus import AgentEventBus
 from ..harness.policy import classify_tool_side_effect, normalize_action_risk
+from ..harness.router import ToolCall, ToolRouter
+from ..harness.tool_registry import REGISTRY
 from .llm import AnthropicPlannerClient, PlannerClient
 from .reference_rules import is_symbolic_id_placeholder, parse_step_reference
-
-DEFAULT_AGENT_TOOLS = (
-    "drive.listFolder",
-    "drive.countFiles",
-    "drive.createFolder",
-    "drive.moveFile",
-    "drive.moveFolder",
-    "drive.renameFile",
-    "drive.renameFolder",
-    "drive.deleteFile",
-    "drive.deleteFolder",
-)
 
 
 class PlanRunner:
@@ -47,11 +38,30 @@ class PlanRunner:
         *,
         settings: Settings | None = None,
         planner_client: PlannerClient | None = None,
+        event_bus: AgentEventBus | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.planner_client = planner_client or AnthropicPlannerClient(settings=self.settings)
+        self.event_bus = event_bus
 
     async def run(self, *, db: AsyncSession, job: BackgroundJob) -> AgentPlanResult:
+        ask: AskProtocol | None = None
+        if self.event_bus is not None:
+            ask = AskProtocol(db=db, event_bus=self.event_bus, job_id=int(job.job_id))
+            await ask.start()
+        try:
+            return await self._run(db=db, job=job, ask=ask)
+        finally:
+            if ask is not None:
+                await ask.aclose()
+
+    async def _run(
+        self,
+        *,
+        db: AsyncSession,
+        job: BackgroundJob,
+        ask: AskProtocol | None,
+    ) -> AgentPlanResult:
         if job.requested_by is None:
             raise ApiError(status_code=400, code=400, message="Agent job is missing requestedBy")
 
@@ -65,32 +75,49 @@ class PlanRunner:
         )
         metadata = await _collect_context_metadata(db, user_id=user_id, request=request)
         allowed_tools = _skill_tool_whitelist(skill)
-        if "drive.countFiles" in allowed_tools and _looks_like_count_question(request.input):
-            llm_payload = _count_question_payload(
+        allowed_tool_set = set(allowed_tools)
+        planner_router = ToolRouter(db=db, user_id=user_id)
+        tool_call_budget = min(self.settings.agent_job_max_tool_calls, 32)
+        planned_tool_calls = 0
+
+        async def _planning_tool_executor(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+            nonlocal planned_tool_calls
+            if tool_name not in allowed_tool_set:
+                raise ApiError(
+                    status_code=400,
+                    code=400,
+                    message=f"Planner attempted disallowed tool: {tool_name}",
+                )
+            spec = REGISTRY.get(tool_name)
+            if spec.side_effect != "read":
+                raise ApiError(
+                    status_code=400,
+                    code=400,
+                    message=f"Planner exploratory tool call must be read-only: {tool_name}",
+                )
+            planned_tool_calls += 1
+            if planned_tool_calls > tool_call_budget:
+                raise ApiError(
+                    status_code=400,
+                    code=400,
+                    message="Planner exceeded exploratory tool-call budget",
+                )
+            return await planner_router.dispatch(ToolCall(tool_name=tool_name, arguments=args))
+
+        llm_payload = await self.planner_client.create_plan(
+            system_prompt=_system_prompt(),
+            user_prompt=_user_prompt(
                 request=request,
+                skill=skill,
+                allowed_tools=allowed_tools,
                 metadata=metadata,
-            )
-        else:
-            try:
-                llm_payload = await self.planner_client.create_plan(
-                    system_prompt=_system_prompt(),
-                    user_prompt=_user_prompt(
-                        request=request,
-                        skill=skill,
-                        allowed_tools=allowed_tools,
-                        metadata=metadata,
-                    ),
-                    max_tokens=request.hints.budget_tokens,
-                    reasoning_effort=request.hints.reasoning_effort,
-                )
-            except ApiError as exc:
-                if exc.status_code != 502:
-                    raise
-                llm_payload = _safe_fallback_payload(
-                    request=request,
-                    metadata=metadata,
-                    allowed_tools=allowed_tools,
-                )
+            ),
+            max_tokens=request.hints.budget_tokens,
+            reasoning_effort=request.hints.reasoning_effort,
+            tools=REGISTRY.anthropic_tools_for(allowed_tools),
+            tool_executor=_planning_tool_executor,
+            max_tool_roundtrips=6,
+        )
 
         actions = _normalize_actions(
             llm_payload=llm_payload,
@@ -135,6 +162,21 @@ class PlanRunner:
             await db.rollback()
             raise
         return result
+
+    async def _ask(
+        self,
+        *,
+        ask: AskProtocol | None,
+        prompt: str,
+        schema: dict[str, Any],
+    ) -> Any | None:
+        if ask is None:
+            return None
+        return await ask.ask(
+            prompt=prompt,
+            schema=schema,
+            timeout_sec=float(self.settings.agent_inbox_ask_timeout_sec),
+        )
 
 
 async def _choose_skill(
@@ -200,10 +242,16 @@ def _skill_tool_whitelist(skill: AgentSkill | AgentSkillCatalogEntry | None) -> 
         raw = skill.tool_whitelist_json
     if isinstance(raw, list) and raw:
         tools = tuple(str(item) for item in raw if str(item).strip())
-        if "drive.countFiles" not in tools:
-            return (*tools, "drive.countFiles")
+        unknown = REGISTRY.unknown_names(tools)
+        if unknown:
+            raise ApiError(
+                status_code=422,
+                code=422,
+                message="Unknown agent tool in selected skill",
+                data={"unknownTools": sorted(unknown)},
+            )
         return tools
-    return DEFAULT_AGENT_TOOLS
+    return REGISTRY.all_names()
 
 
 def _chosen_skill(skill: AgentSkill | AgentSkillCatalogEntry | None) -> AgentChosenSkill | None:
@@ -375,9 +423,8 @@ def _folder_metadata(row: Folder) -> dict[str, Any]:
 
 def _system_prompt() -> str:
     return (
-        "You are FileFlash Agent Planner. Return only JSON. "
-        "Plan file-management actions or read-only answers using the provided tools and metadata. "
-        "For count/how many questions, prefer drive.countFiles over listing folders. "
+        "You are FileFlash Agent Planner. Build plans from tool-grounded facts, not assumptions. "
+        "If you need facts, first call read-only tools; then output one final JSON object that matches outputSchema. "
         "Do not read or infer file contents. Deletions are high risk and must be explicit. "
         "Cross-step dependencies must use '$stepN.field' references only and never symbolic placeholders "
         "like 'newFolderId'."
@@ -399,6 +446,17 @@ def _user_prompt(
         "skill": _skill_payload(skill),
         "allowedTools": list(allowed_tools),
         "toolSchemas": _tool_schemas(allowed_tools),
+        "toolUseMode": (
+            "Use read-only tools first when facts are missing. "
+            "Write tools must appear only in final proposedActions, not exploratory tool_use steps."
+        ),
+        "plannerDefaults": {
+            "organizeRequest": {
+                "scope": "root recursive unless user constrained the scope",
+                "folderNaming": "reuse existing folders first; create english category folders if missing",
+                "writePlanPolicy": "generate executable write actions by default",
+            }
+        },
         "referenceContract": {
             "syntax": "$stepN.field",
             "rules": [
@@ -456,172 +514,7 @@ def _skill_payload(skill: AgentSkill | AgentSkillCatalogEntry | None) -> dict[st
 
 
 def _tool_schemas(allowed_tools: tuple[str, ...]) -> list[dict[str, Any]]:
-    descriptions = {
-        "drive.listFolder": "List direct folder contents by folderId.",
-        "drive.countFiles": (
-            "Count files under folderId. Supports recursive=true and category values "
-            "video, audio, image, document, archive, other. Supports search for file-name "
-            "contains filters. Use category=video for movie/电影/几部 questions."
-        ),
-        "drive.createFolder": "Create a folder under parentFolderId with name.",
-        "drive.moveFile": "Move fileId into targetFolderId.",
-        "drive.moveFolder": "Move folderId into targetParentId.",
-        "drive.renameFile": "Rename fileId to fileName.",
-        "drive.renameFolder": "Rename folderId to folderName.",
-        "drive.deleteFile": "Soft-delete fileId into recycle bin. High risk.",
-        "drive.deleteFolder": "Soft-delete folderId into recycle bin. High risk.",
-    }
-    return [{"tool": tool, "description": descriptions.get(tool, "")} for tool in allowed_tools]
-
-
-def _safe_fallback_payload(
-    *,
-    request: PlanAgentRequest,
-    metadata: dict[str, Any],
-    allowed_tools: tuple[str, ...],
-) -> dict[str, Any]:
-    fallback_actions: list[dict[str, Any]] = []
-    if "drive.countFiles" in allowed_tools and _looks_like_count_question(request.input):
-        return _count_question_payload(request=request, metadata=metadata)
-    if "drive.listFolder" in allowed_tools:
-        root_folder_id = str(
-            metadata.get("rootFolderId")
-            or request.context.root_folder_id
-            or "root"
-        )
-        fallback_actions.append(
-            {
-                "step": 1,
-                "tool": "drive.listFolder",
-                "input": {"folderId": root_folder_id},
-                "sideEffect": "read",
-                "riskLevel": "low",
-                "requiresConfirmation": False,
-            }
-        )
-    return {
-        "summary": "Planner fallback mode: generated a safe read-only plan.",
-        "proposedActions": fallback_actions,
-    }
-
-
-def _looks_like_count_question(text: str) -> bool:
-    normalized = text.lower()
-    return any(token in normalized for token in ("多少", "几个", "几部", "count", "how many", "number of"))
-
-
-def _count_question_payload(
-    *,
-    request: PlanAgentRequest,
-    metadata: dict[str, Any],
-) -> dict[str, Any]:
-    action_input: dict[str, Any] = {
-        "folderId": metadata.get("rootFolderId") or request.context.root_folder_id or "root",
-        "recursive": True,
-        "category": _fallback_count_category(request.input),
-    }
-    search = _fallback_count_search(request.input)
-    if search:
-        action_input["search"] = search
-    return {
-        "summary": "已准备按文件名和类型统计你的文件。",
-        "proposedActions": [
-            {
-                "step": 1,
-                "tool": "drive.countFiles",
-                "input": action_input,
-                "sideEffect": "read",
-                "riskLevel": "low",
-                "requiresConfirmation": False,
-            }
-        ],
-    }
-
-
-def _fallback_count_category(text: str) -> str | None:
-    normalized = text.lower()
-    if any(token in normalized for token in ("电影", "影片", "视频", "几部", "movie", "film", "video")):
-        return "video"
-    if any(token in normalized for token in ("图片", "照片", "image", "photo", "picture")):
-        return "image"
-    if any(token in normalized for token in ("音频", "音乐", "audio", "music")):
-        return "audio"
-    if any(token in normalized for token in ("文档", "document", "doc")):
-        return "document"
-    if any(token in normalized for token in ("压缩", "archive", "zip")):
-        return "archive"
-    return None
-
-
-def _fallback_count_search(text: str) -> str | None:
-    cleaned = re.sub(r"[?？!！。.,，;；:：]", " ", text).strip()
-    candidate = cleaned
-    for phrase in (
-        "我上传了多少部",
-        "我上传了多少个",
-        "我上传了几部",
-        "我上传了几个",
-        "上传了多少部",
-        "上传了多少个",
-        "上传了几部",
-        "上传了几个",
-        "有多少部",
-        "有多少个",
-        "有几部",
-        "有几个",
-    ):
-        candidate = candidate.replace(phrase, " ")
-    for token in (
-        "我",
-        "上传",
-        "了",
-        "有",
-        "多少",
-        "几个",
-        "几部",
-        "多少部",
-        "多少个",
-        "部",
-        "个",
-        "文件",
-        "电影",
-        "影片",
-        "视频",
-        "音频",
-        "音乐",
-        "图片",
-        "照片",
-        "文档",
-        "压缩包",
-    ):
-        candidate = candidate.replace(token, " ")
-    candidate = " ".join(candidate.split()).strip()
-    if candidate:
-        return candidate
-
-    english = cleaned.lower()
-    for phrase in (
-        "how many",
-        "number of",
-        "did i upload",
-        "have i uploaded",
-        "i uploaded",
-        "uploaded",
-        "upload",
-        "movies",
-        "movie",
-        "films",
-        "film",
-        "videos",
-        "video",
-        "files",
-        "file",
-        "are there",
-        "do i have",
-    ):
-        english = english.replace(phrase, " ")
-    english = " ".join(english.split()).strip()
-    return english or None
+    return REGISTRY.schemas_for(allowed_tools)
 
 
 def _normalize_actions(

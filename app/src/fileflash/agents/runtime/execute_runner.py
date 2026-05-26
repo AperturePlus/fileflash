@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -7,16 +10,24 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.errors import ApiError
+from ...core.settings import Settings, get_settings
 from ...models import BackgroundJob
+from ...models.enums import AgentInboxKind
 from ...repositories import (
     AgentActionLogRepository,
+    AgentInboxMessageRepository,
     AgentPlanRepository,
     AgentWorkSessionRepository,
 )
 from ...schemas.agent import AgentExecutionResult, AgentProposedAction, ExecuteAgentRequest
+from ..harness.ask import AskProtocol
+from ..harness.event_bus import AgentEventBus, AgentEventEnvelope
 from ..harness.policy import PolicyGuard
 from ..harness.router import ToolCall, ToolRouter
+from .llm import AnswerClient, AnthropicPlannerClient
 from .reference_rules import is_symbolic_id_placeholder, parse_step_reference
+
+logger = logging.getLogger(__name__)
 
 
 class AgentJobCanceled(Exception):
@@ -24,10 +35,37 @@ class AgentJobCanceled(Exception):
 
 
 class ExecuteRunner:
-    def __init__(self, *, policy_guard: PolicyGuard | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        settings: Settings | None = None,
+        policy_guard: PolicyGuard | None = None,
+        event_bus: AgentEventBus | None = None,
+        answer_client: AnswerClient | None = None,
+    ) -> None:
+        self.settings = settings or get_settings()
         self.policy_guard = policy_guard or PolicyGuard()
+        self.event_bus = event_bus
+        self.answer_client = answer_client or AnthropicPlannerClient(settings=self.settings)
 
     async def run(self, *, db: AsyncSession, job: BackgroundJob) -> AgentExecutionResult:
+        ask: AskProtocol | None = None
+        if self.event_bus is not None:
+            ask = AskProtocol(db=db, event_bus=self.event_bus, job_id=int(job.job_id))
+            await ask.start()
+        try:
+            return await self._run(db=db, job=job, ask=ask)
+        finally:
+            if ask is not None:
+                await ask.aclose()
+
+    async def _run(
+        self,
+        *,
+        db: AsyncSession,
+        job: BackgroundJob,
+        ask: AskProtocol | None,
+    ) -> AgentExecutionResult:
         if job.requested_by is None:
             raise ApiError(status_code=400, code=400, message="Agent job is missing requestedBy")
         request = ExecuteAgentRequest.model_validate(dict(job.payload or {}))
@@ -59,10 +97,23 @@ class ExecuteRunner:
         )
         await db.commit()
 
+        inbox_repo = AgentInboxMessageRepository(db) if self.event_bus is not None else None
+        paused = False
         for action in actions:
             await db.refresh(job)
             if job.cancel_requested_at is not None:
                 raise AgentJobCanceled()
+            if inbox_repo is not None:
+                paused, skip_current = await self._handle_step_boundary_controls(
+                    db=db,
+                    job=job,
+                    inbox_repo=inbox_repo,
+                    action=action,
+                    warnings=warnings,
+                    paused=paused,
+                )
+                if skip_current:
+                    continue
 
             decision = await self.policy_guard.evaluate_tool_call(
                 tool_name=action.tool,
@@ -98,6 +149,13 @@ class ExecuteRunner:
                     error_message=f"{type(exc).__name__}: {exc}"[:2000],
                 )
                 await db.commit()
+                await self._publish_tool(
+                    "tool.failed",
+                    job_id=int(job.job_id),
+                    step=action.step,
+                    tool=action.tool,
+                    payload={"errorMessage": f"{type(exc).__name__}: {exc}"[:2000]},
+                )
                 raise
 
             await action_logs.append_step(
@@ -109,6 +167,14 @@ class ExecuteRunner:
                 started_at=started,
             )
             await db.commit()
+            await self._publish_tool(
+                "tool.started",
+                job_id=int(job.job_id),
+                step=action.step,
+                tool=action.tool,
+                payload={"input": resolved_input},
+                emitted_at=started,
+            )
 
             try:
                 output = await router.dispatch(
@@ -126,6 +192,13 @@ class ExecuteRunner:
                     error_message=f"{type(exc).__name__}: {exc}"[:2000],
                 )
                 await db.commit()
+                await self._publish_tool(
+                    "tool.failed",
+                    job_id=int(job.job_id),
+                    step=action.step,
+                    tool=action.tool,
+                    payload={"errorMessage": f"{type(exc).__name__}: {exc}"[:2000]},
+                )
                 raise
 
             safe_output = jsonable_encoder(output)
@@ -138,6 +211,13 @@ class ExecuteRunner:
                 duration_ms=duration_ms,
             )
             await db.commit()
+            await self._publish_tool(
+                "tool.succeeded",
+                job_id=int(job.job_id),
+                step=action.step,
+                tool=action.tool,
+                payload={"output": safe_output, "durationMs": duration_ms},
+            )
             step_outputs[action.step] = safe_output
             applied += 1
 
@@ -146,7 +226,12 @@ class ExecuteRunner:
             warnings.append(f"{skipped} action(s) were skipped.")
         await work_sessions.close_session(job_id=int(job.job_id), status="closed")
         await db.commit()
-        answer = _build_execution_answer(actions=actions, step_outputs=step_outputs)
+        answer = await _build_execution_answer(
+            task_input=str(getattr(plan, "input_text", "") or ""),
+            actions=actions,
+            step_outputs=step_outputs,
+            answer_client=self.answer_client,
+        )
         return AgentExecutionResult(
             plan_job_id=str(plan_job_id),
             execute_job_id=str(job.job_id),
@@ -157,6 +242,96 @@ class ExecuteRunner:
             warnings=warnings,
             finished_at=datetime.now(UTC),
         )
+
+    async def _handle_step_boundary_controls(
+        self,
+        *,
+        db: AsyncSession,
+        job: BackgroundJob,
+        inbox_repo: AgentInboxMessageRepository,
+        action: AgentProposedAction,
+        warnings: list[str],
+        paused: bool,
+    ) -> tuple[bool, bool]:
+        while True:
+            skip_current = False
+            pending = await inbox_repo.list_pending_controls(job_id=int(job.job_id))
+            for ctrl in pending:
+                kind = AgentInboxKind(ctrl.kind)
+                if kind == AgentInboxKind.CONTROL_CANCEL:
+                    await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
+                    job.cancel_requested_at = datetime.now(UTC)
+                    await db.commit()
+                    raise AgentJobCanceled()
+                if kind == AgentInboxKind.CONTROL_PAUSE:
+                    paused = True
+                    await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
+                    await self._publish_state("agent.paused", job_id=int(job.job_id))
+                elif kind == AgentInboxKind.CONTROL_RESUME:
+                    paused = False
+                    await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
+                    await self._publish_state("agent.resumed", job_id=int(job.job_id))
+                elif kind == AgentInboxKind.CONTROL_SKIP:
+                    await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
+                    warnings.append(f"Step {action.step} skipped by user")
+                    skip_current = True
+                else:
+                    await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
+            await db.commit()
+            if skip_current:
+                return paused, True
+            if not paused:
+                return paused, False
+            await asyncio.sleep(0.1)
+
+    async def _publish_state(self, event_type: str, *, job_id: int) -> None:
+        if self.event_bus is None:
+            return
+        try:
+            await self.event_bus.publish(
+                AgentEventEnvelope(
+                    job_id=job_id,
+                    event_type=event_type,
+                    payload={},
+                    emitted_at=datetime.now(UTC),
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Failed to publish state event jobId=%s eventType=%s",
+                job_id,
+                event_type,
+            )
+
+    async def _publish_tool(
+        self,
+        event_type: str,
+        *,
+        job_id: int,
+        step: int,
+        tool: str,
+        payload: dict[str, Any],
+        emitted_at: datetime | None = None,
+    ) -> None:
+        if self.event_bus is None:
+            return
+        try:
+            await self.event_bus.publish(
+                AgentEventEnvelope(
+                    job_id=job_id,
+                    event_type=event_type,
+                    payload={"step": int(step), "tool": str(tool), **payload},
+                    emitted_at=emitted_at or datetime.now(UTC),
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Failed to publish tool event jobId=%s eventType=%s step=%s tool=%s",
+                job_id,
+                event_type,
+                step,
+                tool,
+            )
 
 
 def _parse_job_id(raw: str) -> int:
@@ -226,64 +401,89 @@ def _resolve_references(
     return value
 
 
-def _build_execution_answer(
+async def _build_execution_answer(
     *,
+    task_input: str = "",
     actions: list[AgentProposedAction],
     step_outputs: dict[int, dict[str, Any]],
+    answer_client: AnswerClient,
 ) -> str | None:
-    for action in actions:
-        if action.tool != "drive.countFiles":
-            continue
-        output = step_outputs.get(action.step)
-        if not isinstance(output, dict):
-            continue
-        return _count_files_answer(output)
-
-    if actions and all(action.side_effect == "read" for action in actions):
-        return _read_only_answer(actions=actions, step_outputs=step_outputs)
-    return None
-
-
-def _count_files_answer(output: dict[str, Any]) -> str:
-    total_items = int(output.get("totalItems") or 0)
-    category = str(output.get("category") or "").strip().lower()
-    qualifier = _search_qualifier(output)
-    if category == "video":
-        return f"你上传了 {total_items} 部{qualifier}电影（按视频文件统计）。"
-    if category == "audio":
-        return f"你上传了 {total_items} 个{qualifier}音频文件。"
-    if category == "image":
-        return f"你上传了 {total_items} 张{qualifier}图片。"
-    if category == "document":
-        return f"你上传了 {total_items} 个{qualifier}文档。"
-    if category == "archive":
-        return f"你上传了 {total_items} 个{qualifier}压缩包。"
-    return f"你上传了 {total_items} 个{qualifier}文件。"
+    if not actions:
+        return None
+    user_prompt = _answer_user_prompt(
+        task_input=task_input,
+        actions=actions,
+        step_outputs=step_outputs,
+    )
+    text = await answer_client.create_answer(
+        system_prompt=_answer_system_prompt(),
+        user_prompt=user_prompt,
+        max_tokens=640,
+        reasoning_effort="low",
+    )
+    answer = _normalize_answer(text)
+    if answer is None:
+        raise ApiError(status_code=502, code=502, message="Agent answer model returned empty response")
+    return answer
 
 
-def _search_qualifier(output: dict[str, Any]) -> str:
-    search = str(output.get("search") or "").strip()
-    if not search:
-        return ""
-    return f"名称包含“{search}”的"
+def _answer_system_prompt() -> str:
+    return (
+        "You are FileFlash execution answer generator. "
+        "Only describe results that are present in tool outputs. "
+        "Do not invent filenames, counts, or paths. "
+        "Keep the response concise and user-facing in the same language as the user input."
+    )
 
 
-def _read_only_answer(
+def _answer_user_prompt(
     *,
+    task_input: str,
     actions: list[AgentProposedAction],
     step_outputs: dict[int, dict[str, Any]],
 ) -> str:
-    for action in actions:
-        output = step_outputs.get(action.step)
-        if not isinstance(output, dict):
-            continue
-        if action.tool == "drive.listFolder":
-            pagination = output.get("pagination")
-            total_items = None
-            if isinstance(pagination, dict):
-                total_items = pagination.get("totalItems")
-            if total_items is None:
-                items = output.get("items")
-                total_items = len(items) if isinstance(items, list) else 0
-            return f"已读取当前文件夹，共 {int(total_items or 0)} 个项目。"
-    return "查询已完成，但没有可展示的结果。"
+    payload_actions: list[dict[str, Any]] = []
+    for action in sorted(actions, key=lambda item: item.step):
+        payload_actions.append(
+            {
+                "step": action.step,
+                "tool": action.tool,
+                "sideEffect": action.side_effect,
+                "input": action.input,
+                "output": _compact_output(step_outputs.get(action.step)),
+            }
+        )
+    payload = {
+        "task": task_input,
+        "actions": payload_actions,
+        "responseGuidance": {
+            "includeNamesWhenAvailable": True,
+            "mentionTruncationWhenProvided": True,
+            "ifAmbiguous": "state candidate count and ask for clarification",
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def _compact_output(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if len(text) <= 12_000:
+        return value
+    compact = dict(value)
+    compact["truncated"] = True
+    compact["truncatedFields"] = sorted(compact.keys())[:16]
+    compact.pop("items", None)
+    compact.pop("sampleItems", None)
+    return compact
+
+
+def _normalize_answer(text: str) -> str | None:
+    candidate = str(text or "").strip()
+    if not candidate:
+        return None
+    candidate = " ".join(candidate.split())
+    if len(candidate) > 1200:
+        candidate = candidate[:1200].rstrip() + "…"
+    return candidate

@@ -17,6 +17,7 @@ from ..db.transaction import apply_local_lock_timeout
 from ..models import BackgroundJob
 from ..services.job_queue import RedisStreamJobQueue
 from ..workers.contracts import WorkerJobMessage
+from .harness.event_bus import AgentEventBus, AgentEventEnvelope, build_agent_event_bus
 from .runtime import AgentJobCanceled, ExecuteRunner, PlanRunner
 
 logger = logging.getLogger(__name__)
@@ -28,10 +29,12 @@ class AgentWorkerConsumer:
         *,
         queue: RedisStreamJobQueue,
         session_factory: async_sessionmaker[AsyncSession] = SessionLocal,
+        event_bus: AgentEventBus | None = None,
     ) -> None:
         self._settings = get_settings()
         self._queue = queue
         self._session_factory = session_factory
+        self._event_bus = event_bus or build_agent_event_bus(settings=self._settings)
 
     async def run(self) -> None:
         logger.info(
@@ -103,12 +106,15 @@ class AgentWorkerConsumer:
             if fresh_job is None:
                 raise ApiError(status_code=404, code=404, message="Job not found")
             if fresh_job.task_type == "agent.plan":
-                result = await PlanRunner(settings=self._settings).run(db=db, job=fresh_job)
+                result = await PlanRunner(
+                    settings=self._settings,
+                    event_bus=self._event_bus,
+                ).run(db=db, job=fresh_job)
                 phase = "awaiting_confirm" if result.requires_confirmation else "completed"
-                return result.model_dump(by_alias=True), phase
+                return result.model_dump(by_alias=True, mode="json"), phase
             if fresh_job.task_type == "agent.execute":
-                result = await ExecuteRunner().run(db=db, job=fresh_job)
-                return result.model_dump(by_alias=True), "completed"
+                result = await ExecuteRunner(event_bus=self._event_bus).run(db=db, job=fresh_job)
+                return result.model_dump(by_alias=True, mode="json"), "completed"
             raise ApiError(
                 status_code=400,
                 code=400,
@@ -135,6 +141,8 @@ class AgentWorkerConsumer:
                 return job
 
     async def _mark_succeeded(self, *, job_id: int, result: dict[str, Any], phase: str) -> None:
+        safe_result = jsonable_encoder(result)
+        should_publish = False
         async with self._session_factory() as db:
             async with db.begin():
                 await apply_local_lock_timeout(db)
@@ -147,14 +155,22 @@ class AgentWorkerConsumer:
                     return
                 now = datetime.now(UTC)
                 job.status = "succeeded"
-                job.result = jsonable_encoder(result)
+                job.result = safe_result
                 job.error_message = None
                 job.agent_phase = phase
                 job.finished_at = now
                 job.updated_at = now
+                should_publish = True
+        if should_publish:
+            await self._publish_terminal(
+                job_id=job_id,
+                event_type="job.succeeded",
+                payload={"status": "succeeded", "agentPhase": phase, "data": {"result": safe_result}},
+            )
 
     async def _mark_failed(self, *, job_id: int, error: Exception) -> None:
         message = _error_message(error)
+        should_publish = False
         async with self._session_factory() as db:
             async with db.begin():
                 await apply_local_lock_timeout(db)
@@ -171,8 +187,21 @@ class AgentWorkerConsumer:
                 job.error_message = message[:2000]
                 job.finished_at = now
                 job.updated_at = now
+                should_publish = True
+        if should_publish:
+            await self._publish_terminal(
+                job_id=job_id,
+                event_type="job.failed",
+                payload={
+                    "status": "failed",
+                    "agentPhase": "failed",
+                    "message": message[:2000],
+                    "data": {"errorMessage": message[:2000]},
+                },
+            )
 
     async def _mark_canceled(self, *, job_id: int) -> None:
+        should_publish = False
         async with self._session_factory() as db:
             async with db.begin():
                 await apply_local_lock_timeout(db)
@@ -187,6 +216,36 @@ class AgentWorkerConsumer:
                 job.cancel_requested_at = job.cancel_requested_at or now
                 job.finished_at = now
                 job.updated_at = now
+                should_publish = True
+        if should_publish:
+            await self._publish_terminal(
+                job_id=job_id,
+                event_type="job.canceled",
+                payload={"status": "canceled", "agentPhase": "canceled"},
+            )
+
+    async def _publish_terminal(
+        self,
+        *,
+        job_id: int,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        try:
+            await self._event_bus.publish(
+                AgentEventEnvelope(
+                    job_id=job_id,
+                    event_type=event_type,
+                    payload=payload or {},
+                    emitted_at=datetime.now(UTC),
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Failed to publish terminal event jobId=%s eventType=%s",
+                job_id,
+                event_type,
+            )
 
 
 def _error_message(error: Exception) -> str:
