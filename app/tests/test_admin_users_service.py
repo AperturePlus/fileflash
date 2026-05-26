@@ -42,6 +42,14 @@ class DummySession:
         self.execute = AsyncMock()
 
 
+class ResultRows:
+    def __init__(self, rows) -> None:  # noqa: ANN001
+        self._rows = rows
+
+    def all(self):  # noqa: ANN201
+        return self._rows
+
+
 @pytest.mark.asyncio
 async def test_list_users_returns_paginated_items() -> None:
     session = DummySession()
@@ -55,6 +63,41 @@ async def test_list_users_returns_paginated_items() -> None:
     assert result.pagination.total_items == 1
     assert result.items[0].username == "alice"
     assert result.items[0].status == "active"
+    assert result.items[0].usage_stats.traffic_bytes == 0
+    assert result.items[0].usage_stats.agent_tokens == 0
+
+
+def test_list_users_query_default_usage_window() -> None:
+    now = datetime(2026, 5, 26, 12, 0, tzinfo=UTC)
+    usage_from, usage_to = ListAdminUsersQuery().resolve_usage_window(now=now)
+
+    assert usage_to == now
+    assert (usage_to - usage_from).days == 7
+
+
+@pytest.mark.asyncio
+async def test_collect_usage_stats_aggregates_traffic_and_tokens() -> None:
+    session = DummySession()
+    session.execute = AsyncMock(
+        side_effect=[
+            ResultRows([(1, 2048), (2, 4096)]),
+            ResultRows([(1, 1500), (3, None)]),
+        ]
+    )
+    service = AdminUsersService(db=session)  # type: ignore[arg-type]
+
+    stats = await service._collect_usage_stats(
+        user_ids=[1, 2, 3],
+        usage_from=datetime(2026, 5, 1, tzinfo=UTC),
+        usage_to=datetime(2026, 5, 26, tzinfo=UTC),
+    )
+
+    assert stats[1].traffic_bytes == 2048
+    assert stats[1].agent_tokens == 1500
+    assert stats[2].traffic_bytes == 4096
+    assert stats[2].agent_tokens == 0
+    assert stats[3].traffic_bytes == 0
+    assert stats[3].agent_tokens == 0
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,13 @@ export type MockUserRecord = User & {
   preference: UserPreference;
 };
 
+export interface MockUsageEvent {
+  userId: string;
+  occurredAt: string;
+  trafficBytes: number;
+  agentTokens: number;
+}
+
 const now = () => new Date().toISOString();
 
 const randomRecentTime = (maxHours = 72) => {
@@ -173,6 +180,25 @@ export const mockUsers: MockUserRecord[] = [
     },
   },
 ];
+
+export const mockUsageEvents: MockUsageEvent[] = mockUsers.flatMap((user, index) => {
+  const recentAt = new Date(Date.now() - (index + 1) * 24 * 60 * 60 * 1000).toISOString();
+  const olderAt = new Date(Date.now() - (index + 20) * 24 * 60 * 60 * 1000).toISOString();
+  return [
+    {
+      userId: user.userId,
+      occurredAt: recentAt,
+      trafficBytes: (index + 1) * 256 * 1024 * 1024,
+      agentTokens: (index + 1) * 1250,
+    },
+    {
+      userId: user.userId,
+      occurredAt: olderAt,
+      trafficBytes: (index + 1) * 64 * 1024 * 1024,
+      agentTokens: (index + 1) * 300,
+    },
+  ];
+});
 
 export const mockShares: Array<Share & { ownerUserId: string }> = [
   {

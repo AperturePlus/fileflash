@@ -6,9 +6,16 @@ from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.errors import ApiError
-from ...models.enums import UserRole, UserStatus
+from ...models.enums import UploadTaskStatus, UserRole, UserStatus
 from ...models.tables_identity import User, UserSession
-from ...schemas.admin.users import AdminUserItem, ListAdminUsersQuery, UpdateUserStatusResponse
+from ...models.tables_storage import UploadTask
+from ...models.tables_worker import BackgroundJob
+from ...schemas.admin.users import (
+    AdminUserItem,
+    AdminUserUsageStats,
+    ListAdminUsersQuery,
+    UpdateUserStatusResponse,
+)
 from ...schemas.common import PaginatedData, PaginationMeta
 from ._status import external_to_internal, internal_to_external
 
@@ -42,8 +49,25 @@ class AdminUsersService:
         offset = (query.page - 1) * query.per_page
         rows = list(await self.db.scalars(statement.offset(offset).limit(query.per_page)))
 
-        last_seen_map = await self._collect_last_seen([int(row.user_id) for row in rows])
-        items = [self._to_item(row, last_seen_map.get(int(row.user_id))) for row in rows]
+        user_ids = [int(row.user_id) for row in rows]
+        last_seen_map = await self._collect_last_seen(user_ids)
+        usage_from, usage_to = self._resolve_usage_window(query)
+        usage_map = await self._collect_usage_stats(
+            user_ids=user_ids,
+            usage_from=usage_from,
+            usage_to=usage_to,
+        )
+        items = [
+            self._to_item(
+                row,
+                last_seen_map.get(int(row.user_id)),
+                usage_map.get(
+                    int(row.user_id),
+                    AdminUserUsageStats(traffic_bytes=0, agent_tokens=0),
+                ),
+            )
+            for row in rows
+        ]
         return PaginatedData(
             items=items,
             pagination=PaginationMeta(
@@ -55,6 +79,71 @@ class AdminUsersService:
                 has_next=query.page < total_pages,
             ),
         )
+
+    @staticmethod
+    def _resolve_usage_window(query: ListAdminUsersQuery) -> tuple[datetime, datetime]:
+        try:
+            return query.resolve_usage_window()
+        except ValueError as exc:
+            raise ApiError(status_code=400, code=400, message=str(exc)) from exc
+
+    async def _collect_usage_stats(
+        self,
+        *,
+        user_ids: list[int],
+        usage_from: datetime,
+        usage_to: datetime,
+    ) -> dict[int, AdminUserUsageStats]:
+        if not user_ids:
+            return {}
+
+        traffic_rows = await self.db.execute(
+            select(UploadTask.user_id, func.coalesce(func.sum(UploadTask.total_size), 0))
+            .where(
+                and_(
+                    UploadTask.user_id.in_(user_ids),
+                    UploadTask.status == UploadTaskStatus.COMPLETED,
+                    UploadTask.completed_at.is_not(None),
+                    UploadTask.completed_at >= usage_from,
+                    UploadTask.completed_at <= usage_to,
+                )
+            )
+            .group_by(UploadTask.user_id)
+        )
+        stats: dict[int, AdminUserUsageStats] = {
+            int(user_id): AdminUserUsageStats(traffic_bytes=int(total or 0), agent_tokens=0)
+            for user_id, total in traffic_rows.all()
+        }
+
+        token_expr = BackgroundJob.result["costEstimate"]["tokens"].as_integer()
+        agent_rows = await self.db.execute(
+            select(
+                BackgroundJob.requested_by,
+                func.coalesce(func.sum(func.coalesce(token_expr, 0)), 0),
+            )
+            .where(
+                and_(
+                    BackgroundJob.requested_by.in_(user_ids),
+                    BackgroundJob.task_type == "agent.plan",
+                    BackgroundJob.status == "succeeded",
+                    BackgroundJob.finished_at.is_not(None),
+                    BackgroundJob.finished_at >= usage_from,
+                    BackgroundJob.finished_at <= usage_to,
+                )
+            )
+            .group_by(BackgroundJob.requested_by)
+        )
+        for user_id, total in agent_rows.all():
+            if user_id is None:
+                continue
+            key = int(user_id)
+            current = stats.get(key, AdminUserUsageStats(traffic_bytes=0, agent_tokens=0))
+            stats[key] = AdminUserUsageStats(
+                traffic_bytes=current.traffic_bytes,
+                agent_tokens=int(total or 0),
+            )
+
+        return stats
 
     async def set_status(self, *, user_id: int, external_status: str) -> UpdateUserStatusResponse:
         target = await self.db.get(User, user_id)
@@ -113,7 +202,11 @@ class AdminUsersService:
         return {int(user_id): seen for user_id, seen in rows.all()}
 
     @staticmethod
-    def _to_item(row: User, last_active_at: datetime | None) -> AdminUserItem:
+    def _to_item(
+        row: User,
+        last_active_at: datetime | None,
+        usage_stats: AdminUserUsageStats,
+    ) -> AdminUserItem:
         limit = max(int(row.storage_limit), 1)
         return AdminUserItem(
             user_id=str(row.user_id),
@@ -129,6 +222,7 @@ class AdminUsersService:
             last_login_at=row.last_login_at,
             last_active_at=last_active_at,
             created_at=row.created_at,
+            usage_stats=usage_stats,
         )
 
 
