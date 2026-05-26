@@ -6,6 +6,7 @@ from .memory import MemoryLoader
 from .policy import PolicyDecision, PolicyGuard
 from .prompt import PromptBuildRequest, PromptBuilder
 from .router import ToolCall, ToolRouter
+from .tool_registry import REGISTRY, ToolContext, ToolRegistry, ToolSpec
 
 __all__ = [
     "AgentEvent",
@@ -20,6 +21,10 @@ __all__ = [
     "PolicyGuard",
     "PromptBuildRequest",
     "PromptBuilder",
+    "REGISTRY",
     "ToolCall",
+    "ToolContext",
+    "ToolRegistry",
     "ToolRouter",
+    "ToolSpec",
 ]
