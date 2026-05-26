@@ -9,6 +9,7 @@ const baseTurn = (overrides: Partial<AgentTurn['agent']> = {}): AgentTurn => ({
     role: 'user',
     content: 'do it',
     status: 'succeeded',
+    events: [],
     timestamp: '2026-05-20T00:00:00Z',
   },
   agent: {
@@ -16,6 +17,7 @@ const baseTurn = (overrides: Partial<AgentTurn['agent']> = {}): AgentTurn => ({
     role: 'agent',
     content: '',
     status: 'succeeded',
+    events: [],
     timestamp: '2026-05-20T00:00:00Z',
     planHash: 'hash-1',
     planResult: {
@@ -60,6 +62,43 @@ describe('organisms/agent/TurnEntry', () => {
     });
     expect(w.text()).toContain('3 部电影');
     expect(w.text()).not.toContain('plan summary text');
+  });
+
+  it('renders lightweight agent activity events before the answer', () => {
+    const w = mount(TurnEntry, {
+      props: {
+        turn: baseTurn({
+          events: [
+            {
+              id: 'ev-1',
+              jobId: 'e-1',
+              taskType: 'agent.execute',
+              type: 'tool.started',
+              status: 'running',
+              agentPhase: 'executing',
+              message: '正在读取名称包含“银翼杀手”的视频文件数量。',
+              data: {},
+              timestamp: '2026-05-20T00:00:01Z',
+            },
+          ],
+          executeResult: {
+            planJobId: 'p-1',
+            executeJobId: 'e-1',
+            summary: 'execution summary text',
+            answer: '你上传了 2 部名称包含“银翼杀手”的电影（按视频文件统计）。',
+            appliedActions: 1,
+            skippedActions: 0,
+            warnings: [],
+            finishedAt: '2026-05-20T00:01:00Z',
+          },
+        }),
+        policy: 'confirm',
+        focused: false,
+      },
+    });
+
+    expect(w.text()).toContain('正在读取名称包含');
+    expect(w.text()).toContain('你上传了 2 部名称包含');
   });
 
   it('hides Execute button when policy=planOnly', () => {

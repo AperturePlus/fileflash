@@ -35,6 +35,12 @@ const resultText = computed(
   () => props.turn.agent.executeResult?.answer || props.turn.agent.executeResult?.summary || '',
 );
 
+const activityEvents = computed(() =>
+  (props.turn.agent.events || [])
+    .filter((event) => event.message && !event.type.startsWith('job.succeeded'))
+    .slice(-4),
+);
+
 const statusLabel = computed(() => {
   const key = `agent.v2.turn.status.${props.turn.agent.status}` as LocaleKey;
   return t(key);
@@ -70,6 +76,13 @@ const formatTime = (iso: string) => {
         </header>
 
         <div v-if="isActive" class="ff-te__progress" />
+
+        <ol v-if="activityEvents.length" class="ff-te__events">
+          <li v-for="event in activityEvents" :key="event.id" class="ff-te__event">
+            <span class="ff-te__event-dot" />
+            <span>{{ event.message }}</span>
+          </li>
+        </ol>
 
         <p v-if="resultText" class="ff-te__sum ff-te__answer">
           {{ resultText }}
@@ -190,6 +203,30 @@ const formatTime = (iso: string) => {
 
 .ff-te__sum { margin: 0; color: var(--text-primary); }
 .ff-te__answer { white-space: pre-wrap; }
+
+.ff-te__events {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ff-te__event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--text-tertiary);
+}
+.ff-te__event-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--ac);
+  flex: 0 0 auto;
+}
 
 .ff-te__actions {
   border: 1px solid var(--border-subtle);
