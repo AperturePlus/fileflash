@@ -14,7 +14,8 @@ import { ui } from '../../../utils/ui';
 const {
   sessions, activeSessionId, activeTurns, policy, reasoningEffort, taskInput, isSending,
   createSession, switchSession, deleteSession,
-  sendMessage, runExecute, cancel,
+  sendMessage, runExecute, cancel, replyToAsk,
+  pauseTurn, resumeTurn, skipStep, approveStep, denyStep,
 } = useAgentSession();
 
 const localeStore = useLocaleStore();
@@ -31,7 +32,20 @@ const turnOf = (id: string): ChatMessage | null =>
 
 const onExecute = (id: string) => { const m = turnOf(id); if (m) runExecute(m); };
 const onCancel  = (id: string) => { const m = turnOf(id); if (m) cancel(m); };
+const onReply = (id: string, value: unknown) => { const m = turnOf(id); if (m) replyToAsk(m, value); };
+const onPause = (id: string) => { const m = turnOf(id); if (m) pauseTurn(m); };
+const onResume = (id: string) => { const m = turnOf(id); if (m) resumeTurn(m); };
+const onSkip = (id: string) => { const m = turnOf(id); if (m) skipStep(m); };
+const onApprove = (id: string) => { const m = turnOf(id); if (m) approveStep(m); };
+const onDeny = (id: string) => { const m = turnOf(id); if (m) denyStep(m); };
 const onHint = (text: string) => { taskInput.value = text; sendMessage(); };
+
+const isInputLocked = computed(() =>
+  isSending.value ||
+  activeTurns.value.some(
+    (turn) => turn.agent.status === 'waiting_for_user' || turn.agent.status === 'paused',
+  ),
+);
 
 const onDeleteSession = async (id: string) => {
   const target = sessions.value.find((s) => s.id === id);
@@ -63,6 +77,12 @@ const onDeleteSession = async (id: string) => {
         :focused-id="focusedTurnId"
         @execute="onExecute"
         @cancel="onCancel"
+        @reply="onReply"
+        @pause="onPause"
+        @resume="onResume"
+        @skip="onSkip"
+        @approve="onApprove"
+        @deny="onDeny"
         @focus-turn="focusedTurnId = $event"
         @hint-pick="onHint"
       />
@@ -70,7 +90,7 @@ const onDeleteSession = async (id: string) => {
         v-model="taskInput"
         :policy="policy"
         :reasoning-effort="reasoningEffort"
-        :disabled="isSending"
+        :disabled="isInputLocked"
         @update:policy="policy = $event"
         @update:reasoning-effort="reasoningEffort = $event"
         @submit="sendMessage"

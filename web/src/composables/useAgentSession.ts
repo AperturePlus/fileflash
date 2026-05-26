@@ -1,24 +1,55 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import {
-  cancelAgentJob,
+  approveAgentStep,
+  cancelAgentTurn,
+  denyAgentStep,
   executeAgentPlan,
   getAgentJob,
+  pauseAgentJob,
   planAgentTask,
+  resumeAgentJob,
+  sendAgentReply,
+  skipAgentStep,
   streamAgentJobEvents,
 } from '../api/agent';
 import { useUserStore } from '../store/user';
 import { useLocaleStore } from '../store/locale';
 import { ui } from '../utils/ui';
 import type {
+  AgentAskPayload,
   AgentExecutionPolicy,
   AgentExecutionResult,
   AgentJobEvent,
   AgentPlanResult,
+  AgentProgressPayload,
   AgentReasoningEffort,
+  AgentThinkingPayload,
+  AgentToolPartialPayload,
   PlanAgentRequest,
 } from '../types/agent';
 
-export type MsgStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
+export type MsgStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'canceled'
+  | 'waiting_for_user'
+  | 'paused';
+
+export interface PendingAsk {
+  messageId: string;
+  prompt: string;
+  schema: Record<string, unknown>;
+  timeoutSec: number;
+  askedAt: string;
+}
+
+export interface ToolPartial {
+  step: number;
+  tool: string;
+  chunks: unknown[];
+}
 
 export interface ChatMessage {
   id: string;
@@ -33,6 +64,11 @@ export interface ChatMessage {
   events: AgentJobEvent[];
   errorMessage?: string;
   timestamp: string;
+  pendingAsk?: PendingAsk;
+  pauseRequestedAt?: string;
+  progress?: { step: number; total: number; message?: string; percent?: number };
+  thinking?: string;
+  partials?: Record<number, ToolPartial>;
 }
 
 export interface Session {
@@ -402,10 +438,13 @@ export default function useAgentSession() {
 
   const applyAgentEvent = (msg: ChatMessage, event: AgentJobEvent, kind: 'plan' | 'execute') => {
     appendAgentEvent(msg, event);
+
     if (event.type === 'job.queued') {
       msg.status = 'pending';
     } else if (event.type === 'job.running' || event.type === 'tool.started') {
-      msg.status = 'running';
+      if (msg.status !== 'waiting_for_user' && msg.status !== 'paused') {
+        msg.status = 'running';
+      }
     } else if (event.type === 'job.failed' || event.type === 'tool.failed') {
       msg.status = 'failed';
       const errorMessage = event.data?.errorMessage;
@@ -414,6 +453,47 @@ export default function useAgentSession() {
       msg.status = 'canceled';
     } else if (event.type === 'job.succeeded') {
       msg.status = 'succeeded';
+      msg.pendingAsk = undefined;
+      msg.pauseRequestedAt = undefined;
+    }
+
+    if (event.type === 'agent.ask') {
+      const payload = event.data as AgentAskPayload;
+      msg.pendingAsk = {
+        messageId: payload.messageId,
+        prompt: payload.prompt,
+        schema: payload.schema,
+        timeoutSec: payload.timeoutSec,
+        askedAt: event.timestamp,
+      };
+      msg.status = 'waiting_for_user';
+    } else if (event.type === 'agent.paused') {
+      msg.status = 'paused';
+      msg.pauseRequestedAt = event.timestamp;
+    } else if (event.type === 'agent.resumed') {
+      msg.status = 'running';
+      msg.pauseRequestedAt = undefined;
+    } else if (event.type === 'agent.progress') {
+      const payload = event.data as AgentProgressPayload;
+      msg.progress = {
+        step: payload.step,
+        total: payload.total,
+        message: payload.message,
+        percent: payload.percent,
+      };
+    } else if (event.type === 'agent.thinking') {
+      const payload = event.data as AgentThinkingPayload;
+      msg.thinking = (msg.thinking || '') + (payload.text || '');
+    } else if (event.type === 'tool.partial') {
+      const payload = event.data as AgentToolPartialPayload;
+      msg.partials = msg.partials || {};
+      const slot = msg.partials[payload.step] || {
+        step: payload.step,
+        tool: payload.tool,
+        chunks: [],
+      };
+      slot.chunks = [...slot.chunks, payload.chunk];
+      msg.partials[payload.step] = slot;
     }
 
     const result = event.data?.result;
@@ -558,7 +638,7 @@ export default function useAgentSession() {
       reactiveAgent.planJobId = res.jobId;
       if (isTurnCanceled(reactiveAgent) || reactiveAgent.status === 'canceled') {
         try {
-          await cancelAgentJob(res.jobId);
+          await cancelAgentTurn(res.jobId);
         } catch {
           // ignore cancellation sync errors after local cancel
         }
@@ -621,7 +701,7 @@ export default function useAgentSession() {
       msg.executeJobId = res.jobId;
       if (!ensureTurnNotCanceled(msg)) {
         try {
-          await cancelAgentJob(res.jobId);
+          await cancelAgentTurn(res.jobId);
         } catch {
           // ignore cancellation sync errors after local cancel
         }
@@ -638,17 +718,89 @@ export default function useAgentSession() {
     }
   }
 
+  const activeJobId = (msg: ChatMessage): string | undefined =>
+    msg.executeJobId || msg.planJobId;
+
+  async function replyToAsk(msg: ChatMessage, value: unknown): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId || !msg.pendingAsk) return;
+    const pendingAsk = msg.pendingAsk;
+    msg.pendingAsk = undefined;
+    msg.status = 'running';
+    try {
+      await sendAgentReply(jobId, pendingAsk.messageId, value);
+    } catch (error) {
+      msg.status = 'waiting_for_user';
+      msg.pendingAsk = pendingAsk;
+      msg.errorMessage = extractErrorMessage(error, 'Reply failed.');
+    }
+  }
+
+  async function pauseTurn(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    msg.pauseRequestedAt = new Date().toISOString();
+    try {
+      await pauseAgentJob(jobId);
+    } catch (error) {
+      msg.pauseRequestedAt = undefined;
+      msg.errorMessage = extractErrorMessage(error, 'Pause failed.');
+    }
+  }
+
+  async function resumeTurn(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    try {
+      await resumeAgentJob(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Resume failed.');
+    }
+  }
+
+  async function approveStep(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    try {
+      await approveAgentStep(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Approve failed.');
+    }
+  }
+
+  async function denyStep(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    try {
+      await denyAgentStep(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Deny failed.');
+    }
+  }
+
+  async function skipStep(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    try {
+      await skipAgentStep(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Skip failed.');
+    }
+  }
+
   async function cancel(msg: ChatMessage): Promise<void> {
     markTurnCanceled(msg);
     msg.status = 'canceled';
-    const jobId = msg.executeJobId || msg.planJobId;
+    msg.pendingAsk = undefined;
+    msg.pauseRequestedAt = undefined;
     stopPolling(`${msg.id}:plan`);
     stopPolling(`${msg.id}:execute`);
     stopStream(`${msg.id}:plan`);
     stopStream(`${msg.id}:execute`);
+    const jobId = activeJobId(msg);
     if (!jobId) return;
     try {
-      await cancelAgentJob(jobId);
+      await cancelAgentTurn(jobId);
     } catch (error) {
       msg.errorMessage = extractErrorMessage(error, 'Cancel failed.');
     }
@@ -676,5 +828,11 @@ export default function useAgentSession() {
     sendMessage,
     runExecute,
     cancel,
+    replyToAsk,
+    pauseTurn,
+    resumeTurn,
+    approveStep,
+    denyStep,
+    skipStep,
   };
 }

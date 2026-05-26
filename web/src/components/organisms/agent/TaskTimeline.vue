@@ -14,6 +14,12 @@ const props = defineProps<{
 defineEmits<{
   execute: [id: string];
   cancel: [id: string];
+  reply: [id: string, value: unknown];
+  pause: [id: string];
+  resume: [id: string];
+  skip: [id: string];
+  approve: [id: string];
+  deny: [id: string];
   'focus-turn': [id: string];
   'hint-pick': [text: string];
 }>();
@@ -63,6 +69,12 @@ watch(
       :focused="turn.agent.id === focusedId"
       @execute="$emit('execute', turn.agent.id)"
       @cancel="$emit('cancel', turn.agent.id)"
+      @reply="(value) => $emit('reply', turn.agent.id, value)"
+      @pause="$emit('pause', turn.agent.id)"
+      @resume="$emit('resume', turn.agent.id)"
+      @skip="$emit('skip', turn.agent.id)"
+      @approve="$emit('approve', turn.agent.id)"
+      @deny="$emit('deny', turn.agent.id)"
       @focus="$emit('focus-turn', turn.agent.id)"
     />
   </div>

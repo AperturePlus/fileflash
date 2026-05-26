@@ -3,6 +3,8 @@ import { createMockId, getCurrentUser, mockJobs } from '../state';
 import type {
   AgentBackgroundJob,
   AgentExecutionResult,
+  AgentInboxMessageRequest,
+  AgentInboxMessageResponse,
   AgentPlanResult,
   AgentProposedAction,
   ExecuteAgentRequest,
@@ -241,6 +243,21 @@ const finishJobCanceled = (job: AgentBackgroundJob) => {
   job.updatedAt = timestamp;
 };
 
+const pauseJob = (job: AgentBackgroundJob) => {
+  if (isTerminal(job.status)) return;
+  const timestamp = nowIso();
+  job.status = 'paused';
+  job.agentPhase = 'executing';
+  job.updatedAt = timestamp;
+};
+
+const resumeJob = (job: AgentBackgroundJob) => {
+  if (isTerminal(job.status)) return;
+  const timestamp = nowIso();
+  job.status = 'running';
+  job.updatedAt = timestamp;
+};
+
 const getJobById = (jobId: string) => (mockJobs[jobId] || null) as AgentBackgroundJob | null;
 
 const shouldSimulateFailure = (input: string) => {
@@ -419,8 +436,8 @@ export const setupAgentMocks = () => {
     };
   });
 
-  Mock.mock(/\/api\/v1\/agent\/cancel\/([^/?]+)$/, 'post', (options) => {
-    const jobId = (options.url.match(/\/api\/v1\/agent\/cancel\/([^/?]+)/) || [])[1];
+  Mock.mock(/\/api\/v1\/agent\/jobs\/([^/?]+)\/messages$/, 'post', (options) => {
+    const jobId = (options.url.match(/\/api\/v1\/agent\/jobs\/([^/?]+)\/messages/) || [])[1];
     const job = jobId ? getJobById(jobId) : null;
     if (!job) {
       return {
@@ -431,19 +448,26 @@ export const setupAgentMocks = () => {
       };
     }
 
-    if (!isTerminal(job.status)) {
+    const payload = JSON.parse(options.body || '{}') as AgentInboxMessageRequest;
+    if (payload.kind === 'control.cancel') {
       finishJobCanceled(job);
+    } else if (payload.kind === 'control.pause') {
+      pauseJob(job);
+    } else if (payload.kind === 'control.resume') {
+      resumeJob(job);
     }
+
+    const response: AgentInboxMessageResponse = {
+      inboxMessageId: createMockId('inbox'),
+      kind: payload.kind,
+      acceptedAt: nowIso(),
+    };
 
     return {
       success: true,
       code: 200,
-      message: 'Job canceled',
-      data: {
-        jobId: job.jobId,
-        status: job.status,
-        canceledAt: job.cancelRequestedAt || nowIso(),
-      },
+      message: 'Agent message accepted',
+      data: response,
     };
   });
 };

@@ -2,8 +2,9 @@ import http from '../utils/http';
 import { useUserStore } from '../store/user';
 import type {
   AgentBackgroundJob,
+  AgentInboxMessageRequest,
+  AgentInboxMessageResponse,
   AgentJobEvent,
-  CancelAgentResponse,
   ExecuteAgentRequest,
   ExecuteAgentResponse,
   PlanAgentRequest,
@@ -18,9 +19,39 @@ export const executeAgentPlan = (data: ExecuteAgentRequest) => {
   return http.post<ExecuteAgentResponse>('/agent/execute', data);
 };
 
-export const cancelAgentJob = (jobId: string) => {
-  return http.post<CancelAgentResponse>(`/agent/cancel/${encodeURIComponent(jobId)}`);
+export const sendAgentMessage = (
+  jobId: string,
+  body: AgentInboxMessageRequest,
+) => {
+  return http.post<AgentInboxMessageResponse>(
+    `/agent/jobs/${encodeURIComponent(jobId)}/messages`,
+    body,
+  );
 };
+
+export const sendAgentReply = (
+  jobId: string,
+  replyTo: string,
+  value: unknown,
+) => sendAgentMessage(jobId, { kind: 'reply', replyTo, value });
+
+export const pauseAgentJob = (jobId: string) =>
+  sendAgentMessage(jobId, { kind: 'control.pause' });
+
+export const resumeAgentJob = (jobId: string) =>
+  sendAgentMessage(jobId, { kind: 'control.resume' });
+
+export const approveAgentStep = (jobId: string) =>
+  sendAgentMessage(jobId, { kind: 'control.approve' });
+
+export const denyAgentStep = (jobId: string) =>
+  sendAgentMessage(jobId, { kind: 'control.deny' });
+
+export const skipAgentStep = (jobId: string) =>
+  sendAgentMessage(jobId, { kind: 'control.skip' });
+
+export const cancelAgentTurn = (jobId: string) =>
+  sendAgentMessage(jobId, { kind: 'control.cancel' });
 
 export const getAgentJob = <T = Record<string, any>>(jobId: string) => {
   return http.get<AgentBackgroundJob<T>>(`/jobs/${encodeURIComponent(jobId)}`);

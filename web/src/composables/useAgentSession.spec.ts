@@ -1,12 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { nextTick } from 'vue';
+import type { ChatMessage } from './useAgentSession';
 
 vi.mock('../api/agent', () => ({
   planAgentTask: vi.fn(),
   executeAgentPlan: vi.fn(),
-  cancelAgentJob: vi.fn(),
+  cancelAgentTurn: vi.fn(),
   getAgentJob: vi.fn(),
   streamAgentJobEvents: vi.fn(),
+  sendAgentMessage: vi.fn(),
+  sendAgentReply: vi.fn(),
+  pauseAgentJob: vi.fn(),
+  resumeAgentJob: vi.fn(),
+  approveAgentStep: vi.fn(),
+  denyAgentStep: vi.fn(),
+  skipAgentStep: vi.fn(),
 }));
 
 vi.mock('../store/user', () => ({
@@ -491,7 +499,7 @@ describe('useAgentSession', () => {
     expect(turn.agent.errorMessage).toBe('Execute failed.');
   });
 
-  it('cancel calls cancelAgentJob and clears polling for that turn', async () => {
+  it('cancel calls cancelAgentTurn and clears polling for that turn', async () => {
     vi.mocked(agentApi.planAgentTask).mockResolvedValue({
       jobId: 'job-1',
       status: 'pending',
@@ -502,10 +510,10 @@ describe('useAgentSession', () => {
       jobId: 'job-1',
       status: 'running',
     } as any);
-    vi.mocked(agentApi.cancelAgentJob).mockResolvedValue({
-      jobId: 'job-1',
-      status: 'canceled',
-      canceledAt: '2026-05-20T00:00:00Z',
+    vi.mocked(agentApi.cancelAgentTurn).mockResolvedValue({
+      inboxMessageId: 'inbox-1',
+      kind: 'control.cancel',
+      acceptedAt: '2026-05-20T00:00:00Z',
     });
 
     const { default: useAgentSession } = await loadComposable();
@@ -516,7 +524,7 @@ describe('useAgentSession', () => {
     const turn = activeTurns.value[0];
     const callsBefore = vi.mocked(agentApi.getAgentJob).mock.calls.length;
     await cancel(turn.agent);
-    expect(agentApi.cancelAgentJob).toHaveBeenCalled();
+    expect(agentApi.cancelAgentTurn).toHaveBeenCalled();
     // Advance time to ensure timer wouldn't fire again
     await vi.advanceTimersByTimeAsync(3000);
     const callsAfter = vi.mocked(agentApi.getAgentJob).mock.calls.length;
@@ -526,10 +534,10 @@ describe('useAgentSession', () => {
   it('cancel before plan job id arrives keeps turn canceled and does not start polling', async () => {
     const planGate = deferred<any>();
     vi.mocked(agentApi.planAgentTask).mockReturnValue(planGate.promise);
-    vi.mocked(agentApi.cancelAgentJob).mockResolvedValue({
-      jobId: 'job-late',
-      status: 'canceled',
-      canceledAt: '2026-05-20T00:00:00Z',
+    vi.mocked(agentApi.cancelAgentTurn).mockResolvedValue({
+      inboxMessageId: 'inbox-late',
+      kind: 'control.cancel',
+      acceptedAt: '2026-05-20T00:00:00Z',
     });
 
     const { default: useAgentSession } = await loadComposable();
@@ -550,7 +558,7 @@ describe('useAgentSession', () => {
     await sendTask;
 
     expect(agentApi.getAgentJob).not.toHaveBeenCalled();
-    expect(agentApi.cancelAgentJob).toHaveBeenCalledWith('job-late');
+    expect(agentApi.cancelAgentTurn).toHaveBeenCalledWith('job-late');
     expect(turn.agent.status).toBe('canceled');
   });
 
@@ -562,10 +570,10 @@ describe('useAgentSession', () => {
       taskType: 'agent.plan',
     });
     vi.mocked(agentApi.getAgentJob).mockReturnValue(firstPoll.promise);
-    vi.mocked(agentApi.cancelAgentJob).mockResolvedValue({
-      jobId: 'job-1',
-      status: 'canceled',
-      canceledAt: '2026-05-20T00:00:00Z',
+    vi.mocked(agentApi.cancelAgentTurn).mockResolvedValue({
+      inboxMessageId: 'inbox-1',
+      kind: 'control.cancel',
+      acceptedAt: '2026-05-20T00:00:00Z',
     });
 
     const { default: useAgentSession } = await loadComposable();
@@ -589,6 +597,208 @@ describe('useAgentSession', () => {
 
     expect(turn.agent.status).toBe('canceled');
     expect(vi.mocked(agentApi.getAgentJob).mock.calls.length).toBe(1);
+  });
+
+  it('applies ask, progress, thinking, pause, resume, and partial stream events', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-ask',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.streamAgentJobEvents).mockImplementationOnce(async (_jobId, handlers) => {
+      handlers?.onEvent?.({
+        id: 'progress-1',
+        jobId: 'job-ask',
+        taskType: 'agent.plan',
+        type: 'agent.progress',
+        status: 'running',
+        agentPhase: 'planning',
+        message: 'step one',
+        data: { step: 1, total: 3, message: 'Reading folders', percent: 33 },
+        timestamp: '2026-05-26T00:00:00Z',
+      });
+      handlers?.onEvent?.({
+        id: 'thinking-1',
+        jobId: 'job-ask',
+        taskType: 'agent.plan',
+        type: 'agent.thinking',
+        status: 'running',
+        agentPhase: 'planning',
+        message: '',
+        data: { text: 'Need user choice.' },
+        timestamp: '2026-05-26T00:00:01Z',
+      });
+      handlers?.onEvent?.({
+        id: 'partial-1',
+        jobId: 'job-ask',
+        taskType: 'agent.plan',
+        type: 'tool.partial',
+        status: 'running',
+        agentPhase: 'planning',
+        message: '',
+        data: { step: 1, tool: 'drive.listFolder', chunk: { name: 'A' } },
+        timestamp: '2026-05-26T00:00:02Z',
+      });
+      handlers?.onEvent?.({
+        id: 'paused-1',
+        jobId: 'job-ask',
+        taskType: 'agent.plan',
+        type: 'agent.paused',
+        status: 'paused',
+        agentPhase: 'planning',
+        message: 'paused',
+        data: {},
+        timestamp: '2026-05-26T00:00:03Z',
+      });
+      handlers?.onEvent?.({
+        id: 'resumed-1',
+        jobId: 'job-ask',
+        taskType: 'agent.plan',
+        type: 'agent.resumed',
+        status: 'running',
+        agentPhase: 'planning',
+        message: 'resumed',
+        data: {},
+        timestamp: '2026-05-26T00:00:04Z',
+      });
+      handlers?.onEvent?.({
+        id: 'ask-1',
+        jobId: 'job-ask',
+        taskType: 'agent.plan',
+        type: 'agent.ask',
+        status: 'waiting_for_user',
+        agentPhase: 'planning',
+        message: 'choose',
+        data: {
+          messageId: 'ask-101',
+          prompt: 'Pick one',
+          schema: { choice: ['A', 'B'] },
+          timeoutSec: 60,
+        },
+        timestamp: '2026-05-26T00:00:05Z',
+      });
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, activeTurns } = useAgentSession();
+    taskInput.value = 'choose a folder';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    expect(turn.agent.status).toBe('waiting_for_user');
+    expect(turn.agent.pendingAsk?.messageId).toBe('ask-101');
+    expect(turn.agent.progress?.step).toBe(1);
+    expect(turn.agent.thinking).toContain('Need user choice.');
+    expect(turn.agent.partials?.[1].chunks).toEqual([{ name: 'A' }]);
+  });
+
+  it('replyToAsk forwards reply via inbox and advances status to running', async () => {
+    vi.mocked(agentApi.sendAgentReply).mockResolvedValue({
+      inboxMessageId: 'reply-1',
+      kind: 'reply',
+      acceptedAt: '2026-05-26T00:00:00Z',
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { createSession, replyToAsk } = useAgentSession();
+    const session = createSession();
+    const msg: ChatMessage = {
+      id: 'msg-e2e',
+      role: 'agent',
+      content: '',
+      status: 'waiting_for_user',
+      events: [],
+      timestamp: new Date().toISOString(),
+      executeJobId: '99',
+      pendingAsk: {
+        messageId: '101',
+        prompt: 'pick',
+        schema: { choice: ['A', 'B'] },
+        timeoutSec: 60,
+        askedAt: new Date().toISOString(),
+      },
+    };
+    session.messages.push(msg);
+
+    await replyToAsk(msg, 'A');
+
+    expect(agentApi.sendAgentReply).toHaveBeenCalledWith('99', '101', 'A');
+    expect(msg.status).toBe('running');
+    expect(msg.pendingAsk).toBeUndefined();
+  });
+
+  it('pause and resume send control.pause then control.resume', async () => {
+    vi.mocked(agentApi.pauseAgentJob).mockResolvedValue({
+      inboxMessageId: 'pause-1',
+      kind: 'control.pause',
+      acceptedAt: '2026-05-26T00:00:00Z',
+    });
+    vi.mocked(agentApi.resumeAgentJob).mockResolvedValue({
+      inboxMessageId: 'resume-1',
+      kind: 'control.resume',
+      acceptedAt: '2026-05-26T00:00:01Z',
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { createSession, pauseTurn, resumeTurn } = useAgentSession();
+    const session = createSession();
+    const msg: ChatMessage = {
+      id: 'msg-pp',
+      role: 'agent',
+      content: '',
+      status: 'running',
+      events: [],
+      timestamp: new Date().toISOString(),
+      executeJobId: '77',
+    };
+    session.messages.push(msg);
+
+    await pauseTurn(msg);
+    expect(agentApi.pauseAgentJob).toHaveBeenCalledWith('77');
+    expect(msg.pauseRequestedAt).toBeTruthy();
+
+    await resumeTurn(msg);
+    expect(agentApi.resumeAgentJob).toHaveBeenCalledWith('77');
+  });
+
+  it('approve, deny, and skip send inbox control helpers', async () => {
+    vi.mocked(agentApi.approveAgentStep).mockResolvedValue({
+      inboxMessageId: 'approve-1',
+      kind: 'control.approve',
+      acceptedAt: '2026-05-26T00:00:00Z',
+    });
+    vi.mocked(agentApi.denyAgentStep).mockResolvedValue({
+      inboxMessageId: 'deny-1',
+      kind: 'control.deny',
+      acceptedAt: '2026-05-26T00:00:00Z',
+    });
+    vi.mocked(agentApi.skipAgentStep).mockResolvedValue({
+      inboxMessageId: 'skip-1',
+      kind: 'control.skip',
+      acceptedAt: '2026-05-26T00:00:00Z',
+    });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { createSession, approveStep, denyStep, skipStep } = useAgentSession();
+    const session = createSession();
+    const msg: ChatMessage = {
+      id: 'msg-controls',
+      role: 'agent',
+      content: '',
+      status: 'running',
+      events: [],
+      timestamp: new Date().toISOString(),
+      planJobId: '66',
+    };
+    session.messages.push(msg);
+
+    await approveStep(msg);
+    await denyStep(msg);
+    await skipStep(msg);
+
+    expect(agentApi.approveAgentStep).toHaveBeenCalledWith('66');
+    expect(agentApi.denyAgentStep).toHaveBeenCalledWith('66');
+    expect(agentApi.skipAgentStep).toHaveBeenCalledWith('66');
   });
 
   it('reload — sessions persist via localStorage', async () => {

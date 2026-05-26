@@ -513,6 +513,19 @@ export type LocaleKey =
   | 'agent.v2.turn.status.succeeded'
   | 'agent.v2.turn.status.failed'
   | 'agent.v2.turn.status.canceled'
+  | 'agent.v2.turn.status.waiting_for_user'
+  | 'agent.v2.turn.status.paused'
+  | 'agent.v2.turn.controls.pause'
+  | 'agent.v2.turn.controls.resume'
+  | 'agent.v2.turn.controls.skip'
+  | 'agent.v2.turn.controls.approve'
+  | 'agent.v2.turn.controls.deny'
+  | 'agent.v2.turn.ask.placeholder'
+  | 'agent.v2.turn.ask.send'
+  | 'agent.v2.turn.ask.timeout'
+  | 'agent.v2.turn.progress.label'
+  | 'agent.v2.turn.thinking.label'
+  | 'agent.v2.turn.thinking.toggle'
   | 'agent.v2.turn.cost.label'
   | 'agent.v2.turn.cost.tokens'
   | 'agent.v2.turn.cost.calls'
@@ -1093,6 +1106,19 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.turn.status.succeeded': '已完成',
     'agent.v2.turn.status.failed': '失败',
     'agent.v2.turn.status.canceled': '已取消',
+    'agent.v2.turn.status.waiting_for_user': '等待你回复',
+    'agent.v2.turn.status.paused': '已暂停',
+    'agent.v2.turn.controls.pause': '暂停',
+    'agent.v2.turn.controls.resume': '继续',
+    'agent.v2.turn.controls.skip': '跳过此步',
+    'agent.v2.turn.controls.approve': '批准',
+    'agent.v2.turn.controls.deny': '拒绝',
+    'agent.v2.turn.ask.placeholder': '输入回答…',
+    'agent.v2.turn.ask.send': '发送',
+    'agent.v2.turn.ask.timeout': '剩余 {value}',
+    'agent.v2.turn.progress.label': '进度',
+    'agent.v2.turn.thinking.label': '思考过程',
+    'agent.v2.turn.thinking.toggle': '展开 / 收起',
     'agent.v2.turn.cost.label': '消耗',
     'agent.v2.turn.cost.tokens': 'tokens',
     'agent.v2.turn.cost.calls': '调用',
@@ -1668,6 +1694,19 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.turn.status.succeeded': 'succeeded',
     'agent.v2.turn.status.failed': 'failed',
     'agent.v2.turn.status.canceled': 'canceled',
+    'agent.v2.turn.status.waiting_for_user': 'WAITING FOR YOU',
+    'agent.v2.turn.status.paused': 'PAUSED',
+    'agent.v2.turn.controls.pause': 'Pause',
+    'agent.v2.turn.controls.resume': 'Resume',
+    'agent.v2.turn.controls.skip': 'Skip step',
+    'agent.v2.turn.controls.approve': 'Approve',
+    'agent.v2.turn.controls.deny': 'Deny',
+    'agent.v2.turn.ask.placeholder': 'Type your answer…',
+    'agent.v2.turn.ask.send': 'Send',
+    'agent.v2.turn.ask.timeout': '{value} left',
+    'agent.v2.turn.progress.label': 'PROGRESS',
+    'agent.v2.turn.thinking.label': 'THINKING',
+    'agent.v2.turn.thinking.toggle': 'Expand / Collapse',
     'agent.v2.turn.cost.label': 'COST',
     'agent.v2.turn.cost.tokens': 'tokens',
     'agent.v2.turn.cost.calls': 'calls',

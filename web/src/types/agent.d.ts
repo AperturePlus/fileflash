@@ -19,6 +19,12 @@ export type AgentJobEventType =
   | 'tool.started'
   | 'tool.succeeded'
   | 'tool.failed'
+  | 'tool.partial'
+  | 'agent.thinking'
+  | 'agent.progress'
+  | 'agent.ask'
+  | 'agent.paused'
+  | 'agent.resumed'
   | 'job.succeeded'
   | 'job.failed'
   | 'job.canceled';
@@ -105,12 +111,6 @@ export interface ExecuteAgentResponse {
   taskType: 'agent.execute';
 }
 
-export interface CancelAgentResponse {
-  jobId: string;
-  status: string;
-  canceledAt: string;
-}
-
 export interface AgentExecutionResult {
   planJobId: string;
   executeJobId: string;
@@ -138,3 +138,53 @@ export type AgentBackgroundJob<T = Record<string, any>> = BackgroundJob<T> & {
   agentPhase?: AgentJobPhase | null;
   cancelRequestedAt?: string | null;
 };
+
+// ----------------- Inbox (upstream channel) -----------------
+
+export type AgentInboxMessageKind =
+  | 'reply'
+  | 'control.pause'
+  | 'control.resume'
+  | 'control.approve'
+  | 'control.deny'
+  | 'control.skip'
+  | 'control.cancel';
+
+export interface AgentInboxMessageRequest {
+  kind: AgentInboxMessageKind;
+  replyTo?: string;
+  value?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentInboxMessageResponse {
+  inboxMessageId: string;
+  kind: AgentInboxMessageKind;
+  acceptedAt: string;
+}
+
+// ----------------- New event payloads -----------------
+
+export interface AgentAskPayload {
+  messageId: string;
+  prompt: string;
+  schema: Record<string, unknown>;
+  timeoutSec: number;
+}
+
+export interface AgentProgressPayload {
+  step: number;
+  total: number;
+  message?: string;
+  percent?: number;
+}
+
+export interface AgentThinkingPayload {
+  text: string;
+}
+
+export interface AgentToolPartialPayload {
+  step: number;
+  tool: string;
+  chunk: unknown;
+}
