@@ -6,6 +6,7 @@ vi.mock('../api/agent', () => ({
   executeAgentPlan: vi.fn(),
   cancelAgentJob: vi.fn(),
   getAgentJob: vi.fn(),
+  streamAgentJobEvents: vi.fn(),
 }));
 
 vi.mock('../store/user', () => ({
@@ -93,6 +94,7 @@ describe('useAgentSession', () => {
     vi.clearAllMocks();
     localStorage.clear();
     vi.useFakeTimers();
+    vi.mocked(agentApi.streamAgentJobEvents).mockRejectedValue(new Error('stream unavailable'));
   });
 
   afterEach(async () => {
@@ -287,6 +289,80 @@ describe('useAgentSession', () => {
 
     const turn = activeTurns.value[0];
     expect(agentApi.executeAgentPlan).toHaveBeenCalled();
+    expect(turn.agent.executeResult?.answer).toContain('3 部电影');
+    expect(turn.agent.status).toBe('succeeded');
+  });
+
+  it('uses streamed plan and execute events when available', async () => {
+    vi.mocked(agentApi.planAgentTask).mockResolvedValue({
+      jobId: 'job-1',
+      status: 'pending',
+      taskType: 'agent.plan',
+    });
+    vi.mocked(agentApi.executeAgentPlan).mockResolvedValue({
+      jobId: 'job-2',
+      status: 'pending',
+      taskType: 'agent.execute',
+    });
+    vi.mocked(agentApi.streamAgentJobEvents)
+      .mockImplementationOnce(async (_jobId, handlers) => {
+        handlers?.onEvent?.({
+          id: 'plan-ready-1',
+          jobId: 'job-1',
+          taskType: 'agent.plan',
+          type: 'plan.ready',
+          status: 'succeeded',
+          agentPhase: 'completed',
+          message: '计划已生成。',
+          data: { result: readOnlyPlanResult },
+          timestamp: '2026-05-20T00:00:00Z',
+        });
+        handlers?.onEvent?.({
+          id: 'plan-done-1',
+          jobId: 'job-1',
+          taskType: 'agent.plan',
+          type: 'job.succeeded',
+          status: 'succeeded',
+          agentPhase: 'completed',
+          message: '任务已完成。',
+          data: { result: readOnlyPlanResult },
+          timestamp: '2026-05-20T00:00:01Z',
+        });
+      })
+      .mockImplementationOnce(async (_jobId, handlers) => {
+        handlers?.onEvent?.({
+          id: 'tool-start-1',
+          jobId: 'job-2',
+          taskType: 'agent.execute',
+          type: 'tool.started',
+          status: 'running',
+          agentPhase: 'executing',
+          message: '正在读取名称包含“银翼杀手”的视频文件数量。',
+          data: { step: 1, tool: 'drive.countFiles' },
+          timestamp: '2026-05-20T00:00:02Z',
+        });
+        handlers?.onEvent?.({
+          id: 'execute-done-1',
+          jobId: 'job-2',
+          taskType: 'agent.execute',
+          type: 'job.succeeded',
+          status: 'succeeded',
+          agentPhase: 'completed',
+          message: '答案已生成。',
+          data: { result: execResult },
+          timestamp: '2026-05-20T00:00:03Z',
+        });
+      });
+
+    const { default: useAgentSession } = await loadComposable();
+    const { taskInput, sendMessage, activeTurns } = useAgentSession();
+    taskInput.value = '我上传了几部银翼杀手？';
+    await sendMessage();
+
+    const turn = activeTurns.value[0];
+    expect(agentApi.getAgentJob).not.toHaveBeenCalled();
+    expect(agentApi.executeAgentPlan).toHaveBeenCalled();
+    expect(turn.agent.events.map((event) => event.id)).toContain('tool-start-1');
     expect(turn.agent.executeResult?.answer).toContain('3 部电影');
     expect(turn.agent.status).toBe('succeeded');
   });
@@ -497,8 +573,9 @@ describe('useAgentSession', () => {
     taskInput.value = 'hello';
 
     const sendTask = sendMessage();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 6 && vi.mocked(agentApi.getAgentJob).mock.calls.length === 0; i += 1) {
+      await Promise.resolve();
+    }
     const turn = activeTurns.value[0];
     await cancel(turn.agent);
     expect(turn.agent.status).toBe('canceled');

@@ -12,6 +12,16 @@ export type AgentJobPhase =
   | 'completed'
   | 'failed'
   | 'canceled';
+export type AgentJobEventType =
+  | 'job.queued'
+  | 'job.running'
+  | 'plan.ready'
+  | 'tool.started'
+  | 'tool.succeeded'
+  | 'tool.failed'
+  | 'job.succeeded'
+  | 'job.failed'
+  | 'job.canceled';
 
 export interface AgentDataPolicy {
   allowFileContent: boolean;
@@ -110,6 +120,18 @@ export interface AgentExecutionResult {
   skippedActions: number;
   warnings: string[];
   finishedAt: string;
+}
+
+export interface AgentJobEvent {
+  id: string;
+  jobId: string;
+  taskType: string;
+  type: AgentJobEventType;
+  status: string;
+  agentPhase?: AgentJobPhase | string | null;
+  message: string;
+  data: Record<string, any>;
+  timestamp: string;
 }
 
 export type AgentBackgroundJob<T = Record<string, any>> = BackgroundJob<T> & {

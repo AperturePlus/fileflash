@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from fileflash.core.deps import get_agent_execute_service, get_agent_plan_service, get_current_user
 from fileflash.core.errors import ApiError, api_error_handler
 from fileflash.db.deps import get_db
-from fileflash.models import BackgroundJob
+from fileflash.models import AgentActionLog, BackgroundJob
 from fileflash.models.tables_identity import User
 from fileflash.routers.agent import router
 from fileflash.schemas.agent import ExecuteAgentResponse, PlanAgentResponse
@@ -55,6 +55,40 @@ class RunningJobDb(StubDb):
         self.job.status = "running"
 
 
+class EventsDb(StubDb):
+    def __init__(self) -> None:
+        super().__init__()
+        now = datetime.now(UTC)
+        self.job.status = "succeeded"
+        self.job.result = {
+            "planJobId": "10",
+            "executeJobId": "12",
+            "summary": "done",
+            "answer": "你上传了 2 部名称包含“银翼杀手”的电影（按视频文件统计）。",
+            "appliedActions": 1,
+            "skippedActions": 0,
+            "warnings": [],
+            "finishedAt": now.isoformat(),
+        }
+        self.job.finished_at = now
+        self.job.updated_at = now
+        self.action_log = AgentActionLog(
+            action_log_id=1,
+            job_id=12,
+            step_no=1,
+            tool_name="drive.countFiles",
+            inputs_json={"folderId": "root", "category": "video", "search": "银翼杀手"},
+            outputs_json={"totalItems": 2, "category": "video", "search": "银翼杀手"},
+            status="succeeded",
+            duration_ms=12,
+            started_at=now,
+            finished_at=now,
+        )
+
+    async def scalars(self, _query):  # noqa: ANN001
+        return [self.action_log]
+
+
 def _user() -> User:
     return User(user_id=7, username="u7", email="u7@example.com", password_hash="x")
 
@@ -78,6 +112,17 @@ def _client_with_running_job() -> TestClient:
     app.dependency_overrides[get_agent_plan_service] = lambda: StubPlanService()
     app.dependency_overrides[get_agent_execute_service] = lambda: StubExecuteService()
     app.dependency_overrides[get_db] = lambda: RunningJobDb()
+    return TestClient(app)
+
+
+def _client_with_events() -> TestClient:
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    app.add_exception_handler(ApiError, api_error_handler)
+    app.dependency_overrides[get_current_user] = _user
+    app.dependency_overrides[get_agent_plan_service] = lambda: StubPlanService()
+    app.dependency_overrides[get_agent_execute_service] = lambda: StubExecuteService()
+    app.dependency_overrides[get_db] = lambda: EventsDb()
     return TestClient(app)
 
 
@@ -150,3 +195,17 @@ def test_cancel_route_marks_running_job_as_canceled():
     assert body["success"] is True
     assert body["data"]["jobId"] == "12"
     assert body["data"]["status"] == "canceled"
+
+
+def test_job_events_route_streams_tool_and_final_answer_events():
+    response = _client_with_events().get("/api/v1/agent/jobs/12/events")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    body = response.text
+    assert "event: tool.started" in body
+    assert "event: tool.succeeded" in body
+    assert "event: job.succeeded" in body
+    assert "正在读取名称包含" in body
+    assert "银翼杀手" in body
+    assert "answer" in body

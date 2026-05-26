@@ -20,6 +20,17 @@ AgentJobPhase = Literal[
     "failed",
     "canceled",
 ]
+AgentJobEventType = Literal[
+    "job.queued",
+    "job.running",
+    "plan.ready",
+    "tool.started",
+    "tool.succeeded",
+    "tool.failed",
+    "job.succeeded",
+    "job.failed",
+    "job.canceled",
+]
 
 
 class AgentDataPolicy(CamelModel):
@@ -123,6 +134,18 @@ class AgentExecutionResult(CamelModel):
     finished_at: datetime
 
 
+class AgentJobEvent(CamelModel):
+    id: str
+    job_id: str
+    task_type: str
+    type: AgentJobEventType
+    status: str
+    agent_phase: str | None = None
+    message: str
+    data: dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime
+
+
 __all__ = [
     "AgentActionSideEffect",
     "AgentApproval",
@@ -133,6 +156,8 @@ __all__ = [
     "AgentExecutionResult",
     "AgentHints",
     "AgentJobPhase",
+    "AgentJobEvent",
+    "AgentJobEventType",
     "AgentPlanContext",
     "AgentPlanResult",
     "AgentProposedAction",
