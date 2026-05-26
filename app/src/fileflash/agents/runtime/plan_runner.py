@@ -132,10 +132,19 @@ class PlanRunner:
             max_tool_roundtrips=6,
         )
 
+        effective_max_steps: int | None
+        if self.settings.is_development_env:
+            effective_max_steps = None
+        else:
+            effective_max_steps = min(
+                request.hints.max_steps,
+                self.settings.agent_job_max_tool_calls,
+            )
+
         actions = _normalize_actions(
             llm_payload=llm_payload,
             allowed_tools=allowed_tools,
-            max_steps=min(request.hints.max_steps, self.settings.agent_job_max_tool_calls),
+            max_steps=effective_max_steps,
         )
         chosen_skill = _chosen_skill(skill)
         llm_summary = str(
@@ -543,14 +552,14 @@ def _normalize_actions(
     *,
     llm_payload: dict[str, Any],
     allowed_tools: tuple[str, ...],
-    max_steps: int,
+    max_steps: int | None,
 ) -> list[AgentProposedAction]:
     raw_actions = llm_payload.get("proposedActions", llm_payload.get("proposed_actions"))
     if raw_actions is None:
         raw_actions = llm_payload.get("actions")
     if not isinstance(raw_actions, list):
         raise ApiError(status_code=502, code=502, message="Agent plan JSON missing proposedActions")
-    if len(raw_actions) > max_steps:
+    if max_steps is not None and len(raw_actions) > max_steps:
         raise ApiError(status_code=400, code=400, message="Agent plan exceeds maxSteps")
 
     allowed = set(allowed_tools)
