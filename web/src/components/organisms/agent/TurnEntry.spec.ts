@@ -41,6 +41,37 @@ describe('organisms/agent/TurnEntry', () => {
     expect(w.text()).toContain('plan summary text');
   });
 
+  it('renders planning evidence beneath summary', () => {
+    const w = mount(TurnEntry, {
+      props: {
+        turn: baseTurn({
+          planResult: {
+            planJobId: 'p-1',
+            planHash: 'hash-1',
+            chosenSkill: null,
+            proposedActions: [],
+            summary: 'plan summary text',
+            requiresConfirmation: false,
+            costEstimate: { tokens: 100, toolCalls: 2, durationSecEstimate: 5 },
+            planningEvidence: [
+              {
+                step: 1,
+                tool: 'drive.searchFiles',
+                input: { folderId: 'root', query: '银翼杀手', category: 'video' },
+                outputPreview: { totalItems: 2 },
+              },
+            ],
+          },
+        }),
+        policy: 'confirm',
+        focused: false,
+      },
+    });
+    expect(w.text()).toContain('规划依据');
+    expect(w.text()).toContain('drive.searchFiles');
+    expect(w.text()).toContain('银翼杀手');
+  });
+
   it('renders execution answer before the plan summary', () => {
     const w = mount(TurnEntry, {
       props: {

@@ -530,6 +530,8 @@ export type LocaleKey =
   | 'agent.v2.turn.cost.tokens'
   | 'agent.v2.turn.cost.calls'
   | 'agent.v2.turn.cost.est'
+  | 'agent.v2.turn.evidence.label'
+  | 'agent.v2.turn.evidence.more'
   | 'agent.v2.turn.warn.label'
   | 'agent.v2.turn.execute'
   | 'agent.v2.turn.cancel'
@@ -1123,6 +1125,8 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.turn.cost.tokens': 'tokens',
     'agent.v2.turn.cost.calls': '调用',
     'agent.v2.turn.cost.est': '预计',
+    'agent.v2.turn.evidence.label': '规划依据',
+    'agent.v2.turn.evidence.more': '更多',
     'agent.v2.turn.warn.label': '警告',
     'agent.v2.turn.execute': '执行',
     'agent.v2.turn.cancel': '取消',
@@ -1711,6 +1715,8 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.turn.cost.tokens': 'tokens',
     'agent.v2.turn.cost.calls': 'calls',
     'agent.v2.turn.cost.est': 'est',
+    'agent.v2.turn.evidence.label': 'PLANNING EVIDENCE',
+    'agent.v2.turn.evidence.more': 'more',
     'agent.v2.turn.warn.label': 'WARN',
     'agent.v2.turn.execute': 'Execute',
     'agent.v2.turn.cancel': 'Cancel',

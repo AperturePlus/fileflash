@@ -55,6 +55,24 @@ const readOnlyPlanResult = {
   requiresConfirmation: true,
 };
 
+const readOnlyPlanResultWithEvidence = {
+  ...readOnlyPlanResult,
+  planningEvidence: [
+    {
+      step: 1,
+      tool: 'drive.searchFiles',
+      input: { folderId: 'root', query: '银翼杀手', category: 'video' },
+      outputPreview: {
+        totalItems: 2,
+        items: [
+          { fileId: '19', name: '银翼杀手1982.mp4' },
+          { fileId: '20', name: '银翼杀手2049.mp4' },
+        ],
+      },
+    },
+  ],
+};
+
 const writePlanResult = {
   ...planResult,
   proposedActions: [
@@ -322,7 +340,7 @@ describe('useAgentSession', () => {
           status: 'succeeded',
           agentPhase: 'completed',
           message: '计划已生成。',
-          data: { result: readOnlyPlanResult },
+          data: { result: readOnlyPlanResultWithEvidence },
           timestamp: '2026-05-20T00:00:00Z',
         });
         handlers?.onEvent?.({
@@ -333,7 +351,7 @@ describe('useAgentSession', () => {
           status: 'succeeded',
           agentPhase: 'completed',
           message: '任务已完成。',
-          data: { result: readOnlyPlanResult },
+          data: { result: readOnlyPlanResultWithEvidence },
           timestamp: '2026-05-20T00:00:01Z',
         });
       })
@@ -371,6 +389,7 @@ describe('useAgentSession', () => {
     expect(agentApi.getAgentJob).not.toHaveBeenCalled();
     expect(agentApi.executeAgentPlan).toHaveBeenCalled();
     expect(turn.agent.events.map((event) => event.id)).toContain('tool-start-1');
+    expect(turn.agent.planResult?.planningEvidence?.[0]?.tool).toBe('drive.searchFiles');
     expect(turn.agent.executeResult?.answer).toContain('3 部电影');
     expect(turn.agent.status).toBe('succeeded');
   });

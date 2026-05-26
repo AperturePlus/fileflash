@@ -7,7 +7,7 @@ import AskPrompt from './AskPrompt.vue';
 import ControlBar from './ControlBar.vue';
 import { useLocaleStore } from '../../../store/locale';
 import type { LocaleKey } from '../../../i18n/messages';
-import type { AgentExecutionPolicy } from '../../../types/agent';
+import type { AgentExecutionPolicy, AgentPlanningEvidence } from '../../../types/agent';
 import type { AgentTurn } from '../../../composables/useAgentSession';
 
 const props = defineProps<{
@@ -78,6 +78,22 @@ const statusLabel = computed(() => {
   const key = `agent.v2.turn.status.${props.turn.agent.status}` as LocaleKey;
   return t(key);
 });
+
+const planningEvidence = computed(
+  () => props.turn.agent.planResult?.planningEvidence?.filter(Boolean) ?? [],
+);
+const visibleEvidence = computed(() => planningEvidence.value.slice(0, 3));
+const hiddenEvidence = computed(() => planningEvidence.value.slice(3));
+
+const formatEvidencePreview = (evidence: AgentPlanningEvidence) =>
+  JSON.stringify(
+    {
+      input: evidence.input || {},
+      outputPreview: evidence.outputPreview || {},
+    },
+    null,
+    2,
+  );
 
 const formatTime = (iso: string) => {
   try {
@@ -152,6 +168,29 @@ const formatTime = (iso: string) => {
         <p v-else-if="turn.agent.planResult?.summary" class="ff-te__sum">
           {{ turn.agent.planResult.summary }}
         </p>
+
+        <section v-if="planningEvidence.length" class="ff-te__evidence">
+          <p class="ff-te__evidence-label">{{ t('agent.v2.turn.evidence.label') }}</p>
+          <ol class="ff-te__evidence-list">
+            <li v-for="item in visibleEvidence" :key="`evidence-${item.step}-${item.tool}`" class="ff-te__evidence-item">
+              <span class="ff-te__evidence-head">#{{ item.step }} · {{ item.tool }}</span>
+              <pre class="ff-te__evidence-json">{{ formatEvidencePreview(item) }}</pre>
+            </li>
+          </ol>
+          <details v-if="hiddenEvidence.length" class="ff-te__evidence-more">
+            <summary>+{{ hiddenEvidence.length }} {{ t('agent.v2.turn.evidence.more') }}</summary>
+            <ol class="ff-te__evidence-list">
+              <li
+                v-for="item in hiddenEvidence"
+                :key="`evidence-hidden-${item.step}-${item.tool}`"
+                class="ff-te__evidence-item"
+              >
+                <span class="ff-te__evidence-head">#{{ item.step }} · {{ item.tool }}</span>
+                <pre class="ff-te__evidence-json">{{ formatEvidencePreview(item) }}</pre>
+              </li>
+            </ol>
+          </details>
+        </section>
 
         <section v-if="!resultText && turn.agent.planResult?.proposedActions?.length" class="ff-te__actions">
           <PlanActionRow
@@ -332,6 +371,50 @@ const formatTime = (iso: string) => {
   height: 5px;
   background: var(--ac);
   flex: 0 0 auto;
+}
+
+.ff-te__evidence {
+  display: grid;
+  gap: var(--sp-xs);
+}
+.ff-te__evidence-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--text-tertiary);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+.ff-te__evidence-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: var(--sp-xs);
+}
+.ff-te__evidence-item {
+  display: grid;
+  gap: 4px;
+}
+.ff-te__evidence-head {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+}
+.ff-te__evidence-json {
+  margin: 0;
+  padding: var(--sp-xs);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ff-te__evidence-more summary {
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
 }
 
 .ff-te__actions {

@@ -288,6 +288,24 @@ const schedulePlanLifecycle = (job: AgentBackgroundJob, payload: PlanAgentReques
       toolCalls: proposedActions.length,
       durationSecEstimate: proposedActions.length * 4,
     },
+    planningEvidence: [
+      {
+        step: 1,
+        tool: 'drive.searchFiles',
+        input: {
+          folderId: payload.context.rootFolderId || 'root',
+          query: payload.input,
+          category: 'video',
+        },
+        outputPreview: {
+          totalItems: 2,
+          items: [
+            { fileId: '19', name: '银翼杀手1982.mp4' },
+            { fileId: '20', name: '银翼杀手2049.mp4' },
+          ],
+        },
+      },
+    ],
   };
 
   setTimeout(() => {

@@ -84,6 +84,13 @@ export interface AgentChosenSkill {
   name: string;
 }
 
+export interface AgentPlanningEvidence {
+  step: number;
+  tool: string;
+  input: Record<string, any>;
+  outputPreview: Record<string, any>;
+}
+
 export interface AgentPlanResult {
   planJobId: string;
   planHash: string;
@@ -92,6 +99,7 @@ export interface AgentPlanResult {
   summary: string;
   requiresConfirmation: boolean;
   costEstimate: AgentCostEstimate;
+  planningEvidence?: AgentPlanningEvidence[] | null;
 }
 
 export interface ExecuteAgentRequest {
