@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -64,26 +65,32 @@ class PlanRunner:
         )
         metadata = await _collect_context_metadata(db, user_id=user_id, request=request)
         allowed_tools = _skill_tool_whitelist(skill)
-        try:
-            llm_payload = await self.planner_client.create_plan(
-                system_prompt=_system_prompt(),
-                user_prompt=_user_prompt(
-                    request=request,
-                    skill=skill,
-                    allowed_tools=allowed_tools,
-                    metadata=metadata,
-                ),
-                max_tokens=request.hints.budget_tokens,
-                reasoning_effort=request.hints.reasoning_effort,
-            )
-        except ApiError as exc:
-            if exc.status_code != 502:
-                raise
-            llm_payload = _safe_fallback_payload(
+        if "drive.countFiles" in allowed_tools and _looks_like_count_question(request.input):
+            llm_payload = _count_question_payload(
                 request=request,
                 metadata=metadata,
-                allowed_tools=allowed_tools,
             )
+        else:
+            try:
+                llm_payload = await self.planner_client.create_plan(
+                    system_prompt=_system_prompt(),
+                    user_prompt=_user_prompt(
+                        request=request,
+                        skill=skill,
+                        allowed_tools=allowed_tools,
+                        metadata=metadata,
+                    ),
+                    max_tokens=request.hints.budget_tokens,
+                    reasoning_effort=request.hints.reasoning_effort,
+                )
+            except ApiError as exc:
+                if exc.status_code != 502:
+                    raise
+                llm_payload = _safe_fallback_payload(
+                    request=request,
+                    metadata=metadata,
+                    allowed_tools=allowed_tools,
+                )
 
         actions = _normalize_actions(
             llm_payload=llm_payload,
@@ -453,7 +460,8 @@ def _tool_schemas(allowed_tools: tuple[str, ...]) -> list[dict[str, Any]]:
         "drive.listFolder": "List direct folder contents by folderId.",
         "drive.countFiles": (
             "Count files under folderId. Supports recursive=true and category values "
-            "video, audio, image, document, archive, other. Use category=video for movie/电影 questions."
+            "video, audio, image, document, archive, other. Supports search for file-name "
+            "contains filters. Use category=video for movie/电影/几部 questions."
         ),
         "drive.createFolder": "Create a folder under parentFolderId with name.",
         "drive.moveFile": "Move fileId into targetFolderId.",
@@ -474,24 +482,7 @@ def _safe_fallback_payload(
 ) -> dict[str, Any]:
     fallback_actions: list[dict[str, Any]] = []
     if "drive.countFiles" in allowed_tools and _looks_like_count_question(request.input):
-        fallback_actions.append(
-            {
-                "step": 1,
-                "tool": "drive.countFiles",
-                "input": {
-                    "folderId": metadata.get("rootFolderId") or request.context.root_folder_id or "root",
-                    "recursive": True,
-                    "category": _fallback_count_category(request.input),
-                },
-                "sideEffect": "read",
-                "riskLevel": "low",
-                "requiresConfirmation": False,
-            }
-        )
-        return {
-            "summary": "Planner fallback mode: generated a safe read-only count plan.",
-            "proposedActions": fallback_actions,
-        }
+        return _count_question_payload(request=request, metadata=metadata)
     if "drive.listFolder" in allowed_tools:
         root_folder_id = str(
             metadata.get("rootFolderId")
@@ -519,9 +510,37 @@ def _looks_like_count_question(text: str) -> bool:
     return any(token in normalized for token in ("多少", "几个", "几部", "count", "how many", "number of"))
 
 
+def _count_question_payload(
+    *,
+    request: PlanAgentRequest,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    action_input: dict[str, Any] = {
+        "folderId": metadata.get("rootFolderId") or request.context.root_folder_id or "root",
+        "recursive": True,
+        "category": _fallback_count_category(request.input),
+    }
+    search = _fallback_count_search(request.input)
+    if search:
+        action_input["search"] = search
+    return {
+        "summary": "已准备按文件名和类型统计你的文件。",
+        "proposedActions": [
+            {
+                "step": 1,
+                "tool": "drive.countFiles",
+                "input": action_input,
+                "sideEffect": "read",
+                "riskLevel": "low",
+                "requiresConfirmation": False,
+            }
+        ],
+    }
+
+
 def _fallback_count_category(text: str) -> str | None:
     normalized = text.lower()
-    if any(token in normalized for token in ("电影", "影片", "视频", "movie", "film", "video")):
+    if any(token in normalized for token in ("电影", "影片", "视频", "几部", "movie", "film", "video")):
         return "video"
     if any(token in normalized for token in ("图片", "照片", "image", "photo", "picture")):
         return "image"
@@ -532,6 +551,77 @@ def _fallback_count_category(text: str) -> str | None:
     if any(token in normalized for token in ("压缩", "archive", "zip")):
         return "archive"
     return None
+
+
+def _fallback_count_search(text: str) -> str | None:
+    cleaned = re.sub(r"[?？!！。.,，;；:：]", " ", text).strip()
+    candidate = cleaned
+    for phrase in (
+        "我上传了多少部",
+        "我上传了多少个",
+        "我上传了几部",
+        "我上传了几个",
+        "上传了多少部",
+        "上传了多少个",
+        "上传了几部",
+        "上传了几个",
+        "有多少部",
+        "有多少个",
+        "有几部",
+        "有几个",
+    ):
+        candidate = candidate.replace(phrase, " ")
+    for token in (
+        "我",
+        "上传",
+        "了",
+        "有",
+        "多少",
+        "几个",
+        "几部",
+        "多少部",
+        "多少个",
+        "部",
+        "个",
+        "文件",
+        "电影",
+        "影片",
+        "视频",
+        "音频",
+        "音乐",
+        "图片",
+        "照片",
+        "文档",
+        "压缩包",
+    ):
+        candidate = candidate.replace(token, " ")
+    candidate = " ".join(candidate.split()).strip()
+    if candidate:
+        return candidate
+
+    english = cleaned.lower()
+    for phrase in (
+        "how many",
+        "number of",
+        "did i upload",
+        "have i uploaded",
+        "i uploaded",
+        "uploaded",
+        "upload",
+        "movies",
+        "movie",
+        "films",
+        "film",
+        "videos",
+        "video",
+        "files",
+        "file",
+        "are there",
+        "do i have",
+    ):
+        english = english.replace(phrase, " ")
+    english = " ".join(english.split()).strip()
+    return english or None
 
 
 def _normalize_actions(

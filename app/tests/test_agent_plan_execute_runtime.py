@@ -682,6 +682,58 @@ async def test_plan_runner_fallback_uses_count_files_for_movie_count_question(
     assert result.proposed_actions[0].side_effect == "read"
 
 
+@pytest.mark.asyncio
+async def test_plan_runner_uses_deterministic_count_plan_with_search_term(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "rootFolderId": "root", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+
+    planner = AsyncMock(return_value={"summary": "wrong", "proposedActions": []})
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=planner),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "input": "我上传了几部银翼杀手？",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+            "executionPolicy": "confirm",
+        }
+    )
+    job = BackgroundJob(
+        job_id=335,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    result = await runner.run(db=DummyDb(), job=job)  # type: ignore[arg-type]
+
+    planner.assert_not_awaited()
+    assert len(result.proposed_actions) == 1
+    action = result.proposed_actions[0]
+    assert action.tool == "drive.countFiles"
+    assert action.input["category"] == "video"
+    assert action.input["search"] == "银翼杀手"
+    assert action.side_effect == "read"
+
+
 def test_normalize_actions_rejects_symbolic_placeholder_target_folder():
     with pytest.raises(ApiError) as exc:
         plan_module._normalize_actions(
@@ -835,6 +887,38 @@ async def test_tool_router_count_files_counts_recursive_videos():
     executed_statement = str(db.execute.await_args.args[0])
     assert "file.status" in executed_statement
     assert "file.is_latest" in executed_statement
+
+
+@pytest.mark.asyncio
+async def test_tool_router_count_files_filters_by_search_term():
+    db = DummyDb()
+    db.scalar = AsyncMock(return_value=1)
+    db.scalars = AsyncMock(return_value=[1])
+    db.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            all=lambda: [
+                (10, "银翼杀手.mp4", 100, "video/mp4", "mp4", 1),
+            ]
+        )
+    )
+    router = ToolRouter(db=db, user_id=7)  # type: ignore[arg-type]
+
+    result = await router.dispatch(
+        ToolCall(
+            tool_name="drive.countFiles",
+            arguments={
+                "folderId": "root",
+                "recursive": True,
+                "category": "video",
+                "search": "银翼杀手",
+            },
+        )
+    )
+
+    assert result["totalItems"] == 1
+    assert result["search"] == "银翼杀手"
+    executed_statement = str(db.execute.await_args.args[0])
+    assert "file_name" in executed_statement
 
 
 @pytest.mark.asyncio
@@ -993,3 +1077,92 @@ async def test_execute_runner_returns_count_files_answer(monkeypatch: pytest.Mon
 
     assert result.answer == "你上传了 3 部电影（按视频文件统计）。"
     assert result.applied_actions == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_runner_returns_count_files_answer_with_search_term(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    started = datetime.now(UTC)
+    job = BackgroundJob(
+        job_id=602,
+        task_type="agent.execute",
+        status="running",
+        payload={
+            "planJobId": "502",
+            "planHash": "sha256:test",
+            "approval": {
+                "confirmedBy": "7",
+                "confirmedAt": started.isoformat(),
+                "highRiskConfirmed": False,
+            },
+        },
+        result={},
+        requested_by=7,
+        scheduled_at=started,
+        created_at=started,
+        updated_at=started,
+    )
+    action = {
+        "step": 1,
+        "tool": "drive.countFiles",
+        "input": {
+            "folderId": "root",
+            "recursive": True,
+            "category": "video",
+            "search": "银翼杀手",
+        },
+        "sideEffect": "read",
+        "riskLevel": "low",
+        "requiresConfirmation": False,
+    }
+    db = DummyDb()
+    db.refresh = AsyncMock()
+
+    monkeypatch.setattr(
+        execute_module,
+        "AgentPlanRepository",
+        lambda _db: SimpleNamespace(
+            get_for_execute_binding=AsyncMock(
+                return_value=SimpleNamespace(proposed_actions_json=[action])
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "AgentWorkSessionRepository",
+        lambda _db: SimpleNamespace(
+            create_for_job=AsyncMock(return_value=None),
+            close_session=AsyncMock(return_value=None),
+        ),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "AgentActionLogRepository",
+        lambda _db: SimpleNamespace(
+            append_step=AsyncMock(return_value=None),
+            finish_step=AsyncMock(return_value=None),
+        ),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "ToolRouter",
+        lambda **kwargs: SimpleNamespace(
+            dispatch=AsyncMock(
+                return_value={
+                    "totalItems": 2,
+                    "category": "video",
+                    "recursive": True,
+                    "folderId": "1",
+                    "search": "银翼杀手",
+                    "byMimeType": {"video/mp4": 2},
+                    "sampleItems": [],
+                }
+            )
+        ),
+    )
+
+    result = await ExecuteRunner().run(db=db, job=job)  # type: ignore[arg-type]
+
+    assert result.answer == "你上传了 2 部名称包含“银翼杀手”的电影（按视频文件统计）。"
+    assert "只读操作" not in (result.answer or "")

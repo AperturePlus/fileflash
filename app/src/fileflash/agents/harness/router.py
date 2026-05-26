@@ -137,7 +137,7 @@ class ToolRouter:
         folder_id = str(_first_value(args, "folderId", "parentFolderId") or "root")
         recursive = _bool_arg(args.get("recursive"), default=True)
         category = _normalize_category(args.get("category"))
-        search = str(args.get("search") or "").strip().lower()
+        search = str(args.get("search") or "").strip()
         root_folder_id = await _resolve_folder_id(
             self.db,
             user_id=self.user_id,
@@ -208,6 +208,7 @@ class ToolRouter:
             "category": category,
             "recursive": recursive,
             "folderId": str(root_folder_id),
+            "search": search or None,
             "byMimeType": dict(sorted(by_mime_type.items())),
             "sampleItems": sample_items,
         }

@@ -240,21 +240,50 @@ def _build_execution_answer(
         return _count_files_answer(output)
 
     if actions and all(action.side_effect == "read" for action in actions):
-        return f"已完成 {len(step_outputs)} 个只读操作。"
+        return _read_only_answer(actions=actions, step_outputs=step_outputs)
     return None
 
 
 def _count_files_answer(output: dict[str, Any]) -> str:
     total_items = int(output.get("totalItems") or 0)
     category = str(output.get("category") or "").strip().lower()
+    qualifier = _search_qualifier(output)
     if category == "video":
-        return f"你上传了 {total_items} 部电影（按视频文件统计）。"
+        return f"你上传了 {total_items} 部{qualifier}电影（按视频文件统计）。"
     if category == "audio":
-        return f"你上传了 {total_items} 个音频文件。"
+        return f"你上传了 {total_items} 个{qualifier}音频文件。"
     if category == "image":
-        return f"你上传了 {total_items} 张图片。"
+        return f"你上传了 {total_items} 张{qualifier}图片。"
     if category == "document":
-        return f"你上传了 {total_items} 个文档。"
+        return f"你上传了 {total_items} 个{qualifier}文档。"
     if category == "archive":
-        return f"你上传了 {total_items} 个压缩包。"
-    return f"你上传了 {total_items} 个文件。"
+        return f"你上传了 {total_items} 个{qualifier}压缩包。"
+    return f"你上传了 {total_items} 个{qualifier}文件。"
+
+
+def _search_qualifier(output: dict[str, Any]) -> str:
+    search = str(output.get("search") or "").strip()
+    if not search:
+        return ""
+    return f"名称包含“{search}”的"
+
+
+def _read_only_answer(
+    *,
+    actions: list[AgentProposedAction],
+    step_outputs: dict[int, dict[str, Any]],
+) -> str:
+    for action in actions:
+        output = step_outputs.get(action.step)
+        if not isinstance(output, dict):
+            continue
+        if action.tool == "drive.listFolder":
+            pagination = output.get("pagination")
+            total_items = None
+            if isinstance(pagination, dict):
+                total_items = pagination.get("totalItems")
+            if total_items is None:
+                items = output.get("items")
+                total_items = len(items) if isinstance(items, list) else 0
+            return f"已读取当前文件夹，共 {int(total_items or 0)} 个项目。"
+    return "查询已完成，但没有可展示的结果。"
