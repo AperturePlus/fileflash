@@ -94,6 +94,13 @@ class AgentChosenSkill(CamelModel):
     name: str
 
 
+class AgentPlanningEvidence(CamelModel):
+    step: int = Field(ge=1)
+    tool: str = Field(min_length=1, max_length=120)
+    input: dict[str, Any] = Field(default_factory=dict)
+    output_preview: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentPlanResult(CamelModel):
     plan_job_id: str
     plan_hash: str
@@ -102,6 +109,7 @@ class AgentPlanResult(CamelModel):
     summary: str
     requires_confirmation: bool
     cost_estimate: AgentCostEstimate
+    planning_evidence: list[AgentPlanningEvidence] | None = None
 
 
 class AgentApproval(CamelModel):
@@ -192,6 +200,7 @@ __all__ = [
     "AgentJobEvent",
     "AgentJobEventType",
     "AgentPlanContext",
+    "AgentPlanningEvidence",
     "AgentPlanResult",
     "AgentProposedAction",
     "AgentReasoningEffort",

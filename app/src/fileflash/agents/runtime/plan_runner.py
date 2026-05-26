@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -19,6 +20,7 @@ from ...repositories.agent.contracts import AgentSkillCatalogEntry
 from ...schemas.agent import (
     AgentChosenSkill,
     AgentCostEstimate,
+    AgentPlanningEvidence,
     AgentPlanResult,
     AgentProposedAction,
     PlanAgentRequest,
@@ -79,6 +81,7 @@ class PlanRunner:
         planner_router = ToolRouter(db=db, user_id=user_id)
         tool_call_budget = min(self.settings.agent_job_max_tool_calls, 32)
         planned_tool_calls = 0
+        planning_evidence: list[AgentPlanningEvidence] = []
 
         async def _planning_tool_executor(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
             nonlocal planned_tool_calls
@@ -102,7 +105,17 @@ class PlanRunner:
                     code=400,
                     message="Planner exceeded exploratory tool-call budget",
                 )
-            return await planner_router.dispatch(ToolCall(tool_name=tool_name, arguments=args))
+            output = await planner_router.dispatch(ToolCall(tool_name=tool_name, arguments=args))
+            if len(planning_evidence) < 12:
+                planning_evidence.append(
+                    AgentPlanningEvidence(
+                        step=planned_tool_calls,
+                        tool=tool_name,
+                        input=_evidence_mapping(args),
+                        output_preview=_evidence_preview(output),
+                    )
+                )
+            return output
 
         llm_payload = await self.planner_client.create_plan(
             system_prompt=_system_prompt(),
@@ -125,11 +138,19 @@ class PlanRunner:
             max_steps=min(request.hints.max_steps, self.settings.agent_job_max_tool_calls),
         )
         chosen_skill = _chosen_skill(skill)
-        summary = str(
+        llm_summary = str(
             llm_payload.get("summary") or f"Prepared {len(actions)} file action(s)."
         ).strip()
-        if not summary:
-            summary = f"Prepared {len(actions)} file action(s)."
+        if not llm_summary:
+            llm_summary = f"Prepared {len(actions)} file action(s)."
+        summary = llm_summary
+        if _has_write_actions(actions):
+            summary = await _grounded_write_summary(
+                db,
+                user_id=user_id,
+                actions=actions,
+                fallback_summary=llm_summary,
+            )
 
         requires_confirmation = (
             request.execution_policy != "autopilot"
@@ -149,6 +170,7 @@ class PlanRunner:
             summary=summary,
             requires_confirmation=requires_confirmation,
             cost_estimate=cost_estimate,
+            planning_evidence=planning_evidence or None,
         )
         await _upsert_agent_plan(
             db,
@@ -649,6 +671,300 @@ def _validate_action_input_value(
                 field_name=key,
                 field_path=f"{field_path}.{key}",
             )
+
+
+def _has_write_actions(actions: list[AgentProposedAction]) -> bool:
+    return any(action.side_effect == "write" for action in actions)
+
+
+async def _grounded_write_summary(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    actions: list[AgentProposedAction],
+    fallback_summary: str,
+) -> str:
+    write_actions = [action for action in actions if action.side_effect == "write"]
+    if not write_actions:
+        return fallback_summary
+
+    created_folder_names: list[str] = []
+    created_folder_by_step: dict[int, str] = {}
+    move_file_actions: list[AgentProposedAction] = []
+    move_folder_actions: list[AgentProposedAction] = []
+    file_ids: set[int] = set()
+    folder_ids: set[int] = set()
+
+    for action in write_actions:
+        if action.tool == "drive.createFolder":
+            folder_name = str(action.input.get("name") or action.input.get("folderName") or "").strip()
+            if folder_name:
+                created_folder_names.append(folder_name)
+                created_folder_by_step[action.step] = folder_name
+            continue
+        if action.tool == "drive.moveFile":
+            move_file_actions.append(action)
+            file_id = _coerce_positive_int(action.input.get("fileId"))
+            if file_id is not None:
+                file_ids.add(file_id)
+            target_folder_id = action.input.get("targetFolderId")
+            if isinstance(target_folder_id, str):
+                parsed_folder_id = _coerce_positive_int(target_folder_id)
+                if parsed_folder_id is not None:
+                    folder_ids.add(parsed_folder_id)
+            continue
+        if action.tool == "drive.moveFolder":
+            move_folder_actions.append(action)
+            source_folder_id = _coerce_positive_int(action.input.get("folderId"))
+            if source_folder_id is not None:
+                folder_ids.add(source_folder_id)
+            target_parent_id = action.input.get("targetParentId", action.input.get("targetFolderId"))
+            if isinstance(target_parent_id, str):
+                parsed_parent_id = _coerce_positive_int(target_parent_id)
+                if parsed_parent_id is not None:
+                    folder_ids.add(parsed_parent_id)
+
+    file_name_map = await _safe_fetch_file_names(db, user_id=user_id, file_ids=file_ids)
+    folder_name_map = await _safe_fetch_folder_names(db, user_id=user_id, folder_ids=folder_ids)
+
+    moved_file_names: list[str] = []
+    destination_folder_names: list[str] = []
+    for action in move_file_actions:
+        file_id = _coerce_positive_int(action.input.get("fileId"))
+        if file_id is not None:
+            file_name = file_name_map.get(file_id)
+            if file_name:
+                moved_file_names.append(file_name)
+        destination = _resolve_destination_folder_name(
+            action.input.get("targetFolderId"),
+            created_folder_by_step=created_folder_by_step,
+            folder_name_map=folder_name_map,
+        )
+        if destination:
+            destination_folder_names.append(destination)
+
+    moved_folder_count = len(move_folder_actions)
+    moved_file_count = len(move_file_actions)
+    clauses: list[str] = []
+
+    if created_folder_names:
+        unique_created = _unique_preserve_order(created_folder_names)
+        if len(unique_created) == 1:
+            clauses.append(f"创建“{unique_created[0]}”文件夹")
+        else:
+            clauses.append(f"创建 {len(unique_created)} 个文件夹")
+
+    if moved_file_count > 0:
+        clauses.append(
+            f"将{_format_moved_file_subject(moved_file_names, moved_file_count)}移动到"
+            f"{_format_destination_folder(destination_folder_names)}"
+        )
+
+    if moved_folder_count > 0:
+        clauses.append(f"移动 {moved_folder_count} 个文件夹")
+
+    if not clauses:
+        return fallback_summary
+    return "，并".join(clauses) + "。"
+
+
+async def _safe_fetch_file_names(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    file_ids: set[int],
+) -> dict[int, str]:
+    if not file_ids:
+        return {}
+    try:
+        result = await db.execute(
+            select(File.file_id, File.file_name).where(
+                and_(
+                    File.owner_id == user_id,
+                    File.file_id.in_(sorted(file_ids)),
+                    File.status == FileStatus.ACTIVE,
+                    File.is_latest.is_(True),
+                )
+            )
+        )
+        rows = result.all() if hasattr(result, "all") else []
+        if inspect.isawaitable(rows):
+            rows = await rows
+    except Exception:
+        return {}
+    out: dict[int, str] = {}
+    if not isinstance(rows, list):
+        return out
+    for row in rows:
+        try:
+            file_id = row[0]
+            file_name = row[1]
+        except Exception:
+            continue
+        parsed = _coerce_positive_int(file_id)
+        name = str(file_name or "").strip()
+        if parsed is None or not name:
+            continue
+        out[parsed] = name
+    return out
+
+
+async def _safe_fetch_folder_names(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    folder_ids: set[int],
+) -> dict[int, str]:
+    if not folder_ids:
+        return {}
+    try:
+        result = await db.execute(
+            select(Folder.folder_id, Folder.folder_name).where(
+                and_(
+                    Folder.owner_id == user_id,
+                    Folder.folder_id.in_(sorted(folder_ids)),
+                    Folder.status == FolderStatus.ACTIVE,
+                )
+            )
+        )
+        rows = result.all() if hasattr(result, "all") else []
+        if inspect.isawaitable(rows):
+            rows = await rows
+    except Exception:
+        return {}
+    out: dict[int, str] = {}
+    if not isinstance(rows, list):
+        return out
+    for row in rows:
+        try:
+            folder_id = row[0]
+            folder_name = row[1]
+        except Exception:
+            continue
+        parsed = _coerce_positive_int(folder_id)
+        name = str(folder_name or "").strip()
+        if parsed is None or not name:
+            continue
+        out[parsed] = name
+    return out
+
+
+def _resolve_destination_folder_name(
+    raw_value: Any,
+    *,
+    created_folder_by_step: dict[int, str],
+    folder_name_map: dict[int, str],
+) -> str | None:
+    if not isinstance(raw_value, str):
+        return None
+    value = raw_value.strip()
+    if not value:
+        return None
+    reference = parse_step_reference(value)
+    if reference is not None:
+        step, path = reference
+        if path and path[0].lower() in {"folderid", "id"}:
+            return created_folder_by_step.get(step)
+        return None
+    parsed = _coerce_positive_int(value)
+    if parsed is None:
+        return None
+    return folder_name_map.get(parsed)
+
+
+def _format_moved_file_subject(file_names: list[str], total_count: int) -> str:
+    unique_names = _unique_preserve_order(
+        [name.strip() for name in file_names if isinstance(name, str) and name.strip()]
+    )
+    if not unique_names:
+        return f"{total_count} 个文件"
+    if len(unique_names) == 1 and total_count == 1:
+        return f"“{unique_names[0]}”"
+    preview = unique_names[:3]
+    quoted = "、".join(f"“{name}”" for name in preview)
+    if total_count > len(preview):
+        return f"{quoted}等 {total_count} 个文件"
+    if total_count > len(unique_names):
+        return f"{quoted}共 {total_count} 个文件"
+    return f"{quoted}共 {total_count} 个文件"
+
+
+def _format_destination_folder(folder_names: list[str]) -> str:
+    unique_names = _unique_preserve_order(
+        [name.strip() for name in folder_names if isinstance(name, str) and name.strip()]
+    )
+    if not unique_names:
+        return "目标文件夹"
+    if len(unique_names) == 1:
+        return f"“{unique_names[0]}”文件夹"
+    return "多个目标文件夹"
+
+
+def _unique_preserve_order(items: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def _coerce_positive_int(value: Any) -> int | None:
+    text = str(value or "").strip()
+    if not text.isdigit():
+        return None
+    parsed = int(text)
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def _evidence_mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        preview = _evidence_value_preview(value, depth=0)
+        if isinstance(preview, dict):
+            return preview
+    return {}
+
+
+def _evidence_preview(value: Any) -> dict[str, Any]:
+    preview = _evidence_value_preview(value, depth=0)
+    if isinstance(preview, dict):
+        return preview
+    return {"value": preview}
+
+
+def _evidence_value_preview(value: Any, *, depth: int) -> Any:
+    if depth >= 3:
+        if isinstance(value, str):
+            return value[:120] + ("…" if len(value) > 120 else "")
+        if isinstance(value, (int, float, bool)) or value is None:
+            return value
+        return str(value)[:120]
+
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        items = list(value.items())
+        for index, (key, item) in enumerate(items):
+            if index >= 12:
+                out["_truncatedKeys"] = len(items) - 12
+                break
+            out[str(key)] = _evidence_value_preview(item, depth=depth + 1)
+        return out
+
+    if isinstance(value, list):
+        preview_items = [_evidence_value_preview(item, depth=depth + 1) for item in value[:6]]
+        if len(value) > 6:
+            preview_items.append(f"...({len(value) - 6} more)")
+        return preview_items
+
+    if isinstance(value, str):
+        return value[:200] + ("…" if len(value) > 200 else "")
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return str(value)[:200]
 
 
 def _cost_estimate(

@@ -1263,6 +1263,175 @@ async def test_plan_runner_uses_planner_returned_create_then_move_when_target_mi
 
 
 @pytest.mark.asyncio
+async def test_plan_runner_rewrites_write_summary_with_grounded_facts(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "rootFolderId": "root", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+    planner = AsyncMock(
+        return_value={
+            "summary": "创建银翼杀手文件夹，然后将 V字仇杀队 文件夹中的2部银翼杀手电影移入该文件夹。",
+            "proposedActions": [
+                {
+                    "step": 1,
+                    "tool": "drive.createFolder",
+                    "input": {"parentFolderId": "root", "name": "银翼杀手"},
+                },
+                {
+                    "step": 2,
+                    "tool": "drive.moveFile",
+                    "input": {"fileId": "19", "targetFolderId": "$step1.folderId"},
+                },
+                {
+                    "step": 3,
+                    "tool": "drive.moveFile",
+                    "input": {"fileId": "20", "targetFolderId": "$step1.folderId"},
+                },
+            ],
+        }
+    )
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=planner),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "input": "把银翼杀手两部，移到银翼杀手文件夹里",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+            "executionPolicy": "confirm",
+        }
+    )
+    job = BackgroundJob(
+        job_id=348,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db = DummyDb()
+
+    class _Rows:
+        def __init__(self, rows: list[tuple[Any, Any]]) -> None:
+            self._rows = rows
+
+        def all(self) -> list[tuple[Any, Any]]:
+            return list(self._rows)
+
+    db.execute = AsyncMock(return_value=_Rows([(19, "银翼杀手1982.mp4"), (20, "银翼杀手2049.mp4")]))
+
+    result = await runner.run(db=db, job=job)  # type: ignore[arg-type]
+
+    assert "V字仇杀队" not in result.summary
+    assert "创建“银翼杀手”文件夹" in result.summary
+    assert "2 个文件" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_plan_runner_records_planning_evidence_from_read_tools(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "rootFolderId": "root", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+
+    class _FakeToolRouter:
+        async def dispatch(self, _call):  # noqa: ANN001
+            return {
+                "items": [
+                    {"fileId": "19", "name": "银翼杀手1982.mp4", "path": "/My Files/videos/银翼杀手1982.mp4"},
+                    {"fileId": "20", "name": "银翼杀手2049.mp4", "path": "/My Files/videos/银翼杀手2049.mp4"},
+                    {"fileId": "21", "name": "Blade Runner Trailer.mp4", "path": "/My Files/videos/Blade Runner Trailer.mp4"},
+                    {"fileId": "22", "name": "x1.mp4", "path": "/My Files/videos/x1.mp4"},
+                    {"fileId": "23", "name": "x2.mp4", "path": "/My Files/videos/x2.mp4"},
+                    {"fileId": "24", "name": "x3.mp4", "path": "/My Files/videos/x3.mp4"},
+                    {"fileId": "25", "name": "x4.mp4", "path": "/My Files/videos/x4.mp4"},
+                ],
+                "totalItems": 7,
+                "query": "银翼杀手",
+                "folderId": "1",
+                "recursive": True,
+                "category": "video",
+            }
+
+    monkeypatch.setattr(plan_module, "ToolRouter", lambda **kwargs: _FakeToolRouter())
+
+    async def _planner_with_read_tool(**kwargs):  # noqa: ANN003
+        tool_executor = kwargs["tool_executor"]
+        await tool_executor(
+            "drive.searchFiles",
+            {"folderId": "root", "query": "银翼杀手", "category": "video"},
+        )
+        return {
+            "summary": "search first",
+            "proposedActions": [
+                {
+                    "step": 1,
+                    "tool": "drive.searchFiles",
+                    "input": {"folderId": "root", "query": "银翼杀手", "category": "video"},
+                }
+            ],
+        }
+
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=_planner_with_read_tool),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "input": "找出银翼杀手视频文件",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+            "executionPolicy": "confirm",
+        }
+    )
+    job = BackgroundJob(
+        job_id=349,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    result = await runner.run(db=DummyDb(), job=job)  # type: ignore[arg-type]
+
+    assert result.planning_evidence is not None
+    assert len(result.planning_evidence) == 1
+    evidence = result.planning_evidence[0]
+    assert evidence.step == 1
+    assert evidence.tool == "drive.searchFiles"
+    assert evidence.input["query"] == "银翼杀手"
+    assert evidence.output_preview["totalItems"] == 7
+    assert isinstance(evidence.output_preview.get("items"), list)
+    assert "..." in str(evidence.output_preview["items"][-1])
+
+
+@pytest.mark.asyncio
 async def test_plan_runner_uses_planner_returned_read_only_candidates_when_ambiguous(
     monkeypatch: pytest.MonkeyPatch,
 ):
