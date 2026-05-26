@@ -147,6 +147,29 @@ class AgentMcpVisibility(BaseStrEnum):
     PRIVATE = "private"
 
 
+class AgentInboxRole(BaseStrEnum):
+    AGENT = "agent"
+    USER = "user"
+
+
+class AgentInboxKind(BaseStrEnum):
+    ASK = "ask"
+    REPLY = "reply"
+    CONTROL_PAUSE = "control.pause"
+    CONTROL_RESUME = "control.resume"
+    CONTROL_APPROVE = "control.approve"
+    CONTROL_DENY = "control.deny"
+    CONTROL_SKIP = "control.skip"
+    CONTROL_CANCEL = "control.cancel"
+
+
+class AgentInboxStatus(BaseStrEnum):
+    WAITING = "waiting"
+    ANSWERED = "answered"
+    TIMED_OUT = "timed_out"
+    DROPPED = "dropped"
+
+
 __all__ = [
 	"BaseStrEnum",
 	"UploadStatus",
@@ -172,5 +195,8 @@ __all__ = [
     "AgentMemoryKind",
     "AgentSkillVisibility",
     "AgentMcpVisibility",
+    "AgentInboxRole",
+    "AgentInboxKind",
+    "AgentInboxStatus",
 ]
 

@@ -1,5 +1,6 @@
 from .agent import (
     AgentActionLogRepository,
+    AgentInboxMessageRepository,
     AgentMcpCatalogEntry,
     AgentMcpRepository,
     AgentMemoryActiveEntry,
@@ -13,6 +14,7 @@ from .agent import (
 
 __all__ = [
     "AgentActionLogRepository",
+    "AgentInboxMessageRepository",
     "AgentMcpCatalogEntry",
     "AgentMcpRepository",
     "AgentMemoryActiveEntry",

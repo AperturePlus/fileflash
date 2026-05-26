@@ -27,6 +27,12 @@ AgentJobEventType = Literal[
     "tool.started",
     "tool.succeeded",
     "tool.failed",
+    "tool.partial",
+    "agent.thinking",
+    "agent.progress",
+    "agent.ask",
+    "agent.paused",
+    "agent.resumed",
     "job.succeeded",
     "job.failed",
     "job.canceled",
@@ -146,6 +152,30 @@ class AgentJobEvent(CamelModel):
     timestamp: datetime
 
 
+AgentInboxMessageKind = Literal[
+    "reply",
+    "control.pause",
+    "control.resume",
+    "control.approve",
+    "control.deny",
+    "control.skip",
+    "control.cancel",
+]
+
+
+class AgentInboxMessageRequest(CamelModel):
+    kind: AgentInboxMessageKind
+    reply_to: str | None = None
+    value: Any = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentInboxMessageResponse(CamelModel):
+    inbox_message_id: str
+    kind: AgentInboxMessageKind
+    accepted_at: datetime
+
+
 __all__ = [
     "AgentActionSideEffect",
     "AgentApproval",
@@ -155,6 +185,9 @@ __all__ = [
     "AgentExecutionPolicy",
     "AgentExecutionResult",
     "AgentHints",
+    "AgentInboxMessageKind",
+    "AgentInboxMessageRequest",
+    "AgentInboxMessageResponse",
     "AgentJobPhase",
     "AgentJobEvent",
     "AgentJobEventType",

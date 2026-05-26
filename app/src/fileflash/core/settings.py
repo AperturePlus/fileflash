@@ -56,6 +56,22 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://localhost:8080"])
 
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
+    agent_inbox_ask_timeout_sec: int = Field(
+        default=1800,
+        alias="AGENT_INBOX_ASK_TIMEOUT_SEC",
+    )
+    agent_event_channel_prefix: str = Field(
+        default="agent:job",
+        alias="AGENT_EVENT_CHANNEL_PREFIX",
+    )
+    agent_inbox_channel_prefix: str = Field(
+        default="agent:inbox",
+        alias="AGENT_INBOX_CHANNEL_PREFIX",
+    )
+    agent_event_bus_buffer_size: int = Field(
+        default=64,
+        alias="AGENT_EVENT_BUS_BUFFER_SIZE",
+    )
     rabbitmq_url: str | None = Field(default=None, alias="RABBITMQ_URL")
 
     email_verify_base_url: str = Field(default="", alias="EMAIL_VERIFY_BASE_URL")
@@ -151,6 +167,7 @@ class Settings(BaseSettings):
     agent_llm_model: str = Field(default="claude-sonnet-4-6", alias="AGENT_LLM_MODEL")
     agent_llm_base_url: str | None = Field(default=None, alias="AGENT_LLM_BASE_URL")
     agent_llm_api_key: str | None = Field(default=None, alias="AGENT_LLM_API_KEY")
+    agent_llm_plan_max_tokens: int = Field(default=8192, alias="AGENT_LLM_PLAN_MAX_TOKENS")
     agent_mcp_endpoints_raw: str = Field(default="[]", alias="AGENT_MCP_ENDPOINTS")
 
     ffmpeg_binary: str = Field(default="ffmpeg", alias="FFMPEG_BINARY")

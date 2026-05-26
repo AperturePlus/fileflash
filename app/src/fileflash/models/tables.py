@@ -11,6 +11,7 @@ from .tables_access_share import (
 )
 from .tables_agent import (
     AgentActionLog,
+    AgentInboxMessage,
     AgentMcpServer,
     AgentMemory,
     AgentPlan,
@@ -50,6 +51,7 @@ from .tables_worker import BackgroundJob
 __all__ = [
     "Acl",
     "AgentActionLog",
+    "AgentInboxMessage",
     "AgentMcpServer",
     "AgentMemory",
     "AgentPlan",

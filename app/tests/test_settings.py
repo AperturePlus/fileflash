@@ -32,6 +32,7 @@ def test_agent_related_settings_defaults():
     assert settings.agent_queue_stream == "fileflash:agents"
     assert settings.agent_job_timeout_sec == 600
     assert settings.agent_tool_timeout_sec == 30
+    assert settings.agent_llm_plan_max_tokens == 8192
     assert settings.agent_mcp_endpoints == ()
 
 
