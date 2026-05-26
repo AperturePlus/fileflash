@@ -5,9 +5,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..agents.harness.event_bus import AgentEventBus, build_agent_event_bus
 from ..db.deps import get_db
-from ..models.tables_identity import User
 from ..models.enums import UserRole
+from ..models.tables_identity import User
 from ..repositories import (
     AgentActionLogRepository,
     AgentMcpRepository,
@@ -17,15 +18,24 @@ from ..repositories import (
     AgentSkillRepository,
     AgentWorkSessionRepository,
 )
-from ..services.archive import ArchiveService
-from ..services.agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
-from ..services.admin.users import AdminUsersService
-from ..services.admin.storage import AdminStorageService
+from ..s3 import MinioObjectStorageClient
 from ..services.admin.files import AdminFilesService
-from ..services.admin.moderation import AdminModerationService
 from ..services.admin.logs import AdminLogsService
+from ..services.admin.moderation import AdminModerationService
 from ..services.admin.notifications import AdminNotificationsService
+from ..services.admin.storage import AdminStorageService
 from ..services.admin.system import AdminSystemService
+from ..services.admin.users import AdminUsersService
+from ..services.agent import (
+    ExecuteService,
+    McpService,
+    MemoryService,
+    PlanService,
+    SessionService,
+    SettingsService,
+    SkillService,
+)
+from ..services.archive import ArchiveService
 from ..services.auth import AuthService
 from ..services.background_jobs import BackgroundJobService
 from ..services.download_rate_limit import DownloadRateLimitService
@@ -38,7 +48,6 @@ from ..services.rate_limiter import RedisRateLimiter
 from ..services.registration_email_domain_rule import RegistrationEmailDomainRuleService
 from ..services.share import ShareService
 from ..services.upload import UploadService
-from ..s3 import MinioObjectStorageClient
 from .errors import ApiError
 from .security import decode_access_token
 from .settings import Settings, get_settings
@@ -56,6 +65,7 @@ _agent_job_queue_publisher = RedisStreamJobQueue(
     redis_url=_settings.redis_url,
     stream_key=_settings.agent_queue_stream,
 )
+_agent_event_bus_singleton: AgentEventBus | None = None
 
 
 def get_rate_limiter() -> RedisRateLimiter:
@@ -76,6 +86,13 @@ def get_job_queue_publisher() -> RedisStreamJobQueue:
 
 def get_agent_job_queue_publisher() -> RedisStreamJobQueue:
     return _agent_job_queue_publisher
+
+
+def get_agent_event_bus() -> AgentEventBus:
+    global _agent_event_bus_singleton
+    if _agent_event_bus_singleton is None:
+        _agent_event_bus_singleton = build_agent_event_bus(settings=_settings)
+    return _agent_event_bus_singleton
 
 
 def get_background_job_service(
