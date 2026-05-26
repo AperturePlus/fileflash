@@ -35,3 +35,19 @@ async def test_health_hash_computation_enabled_follows_settings() -> None:
     )
     enabled_health = await enabled_service.health()
     assert enabled_health.hash_computation_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_status_uses_auth_default_limits() -> None:
+    service = AdminSystemService(
+        db=DummySession(),
+        settings=make_settings(),
+    )
+
+    status = await service.rate_limit_status()
+    rules_by_scope = {rule.scope: rule for rule in status.rules}
+
+    assert rules_by_scope["auth.login"].limit == 30
+    assert rules_by_scope["auth.login"].window_seconds == 300
+    assert rules_by_scope["auth.register"].limit == 12
+    assert rules_by_scope["auth.register"].window_seconds == 600

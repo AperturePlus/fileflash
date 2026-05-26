@@ -111,14 +111,14 @@ class Settings(BaseSettings):
     upload_temp_prefix: str = Field(default="tmp", alias="UPLOAD_TEMP_PREFIX")
     upload_object_prefix: str = Field(default="objects", alias="UPLOAD_OBJECT_PREFIX")
 
-    max_failed_login_attempts: int = 5
-    account_lock_minutes: int = 15
+    max_failed_login_attempts: int = 8
+    account_lock_minutes: int = 5
     email_verification_expire_minutes: int = 60
     password_reset_expire_minutes: int = 30
 
-    register_rate_limit: int = 5
+    register_rate_limit: int = 12
     register_rate_window_seconds: int = 600
-    login_rate_limit: int = 10
+    login_rate_limit: int = 30
     login_rate_window_seconds: int = 300
     forgot_password_rate_limit: int = 5
     forgot_password_rate_window_seconds: int = 600

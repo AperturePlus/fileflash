@@ -36,6 +36,14 @@ def test_agent_related_settings_defaults():
     assert settings.agent_mcp_endpoints == ()
 
 
+def test_auth_risk_control_defaults():
+    settings = make_settings()
+    assert settings.register_rate_limit == 12
+    assert settings.login_rate_limit == 30
+    assert settings.max_failed_login_attempts == 8
+    assert settings.account_lock_minutes == 5
+
+
 def test_app_env_detection():
     dev = make_settings(APP_ENV="development")
     assert dev.is_development_env is True
