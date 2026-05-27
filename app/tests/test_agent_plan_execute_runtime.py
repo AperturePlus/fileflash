@@ -1228,7 +1228,7 @@ async def test_plan_runner_delegates_count_question_with_search_term_to_planner(
 
 
 @pytest.mark.asyncio
-async def test_plan_runner_rejects_write_tool_in_exploratory_loop(
+async def test_plan_runner_blocks_write_tool_in_exploratory_loop_and_continues(
     monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
@@ -1238,11 +1238,34 @@ async def test_plan_runner_rejects_write_tool_in_exploratory_loop(
         AsyncMock(return_value={"scope": "currentFolder", "rootFolderId": "root", "files": [], "folders": []}),
     )
     monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+    dispatch_mock = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr(
+        plan_module,
+        "ToolRouter",
+        lambda **kwargs: SimpleNamespace(dispatch=dispatch_mock),
+    )
 
     async def fake_create_plan(**kwargs):  # noqa: ANN003
         tool_executor = kwargs["tool_executor"]
-        await tool_executor("drive.moveFile", {"fileId": "1", "targetFolderId": "2"})
-        return {"summary": "should not reach", "proposedActions": []}
+        blocked = await tool_executor("drive.createFolder", {"parentFolderId": "root", "name": "Movies"})
+        assert blocked["_plannerBlocked"] is True
+        assert blocked["_toolError"] is True
+        assert blocked["tool"] == "drive.createFolder"
+        return {
+            "summary": "create then move",
+            "proposedActions": [
+                {
+                    "step": 1,
+                    "tool": "drive.createFolder",
+                    "input": {"parentFolderId": "root", "name": "Movies"},
+                },
+                {
+                    "step": 2,
+                    "tool": "drive.moveFile",
+                    "input": {"fileId": "1", "targetFolderId": "$step1.folderId"},
+                },
+            ],
+        }
 
     runner = PlanRunner(
         settings=settings(),
@@ -1272,10 +1295,69 @@ async def test_plan_runner_rejects_write_tool_in_exploratory_loop(
         updated_at=datetime.now(UTC),
     )
 
-    with pytest.raises(ApiError) as exc:
-        await runner.run(db=DummyDb(), job=job)  # type: ignore[arg-type]
-    assert exc.value.status_code == 400
-    assert "read-only" in exc.value.message
+    result = await runner.run(db=DummyDb(), job=job)  # type: ignore[arg-type]
+    assert len(result.proposed_actions) == 2
+    assert result.proposed_actions[0].tool == "drive.createFolder"
+    assert result.proposed_actions[1].input["targetFolderId"] == "$step1.folderId"
+    dispatch_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_plan_runner_passes_only_read_tools_to_planner_tool_use(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "rootFolderId": "root", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+    captured_tools: list[dict[str, Any]] = []
+
+    async def fake_create_plan(**kwargs):  # noqa: ANN003
+        nonlocal captured_tools
+        tools = kwargs.get("tools")
+        if isinstance(tools, list):
+            captured_tools = list(tools)
+        return {"summary": "ok", "proposedActions": []}
+
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=fake_create_plan),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "input": "整理当前文件夹",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+            "executionPolicy": "confirm",
+        }
+    )
+    job = BackgroundJob(
+        job_id=341,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    await runner.run(db=DummyDb(), job=job)  # type: ignore[arg-type]
+
+    assert captured_tools
+    internal_names = {str(item.get("internalName") or "") for item in captured_tools}
+    assert "drive.createFolder" not in internal_names
+    assert "drive.moveFile" not in internal_names
+    for internal_name in internal_names:
+        assert plan_module.REGISTRY.get(internal_name).side_effect == "read"
 
 
 @pytest.mark.asyncio
