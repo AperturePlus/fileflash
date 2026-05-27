@@ -78,6 +78,10 @@ class PlanRunner:
         metadata = await _collect_context_metadata(db, user_id=user_id, request=request)
         allowed_tools = _skill_tool_whitelist(skill)
         allowed_tool_set = set(allowed_tools)
+        exploration_tools = tuple(
+            tool_name for tool_name in allowed_tools if REGISTRY.get(tool_name).side_effect == "read"
+        )
+        exploration_tool_set = set(exploration_tools)
         planner_router = ToolRouter(db=db, user_id=user_id)
         tool_call_budget = min(self.settings.agent_job_max_tool_calls, 32)
         planned_tool_calls = 0
@@ -85,19 +89,6 @@ class PlanRunner:
 
         async def _planning_tool_executor(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
             nonlocal planned_tool_calls
-            if tool_name not in allowed_tool_set:
-                raise ApiError(
-                    status_code=400,
-                    code=400,
-                    message=f"Planner attempted disallowed tool: {tool_name}",
-                )
-            spec = REGISTRY.get(tool_name)
-            if spec.side_effect != "read":
-                raise ApiError(
-                    status_code=400,
-                    code=400,
-                    message=f"Planner exploratory tool call must be read-only: {tool_name}",
-                )
             planned_tool_calls += 1
             if planned_tool_calls > tool_call_budget:
                 raise ApiError(
@@ -105,6 +96,39 @@ class PlanRunner:
                     code=400,
                     message="Planner exceeded exploratory tool-call budget",
                 )
+            if tool_name not in allowed_tool_set:
+                blocked = _blocked_planning_tool_result(
+                    tool_name=tool_name,
+                    reason="Planner attempted a tool that is not allowed by the selected skill.",
+                )
+                if len(planning_evidence) < 12:
+                    planning_evidence.append(
+                        AgentPlanningEvidence(
+                            step=planned_tool_calls,
+                            tool=tool_name,
+                            input=_evidence_mapping(args),
+                            output_preview=_evidence_preview(blocked),
+                        )
+                    )
+                return blocked
+            if tool_name not in exploration_tool_set:
+                blocked = _blocked_planning_tool_result(
+                    tool_name=tool_name,
+                    reason=(
+                        "Planner exploratory tool call must be read-only. "
+                        "Move write operations into final proposedActions."
+                    ),
+                )
+                if len(planning_evidence) < 12:
+                    planning_evidence.append(
+                        AgentPlanningEvidence(
+                            step=planned_tool_calls,
+                            tool=tool_name,
+                            input=_evidence_mapping(args),
+                            output_preview=_evidence_preview(blocked),
+                        )
+                    )
+                return blocked
             output = await planner_router.dispatch(ToolCall(tool_name=tool_name, arguments=args))
             if len(planning_evidence) < 12:
                 planning_evidence.append(
@@ -123,19 +147,29 @@ class PlanRunner:
                 request=request,
                 skill=skill,
                 allowed_tools=allowed_tools,
+                exploration_tools=exploration_tools,
                 metadata=metadata,
             ),
             max_tokens=request.hints.budget_tokens,
             reasoning_effort=request.hints.reasoning_effort,
-            tools=REGISTRY.anthropic_tools_for(allowed_tools),
+            tools=REGISTRY.anthropic_tools_for(exploration_tools),
             tool_executor=_planning_tool_executor,
             max_tool_roundtrips=6,
         )
 
+        effective_max_steps: int | None
+        if self.settings.is_development_env:
+            effective_max_steps = None
+        else:
+            effective_max_steps = min(
+                request.hints.max_steps,
+                self.settings.agent_job_max_tool_calls,
+            )
+
         actions = _normalize_actions(
             llm_payload=llm_payload,
             allowed_tools=allowed_tools,
-            max_steps=min(request.hints.max_steps, self.settings.agent_job_max_tool_calls),
+            max_steps=effective_max_steps,
         )
         chosen_skill = _chosen_skill(skill)
         llm_summary = str(
@@ -458,6 +492,7 @@ def _user_prompt(
     request: PlanAgentRequest,
     skill: AgentSkill | AgentSkillCatalogEntry | None,
     allowed_tools: tuple[str, ...],
+    exploration_tools: tuple[str, ...],
     metadata: dict[str, Any],
 ) -> str:
     payload = {
@@ -467,10 +502,12 @@ def _user_prompt(
         "dataPolicy": request.data_policy.model_dump(by_alias=True),
         "skill": _skill_payload(skill),
         "allowedTools": list(allowed_tools),
+        "explorationTools": list(exploration_tools),
         "toolSchemas": _tool_schemas(allowed_tools),
         "toolUseMode": (
-            "Use read-only tools first when facts are missing. "
-            "Write tools must appear only in final proposedActions, not exploratory tool_use steps."
+            "Use exploratory tool_use only with read-only tools listed in explorationTools. "
+            "Never call write tools with tool_use; put write operations only in final proposedActions "
+            "and use '$stepN.field' references for cross-step ids."
         ),
         "plannerDefaults": {
             "organizeRequest": {
@@ -539,18 +576,32 @@ def _tool_schemas(allowed_tools: tuple[str, ...]) -> list[dict[str, Any]]:
     return REGISTRY.schemas_for(allowed_tools)
 
 
+def _blocked_planning_tool_result(*, tool_name: str, reason: str) -> dict[str, Any]:
+    return {
+        "_plannerBlocked": True,
+        "_toolError": True,
+        "errorCode": "planner.exploration_tool_blocked",
+        "tool": tool_name,
+        "message": reason,
+        "guidance": (
+            "Do not execute write tools during exploration. "
+            "Place write actions in final proposedActions and reference prior outputs via '$stepN.field'."
+        ),
+    }
+
+
 def _normalize_actions(
     *,
     llm_payload: dict[str, Any],
     allowed_tools: tuple[str, ...],
-    max_steps: int,
+    max_steps: int | None,
 ) -> list[AgentProposedAction]:
     raw_actions = llm_payload.get("proposedActions", llm_payload.get("proposed_actions"))
     if raw_actions is None:
         raw_actions = llm_payload.get("actions")
     if not isinstance(raw_actions, list):
         raise ApiError(status_code=502, code=502, message="Agent plan JSON missing proposedActions")
-    if len(raw_actions) > max_steps:
+    if max_steps is not None and len(raw_actions) > max_steps:
         raise ApiError(status_code=400, code=400, message="Agent plan exceeds maxSteps")
 
     allowed = set(allowed_tools)

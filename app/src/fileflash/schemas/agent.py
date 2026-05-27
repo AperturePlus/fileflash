@@ -47,7 +47,7 @@ class AgentDataPolicy(CamelModel):
 
 class AgentHints(CamelModel):
     prefer_skill_id: str | None = None
-    max_steps: int = Field(default=12, ge=1, le=100)
+    max_steps: int = Field(default=12, ge=1)
     budget_tokens: int = Field(default=8_000, ge=1)
     reasoning_effort: AgentReasoningEffort = "adaptive"
 

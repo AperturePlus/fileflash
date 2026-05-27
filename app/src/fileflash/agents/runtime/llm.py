@@ -263,13 +263,14 @@ class AnthropicPlannerClient:
             tool_results: list[dict[str, Any]] = []
             for call in tool_calls:
                 tool_output = await tool_executor(call["tool"], call["input"])
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": call["id"],
-                        "content": _tool_result_content(tool_output),
-                    }
-                )
+                tool_result: dict[str, Any] = {
+                    "type": "tool_result",
+                    "tool_use_id": call["id"],
+                    "content": _tool_result_content(tool_output),
+                }
+                if _is_tool_error_payload(tool_output):
+                    tool_result["is_error"] = True
+                tool_results.append(tool_result)
             messages.append({"role": "user", "content": tool_results})
             loop_kwargs = dict(request_kwargs)
             loop_kwargs["messages"] = messages
@@ -470,6 +471,12 @@ def _tool_result_content(payload: dict[str, Any]) -> list[dict[str, str]]:
     if len(text) > 12_000:
         text = text[:12_000] + "…"
     return [{"type": "text", "text": text}]
+
+
+def _is_tool_error_payload(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return bool(payload.get("_toolError") is True or payload.get("isError") is True)
 
 
 def _reasoning_params(reasoning_effort: str) -> dict[str, Any]:

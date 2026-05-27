@@ -40,7 +40,10 @@ class PlanService:
                 code=400,
                 message="Agent token budget exceeds server limit",
             )
-        if payload.hints.max_steps > self.settings.agent_job_max_tool_calls:
+        if (
+            not self.settings.is_development_env
+            and payload.hints.max_steps > self.settings.agent_job_max_tool_calls
+        ):
             raise ApiError(status_code=400, code=400, message="Agent maxSteps exceeds server limit")
 
         await self._enforce_limits(user_id=user_id)
