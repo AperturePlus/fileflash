@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import Icon from '../atoms/Icon.vue';
 
 interface SelectOption {
@@ -23,45 +23,19 @@ const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>();
 const rootEl = ref<HTMLElement | null>(null);
 const open = ref(false);
 const activeIndex = ref(-1);
-const placement = ref<'down' | 'up'>('down');
-const menuMaxHeight = ref<number>(240);
 
 const selectedLabel = computed(() => {
   const m = props.options.find((o) => o.value === props.modelValue);
   return m?.label ?? '';
 });
 
-const MENU_HARD_CAP = 240;
-const MENU_MIN_HEIGHT = 80;
-const ROW_HEIGHT = 24;
-const MENU_GAP = 8;
-
-const updatePlacement = () => {
-  if (!rootEl.value || typeof window === 'undefined') return;
-  const rect = rootEl.value.getBoundingClientRect();
-  const vh = window.innerHeight || document.documentElement.clientHeight;
-  const spaceBelow = Math.max(0, vh - rect.bottom - MENU_GAP);
-  const spaceAbove = Math.max(0, rect.top - MENU_GAP);
-  const naturalHeight = Math.min(MENU_HARD_CAP, props.options.length * ROW_HEIGHT + 8);
-
-  if (spaceBelow >= naturalHeight || spaceBelow >= spaceAbove) {
-    placement.value = 'down';
-    menuMaxHeight.value = Math.max(MENU_MIN_HEIGHT, Math.min(MENU_HARD_CAP, spaceBelow));
-  } else {
-    placement.value = 'up';
-    menuMaxHeight.value = Math.max(MENU_MIN_HEIGHT, Math.min(MENU_HARD_CAP, spaceAbove));
-  }
-};
-
 const toggle = () => {
   if (props.disabled) return;
-  const next = !open.value;
-  if (next) {
-    updatePlacement();
+  open.value = !open.value;
+  if (open.value) {
     const i = props.options.findIndex((o) => o.value === props.modelValue);
     activeIndex.value = i >= 0 ? i : 0;
   }
-  open.value = next;
 };
 
 const pick = (value: string | number) => {
@@ -97,22 +71,8 @@ const onDocClick = (e: MouseEvent) => {
   if (!rootEl.value.contains(e.target as Node)) open.value = false;
 };
 
-const onViewportChange = () => {
-  if (!open.value) return;
-  // Defer to next frame to let layout settle before remeasure.
-  nextTick(updatePlacement);
-};
-
-onMounted(() => {
-  document.addEventListener('mousedown', onDocClick);
-  window.addEventListener('resize', onViewportChange);
-  window.addEventListener('scroll', onViewportChange, true);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocClick);
-  window.removeEventListener('resize', onViewportChange);
-  window.removeEventListener('scroll', onViewportChange, true);
-});
+onMounted(() => document.addEventListener('mousedown', onDocClick));
+onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick));
 </script>
 
 <template>
@@ -134,13 +94,7 @@ onBeforeUnmount(() => {
       </span>
       <Icon :name="open ? 'chevronUp' : 'chevronDown'" :size="size === 'sm' ? 12 : 14" />
     </button>
-    <ul
-      v-if="open"
-      class="ff-select__menu"
-      :class="`ff-select__menu--${placement}`"
-      :style="{ maxHeight: `${menuMaxHeight}px` }"
-      role="listbox"
-    >
+    <ul v-if="open" class="ff-select__menu" role="listbox">
       <li
         v-for="(opt, i) in options"
         :key="opt.value"
@@ -185,8 +139,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: border-color var(--mo-duration-fast) var(--mo-easing);
 }
-.ff-select--sm { font-size: var(--text-small); }
-.ff-select--sm .ff-select__trigger { height: 24px; }
+.ff-select--sm .ff-select__trigger { height: 24px; font-size: 9px; }
 .ff-select--md .ff-select__trigger { height: 32px; }
 .ff-select__trigger:hover:not(:disabled),
 .ff-select.is-open .ff-select__trigger { border-color: var(--ac); }
@@ -196,6 +149,7 @@ onBeforeUnmount(() => {
 
 .ff-select__menu {
   position: absolute; left: 0; right: 0;
+  bottom: calc(100% + 2px); top: auto;
   background: var(--surface-raised);
   border: 1px solid var(--border-default);
   border-radius: 0;
@@ -206,8 +160,6 @@ onBeforeUnmount(() => {
   max-height: 240px;
   overflow: auto;
 }
-.ff-select__menu--down { top: calc(100% + 2px); }
-.ff-select__menu--up { bottom: calc(100% + 2px); }
 .ff-select__option {
   padding: var(--sp-xs) var(--sp-sm);
   color: var(--text-secondary);

@@ -38,4 +38,4 @@ app/artifacts/
 .playwright*
 .snow/
 
-/node_modules/
+/node_modules/docker/.env.production
