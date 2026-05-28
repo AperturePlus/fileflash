@@ -21,6 +21,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 from .enums import (
     AgentExecutionPolicy,
+    AgentInboxKind,
+    AgentInboxRole,
+    AgentInboxStatus,
     AgentMcpVisibility,
     AgentMemoryKind,
     AgentMemoryScope,
@@ -345,8 +348,55 @@ class AgentWorkSession(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class AgentInboxMessage(Base):
+    __tablename__ = "agent_inbox_message"
+    __table_args__ = (
+        Index("idx_agent_inbox_message_job_created", "job_id", "created_at"),
+        Index(
+            "idx_agent_inbox_message_job_status",
+            "job_id",
+            "status",
+            postgresql_where=text("status IS NOT NULL"),
+        ),
+    )
+
+    inbox_message_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    job_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("background_job.job_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    role: Mapped[AgentInboxRole] = mapped_column(
+        pg_enum(AgentInboxRole, "agent_inbox_role_enum"),
+        nullable=False,
+    )
+    kind: Mapped[AgentInboxKind] = mapped_column(
+        pg_enum(AgentInboxKind, "agent_inbox_kind_enum"),
+        nullable=False,
+    )
+    payload_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    reply_to_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("agent_inbox_message.inbox_message_id", ondelete="SET NULL"),
+    )
+    status: Mapped[AgentInboxStatus | None] = mapped_column(
+        pg_enum(AgentInboxStatus, "agent_inbox_status_enum"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 __all__ = [
     "AgentActionLog",
+    "AgentInboxMessage",
     "AgentMcpServer",
     "AgentMemory",
     "AgentPlan",

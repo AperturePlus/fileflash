@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount } from '../../test/mount';
 import Select from './Select.vue';
 
@@ -49,5 +49,49 @@ describe('molecules/Select', () => {
     expect(w.find('.ff-select__menu').exists()).toBe(true);
     await w.find('.ff-select').trigger('keydown', { key: 'Escape' });
     expect(w.find('.ff-select__menu').exists()).toBe(false);
+  });
+
+  it('opens upward when there is not enough room below the trigger', async () => {
+    const originalInner = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { value: 600, configurable: true });
+    const w = mount(Select, {
+      props: { modelValue: 'a', options: OPTS },
+      attachTo: document.body,
+    });
+    const root = w.find('.ff-select').element as HTMLElement;
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 580, top: 580, bottom: 596,
+      left: 0, right: 120, width: 120, height: 16,
+      toJSON: () => undefined,
+    } as DOMRect);
+
+    await w.find('.ff-select__trigger').trigger('click');
+    const menu = w.find('.ff-select__menu');
+    expect(menu.exists()).toBe(true);
+    expect(menu.classes()).toContain('ff-select__menu--up');
+
+    Object.defineProperty(window, 'innerHeight', { value: originalInner, configurable: true });
+  });
+
+  it('opens downward when there is room below the trigger', async () => {
+    const originalInner = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    const w = mount(Select, {
+      props: { modelValue: 'a', options: OPTS },
+      attachTo: document.body,
+    });
+    const root = w.find('.ff-select').element as HTMLElement;
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 100, top: 100, bottom: 132,
+      left: 0, right: 120, width: 120, height: 32,
+      toJSON: () => undefined,
+    } as DOMRect);
+
+    await w.find('.ff-select__trigger').trigger('click');
+    const menu = w.find('.ff-select__menu');
+    expect(menu.exists()).toBe(true);
+    expect(menu.classes()).toContain('ff-select__menu--down');
+
+    Object.defineProperty(window, 'innerHeight', { value: originalInner, configurable: true });
   });
 });

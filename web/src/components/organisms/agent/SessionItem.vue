@@ -1,19 +1,29 @@
 <script setup lang="ts">
 import IconButton from '../../molecules/IconButton.vue';
+import { useLocaleStore } from '../../../store/locale';
 import type { Session } from '../../../composables/useAgentSession';
 
 defineProps<{ session: Session; active: boolean }>();
 defineEmits<{ select: []; delete: [] }>();
 
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
+const formatRelativeUnit = (key:
+  | 'agent.v2.sessions.relative.minutes'
+  | 'agent.v2.sessions.relative.hours'
+  | 'agent.v2.sessions.relative.days', value: number) =>
+  t(key).replace('{value}', String(value));
+
 const relativeTime = (iso: string): string => {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m`;
+  if (mins < 1) return t('agent.v2.sessions.relative.justNow');
+  if (mins < 60) return formatRelativeUnit('agent.v2.sessions.relative.minutes', mins);
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
+  if (hours < 24) return formatRelativeUnit('agent.v2.sessions.relative.hours', hours);
   const days = Math.floor(hours / 24);
-  return `${days}d`;
+  return formatRelativeUnit('agent.v2.sessions.relative.days', days);
 };
 </script>
 
@@ -25,7 +35,7 @@ const relativeTime = (iso: string): string => {
     </div>
     <IconButton
       icon="trash"
-      label="Delete session"
+      :label="t('agent.v2.sessions.delete')"
       size="sm"
       class="ff-si__del"
       @click.stop="$emit('delete')"
@@ -57,7 +67,7 @@ const relativeTime = (iso: string): string => {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ff-si__time {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   color: var(--text-tertiary);
   letter-spacing: var(--tracking-wide);
 }

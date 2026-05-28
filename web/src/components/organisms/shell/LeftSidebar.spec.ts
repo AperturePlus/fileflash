@@ -5,6 +5,8 @@ import LeftSidebar from './LeftSidebar.vue';
 import { useFileStore } from '../../../store/file';
 import { eventBus } from '../../../utils/eventBus';
 
+const activeUploadingCountRef = vi.hoisted(() => ({ value: 0, __v_isRef: true }));
+
 const {
   getStarredFilesMock,
   getFolderPathMock,
@@ -16,19 +18,32 @@ const {
 }));
 
 vi.mock('../../../api/file', () => ({
+  downloadFile: vi.fn(() => Promise.resolve(new Blob(['ok'], { type: 'text/plain' }))),
   getStarredFiles: getStarredFilesMock,
+  getPreviewUrl: vi.fn(() => Promise.resolve({ previewUrl: '/preview/mock', expiresAt: '2026-05-25T00:00:00Z' })),
+  previewFile: vi.fn(() => Promise.resolve(new Blob(['ok'], { type: 'text/plain' }))),
 }));
 
 vi.mock('../../../api/folder', () => ({
   getFolderPath: getFolderPathMock,
 }));
 
-vi.mock('vue-router', () => ({
-  useRouter: () => ({
-    push: pushMock,
-    currentRoute: { value: { path: '/shared' } },
+vi.mock('../../../store/upload', () => ({
+  useUploadStore: () => ({
+    activeUploadingCount: activeUploadingCountRef,
   }),
 }));
+
+vi.mock('vue-router', async () => {
+  const actual = await vi.importActual<typeof import('vue-router')>('vue-router');
+  return {
+    ...actual,
+    useRouter: () => ({
+      push: pushMock,
+      currentRoute: { value: { path: '/shared' } },
+    }) as any,
+  };
+});
 
 const baseTimestamp = '2026-05-13T10:00:00Z';
 
@@ -88,6 +103,7 @@ describe('LeftSidebar', () => {
         { folderId, name: `Path-${folderId}` },
       ],
     }));
+    activeUploadingCountRef.value = 0;
   });
 
   it('renders Starred section above Workspace Tree and shows path subtitle', async () => {
@@ -179,6 +195,25 @@ describe('LeftSidebar', () => {
     await flush();
 
     expect(getStarredFilesMock.mock.calls.length).toBeGreaterThan(before);
+    wrapper.unmount();
+  });
+
+  it('shows upload indicator on My Files when uploads are active', async () => {
+    activeUploadingCountRef.value = 1;
+
+    const wrapper = mount(LeftSidebar, {
+      props: { collapsed: false },
+      global: {
+        stubs: {
+          'router-link': { template: '<a><slot /></a>' },
+          FileTreeNode: true,
+          StorageStatusWidget: true,
+        },
+      },
+    });
+    await flush();
+
+    expect(wrapper.find('.upload-indicator').exists()).toBe(true);
     wrapper.unmount();
   });
 });

@@ -9,6 +9,7 @@ defineProps<{ items: Share[] }>();
 defineEmits<{
   (e: 'copy', share: Share): void;
   (e: 'delete', share: Share): void;
+  (e: 'regenerate-password', share: Share): void;
 }>();
 
 const localeStore = useLocaleStore();
@@ -47,6 +48,14 @@ const formatItemType = (itemType: Share['itemType']) =>
 
       <div class="links-table__cell links-table__cell--action">
         <Button size="sm" variant="ghost" @click="$emit('copy', share)">{{ t('sharing.table.links.copy') }}</Button>
+        <Button
+          v-if="share.settings.passwordProtected"
+          size="sm"
+          variant="ghost"
+          @click="$emit('regenerate-password', share)"
+        >
+          {{ t('sharing.table.links.regeneratePassword') }}
+        </Button>
         <Button size="sm" variant="danger" @click="$emit('delete', share)">{{ t('sharing.table.links.delete') }}</Button>
       </div>
     </div>
@@ -58,7 +67,7 @@ const formatItemType = (itemType: Share['itemType']) =>
 .links-table__head,
 .links-table__row {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 0.9fr 1.1fr 160px;
+  grid-template-columns: 1.4fr 1fr 0.9fr 1.1fr 270px;
   align-items: center;
   gap: 12px;
   padding: 0 12px;

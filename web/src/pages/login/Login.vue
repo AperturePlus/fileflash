@@ -56,13 +56,6 @@ async function onSubmit(payload: AuthSubmitPayload) {
     :initial="initial"
     @submit="onSubmit"
   >
-    <template #hint>
-      <div class="login__hint">
-        <strong>Mock Test Accounts</strong>
-        <small>admin / admin123 (administrator)</small>
-        <small>demo / demo123 (regular user)</small>
-      </div>
-    </template>
     <template #secondary>
       <router-link to="/forgot-password" class="login__sec">Forgot password</router-link>
     </template>
@@ -74,23 +67,6 @@ async function onSubmit(payload: AuthSubmitPayload) {
 </template>
 
 <style scoped>
-.login__hint {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: var(--sp-sm) var(--sp-md);
-  background: var(--surface-inset);
-  border: 1px solid var(--border-subtle);
-  font-family: var(--font-mono);
-  font-size: var(--text-small);
-  color: var(--text-secondary);
-  margin-top: var(--sp-sm);
-}
-.login__hint strong {
-  color: var(--text-primary);
-  font-weight: var(--weight-semibold);
-  font-size: var(--text-label);
-  letter-spacing: var(--tracking-wider);
-  text-transform: uppercase;
-}
 .login__sec {
   color: var(--ac);
   font-size: var(--text-small);

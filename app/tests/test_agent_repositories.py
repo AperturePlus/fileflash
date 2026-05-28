@@ -28,6 +28,14 @@ class FakeMappingResult:
         return list(self._rows)
 
 
+class FakeScalarResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar(self):
+        return self._value
+
+
 class DummySession:
     def __init__(self) -> None:
         self.add = Mock()
@@ -134,6 +142,86 @@ async def test_agent_skill_list_visible_maps_catalog_rows():
     repo = AgentSkillRepository(session)
     items = await repo.list_visible(user_id=7)
     assert [item.skill_key for item in items] == ["builtin:organizeByType", "user:cleanup"]
+    statement = session.execute.await_args.args[0]
+    assert "owner_user_id = CAST(:user_id AS BIGINT)" in str(statement)
+
+
+@pytest.mark.asyncio
+async def test_agent_skill_list_visible_accepts_null_user_id():
+    session = DummySession()
+    session.execute.return_value = FakeMappingResult([])
+
+    repo = AgentSkillRepository(session)
+    items = await repo.list_visible(user_id=None)
+
+    assert items == []
+    params = session.execute.await_args.args[1]
+    assert params["user_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_agent_skill_search_visible_uses_bigint_cast_with_empty_query():
+    session = DummySession()
+    session.execute.return_value = FakeMappingResult([])
+
+    repo = AgentSkillRepository(session)
+    items = await repo.search_visible(user_id=1, query_text="", limit=20)
+
+    assert items == []
+    statement = session.execute.await_args.args[0]
+    assert "owner_user_id = CAST(:user_id AS BIGINT)" in str(statement)
+    params = session.execute.await_args.args[1]
+    assert params["query_text"] == ""
+
+
+@pytest.mark.asyncio
+async def test_agent_skill_list_catalog_paginated_uses_bigint_cast_with_null_user():
+    session = DummySession()
+    session.execute = AsyncMock(
+        side_effect=[
+            FakeScalarResult(1),
+            FakeMappingResult(
+                [
+                    {
+                        "skill_id": 1,
+                        "skill_key": "builtin:organizeByType",
+                        "name": "organizeByType",
+                        "description": "Organize files by type",
+                        "triggers_text": "organize, classify",
+                        "tool_whitelist_json": ["drive.listFolder"],
+                        "plan_template_json": {},
+                        "inputs_schema_json": {},
+                        "outputs_schema_json": {},
+                        "visibility": "global",
+                        "owner_user_id": None,
+                        "created_at": datetime.now(UTC),
+                        "updated_at": datetime.now(UTC),
+                        "search_text": "organize files by type",
+                    }
+                ]
+            ),
+        ]
+    )
+
+    repo = AgentSkillRepository(session)
+    items, total_items = await repo.list_catalog_paginated(
+        user_id=None,
+        visibility="all",
+        query_text="",
+        page=1,
+        per_page=20,
+    )
+
+    assert total_items == 1
+    assert [item.skill_key for item in items] == ["builtin:organizeByType"]
+    count_statement = session.execute.await_args_list[0].args[0]
+    list_statement = session.execute.await_args_list[1].args[0]
+    assert "owner_user_id = CAST(:user_id AS BIGINT)" in str(count_statement)
+    assert "owner_user_id = CAST(:user_id AS BIGINT)" in str(list_statement)
+    params = session.execute.await_args_list[1].args[1]
+    assert params["query_text"] == ""
+    assert params["offset"] == 0
+    assert params["limit"] == 20
 
 
 @pytest.mark.asyncio
@@ -179,6 +267,21 @@ async def test_agent_mcp_list_visible_maps_catalog_rows():
     repo = AgentMcpRepository(session)
     items = await repo.list_visible(user_id=7)
     assert [item.name for item in items] == ["web-search", "private-python"]
+    statement = session.execute.await_args.args[0]
+    assert "owner_user_id = CAST(:user_id AS BIGINT)" in str(statement)
+
+
+@pytest.mark.asyncio
+async def test_agent_mcp_list_visible_accepts_null_user_id():
+    session = DummySession()
+    session.execute.return_value = FakeMappingResult([])
+
+    repo = AgentMcpRepository(session)
+    items = await repo.list_visible(user_id=None)
+
+    assert items == []
+    params = session.execute.await_args.args[1]
+    assert params["user_id"] is None
 
 
 @pytest.mark.asyncio
@@ -254,6 +357,59 @@ async def test_agent_action_log_finish_refreshes_work_session_metrics():
     assert entry.duration_ms == 42
     assert entry.error_message == "boom"
     session.execute.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_agent_action_log_append_step_normalizes_datetime_inputs():
+    session = DummySession()
+    session.scalar = AsyncMock(return_value=88)
+    captured: list[SimpleNamespace] = []
+
+    def add(entry: SimpleNamespace) -> None:
+        captured.append(entry)
+
+    session.add = Mock(side_effect=add)
+    repo = AgentActionLogRepository(session)
+    now = datetime.now(UTC)
+
+    await repo.append_step(
+        job_id=101,
+        step_no=1,
+        tool_name="drive.createFolder",
+        inputs_json={"createdAt": now},
+        status="running",
+    )
+
+    assert captured
+    saved = captured[0]
+    assert isinstance(saved.inputs_json["createdAt"], str)
+    assert saved.inputs_json["createdAt"] == now.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_agent_action_log_finish_step_normalizes_datetime_outputs():
+    session = DummySession()
+    entry = SimpleNamespace(
+        outputs_json={},
+        status="running",
+        duration_ms=None,
+        error_message=None,
+        finished_at=None,
+    )
+    session.scalar = AsyncMock(side_effect=[entry, 88])
+    repo = AgentActionLogRepository(session)
+    now = datetime.now(UTC)
+
+    await repo.finish_step(
+        job_id=101,
+        step_no=2,
+        outputs_json={"updatedAt": now},
+        status="succeeded",
+        duration_ms=5,
+    )
+
+    assert isinstance(entry.outputs_json["updatedAt"], str)
+    assert entry.outputs_json["updatedAt"] == now.isoformat()
 
 
 @pytest.mark.asyncio

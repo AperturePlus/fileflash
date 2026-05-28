@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     app_env: str = Field(default="production", alias="APP_ENV")
 
+    default_admin_username: str | None = Field(default=None, alias="DEFAULT_ADMIN_USERNAME")
+    default_admin_email: str | None = Field(default=None, alias="DEFAULT_ADMIN_EMAIL")
+    default_admin_password: str | None = Field(default=None, alias="DEFAULT_ADMIN_PASSWORD")
+
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     ff_db_uri: str | None = Field(default=None, alias="FF_DB_URI")
 
@@ -39,6 +43,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 3
     refresh_token_expire_days: int = 7
+    file_preview_url_ttl_seconds: int = Field(
+        default=4 * 60 * 60,
+        alias="FILE_PREVIEW_URL_TTL_SECONDS",
+    )
 
     refresh_cookie_name: str = "refreshToken"
     refresh_cookie_secure: bool = False
@@ -48,6 +56,22 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://localhost:8080"])
 
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
+    agent_inbox_ask_timeout_sec: int = Field(
+        default=1800,
+        alias="AGENT_INBOX_ASK_TIMEOUT_SEC",
+    )
+    agent_event_channel_prefix: str = Field(
+        default="agent:job",
+        alias="AGENT_EVENT_CHANNEL_PREFIX",
+    )
+    agent_inbox_channel_prefix: str = Field(
+        default="agent:inbox",
+        alias="AGENT_INBOX_CHANNEL_PREFIX",
+    )
+    agent_event_bus_buffer_size: int = Field(
+        default=64,
+        alias="AGENT_EVENT_BUS_BUFFER_SIZE",
+    )
     rabbitmq_url: str | None = Field(default=None, alias="RABBITMQ_URL")
 
     email_verify_base_url: str = Field(default="", alias="EMAIL_VERIFY_BASE_URL")
@@ -68,28 +92,44 @@ class Settings(BaseSettings):
     object_storage_secure: bool = Field(default=False, alias="OBJECT_STORAGE_SECURE")
     object_storage_region: str | None = Field(default=None, alias="OBJECT_STORAGE_REGION")
 
-    upload_chunk_size_default: int = Field(default=5 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_DEFAULT")
+    upload_chunk_size_default: int = Field(
+        default=5 * 1024 * 1024,
+        alias="UPLOAD_CHUNK_SIZE_DEFAULT",
+    )
     upload_chunk_size_min: int = Field(default=1 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_MIN")
     upload_chunk_size_max: int = Field(default=16 * 1024 * 1024, alias="UPLOAD_CHUNK_SIZE_MAX")
-    upload_single_file_size_max: int = Field(default=5 * 1024 * 1024 * 1024, alias="UPLOAD_SINGLE_FILE_SIZE_MAX")
+    upload_single_file_size_max: int = Field(
+        default=5 * 1024 * 1024 * 1024,
+        alias="UPLOAD_SINGLE_FILE_SIZE_MAX",
+    )
+    upload_verify_merged_object_hash: bool = Field(
+        default=False,
+        alias="UPLOAD_VERIFY_MERGED_OBJECT_HASH",
+    )
     starred_items_limit: int = Field(default=20, alias="STARRED_ITEMS_LIMIT")
     upload_session_ttl_hours: int = Field(default=24, alias="UPLOAD_SESSION_TTL_HOURS")
     upload_temp_prefix: str = Field(default="tmp", alias="UPLOAD_TEMP_PREFIX")
     upload_object_prefix: str = Field(default="objects", alias="UPLOAD_OBJECT_PREFIX")
 
-    max_failed_login_attempts: int = 5
-    account_lock_minutes: int = 15
+    max_failed_login_attempts: int = 8
+    account_lock_minutes: int = 5
     email_verification_expire_minutes: int = 60
     password_reset_expire_minutes: int = 30
 
-    register_rate_limit: int = 5
+    register_rate_limit: int = 12
     register_rate_window_seconds: int = 600
-    login_rate_limit: int = 10
+    login_rate_limit: int = 30
     login_rate_window_seconds: int = 300
     forgot_password_rate_limit: int = 5
     forgot_password_rate_window_seconds: int = 600
     resend_verification_rate_limit: int = 5
     resend_verification_rate_window_seconds: int = 600
+    download_rate_window_seconds: int = Field(default=600, alias="DOWNLOAD_RATE_WINDOW_SECONDS")
+    download_rate_limit_requests: int = Field(default=120, alias="DOWNLOAD_RATE_LIMIT_REQUESTS")
+    download_rate_limit_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        alias="DOWNLOAD_RATE_LIMIT_BYTES",
+    )
 
     worker_poll_interval_seconds: float = Field(
         default=2.0,
@@ -124,9 +164,10 @@ class Settings(BaseSettings):
     agent_user_concurrent_limit: int = Field(default=2, alias="AGENT_USER_CONCURRENT_LIMIT")
     agent_staging_ttl_sec: int = Field(default=86400, alias="AGENT_STAGING_TTL_SEC")
     agent_sse_enabled: bool = Field(default=False, alias="AGENT_SSE_ENABLED")
-    agent_llm_provider: str = Field(default="anthropic", alias="AGENT_LLM_PROVIDER")
     agent_llm_model: str = Field(default="claude-sonnet-4-6", alias="AGENT_LLM_MODEL")
+    agent_llm_base_url: str | None = Field(default=None, alias="AGENT_LLM_BASE_URL")
     agent_llm_api_key: str | None = Field(default=None, alias="AGENT_LLM_API_KEY")
+    agent_llm_plan_max_tokens: int = Field(default=8192, alias="AGENT_LLM_PLAN_MAX_TOKENS")
     agent_mcp_endpoints_raw: str = Field(default="[]", alias="AGENT_MCP_ENDPOINTS")
 
     ffmpeg_binary: str = Field(default="ffmpeg", alias="FFMPEG_BINARY")
@@ -184,6 +225,25 @@ class Settings(BaseSettings):
         token_hash_secret = (self.token_hash_secret or "").strip()
         if token_hash_secret and len(token_hash_secret.encode("utf-8")) < self.MIN_SECRET_LENGTH:
             issues.append(f"TOKEN_HASH_SECRET must be at least {self.MIN_SECRET_LENGTH} bytes")
+        issues.extend(self.default_admin_configuration_issues)
+        return tuple(issues)
+
+    @property
+    def default_admin_configuration_issues(self) -> tuple[str, ...]:
+        if not self.is_production_env:
+            return ()
+
+        issues: list[str] = []
+        if not (self.default_admin_username or "").strip():
+            issues.append("DEFAULT_ADMIN_USERNAME is required in production")
+        if not (self.default_admin_email or "").strip():
+            issues.append("DEFAULT_ADMIN_EMAIL is required in production")
+
+        password = (self.default_admin_password or "").strip()
+        if not password:
+            issues.append("DEFAULT_ADMIN_PASSWORD is required in production")
+        elif len(password.encode("utf-8")) < self.MIN_SECRET_LENGTH:
+            issues.append(f"DEFAULT_ADMIN_PASSWORD must be at least {self.MIN_SECRET_LENGTH} bytes")
         return tuple(issues)
 
     def assert_runtime_security(self) -> None:

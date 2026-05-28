@@ -19,7 +19,7 @@ const t = localeStore.t;
 
 const rootFolders = ref<FolderItem[]>([]);
 const isLoading = ref(false);
-const selectedFolderId = ref<string | null>(null);
+const selectedFolderId = ref<string | null>(props.isVisible ? 'root' : null);
 
 const fetchRootFolders = async () => {
   if (rootFolders.value.length > 0) return;
@@ -46,6 +46,9 @@ onMounted(fetchRootFolders);
 
 watch(() => props.isVisible, (visible) => {
   if (visible) {
+    selectedFolderId.value = 'root';
+    void fetchRootFolders();
+  } else {
     selectedFolderId.value = null;
   }
 });
@@ -75,7 +78,6 @@ const handleConfirm = () => {
           <p class="prompt">{{ t('move.dialog.prompt') }}</p>
           <div class="folder-tree-container">
             <div v-if="isLoading" class="loading-indicator">{{ t('move.dialog.loading') }}</div>
-            <div v-else-if="rootFolders.length === 0" class="empty-state">{{ t('move.dialog.empty') }}</div>
             <div v-else>
               <div
                 class="root-folder-item"
@@ -84,6 +86,7 @@ const handleConfirm = () => {
               >
                 {{ t('move.dialog.root') }}
               </div>
+              <div v-if="rootFolders.length === 0" class="empty-state">{{ t('move.dialog.empty') }}</div>
               <FolderTreeNode
                 v-for="folder in rootFolders"
                 :key="folder.id"

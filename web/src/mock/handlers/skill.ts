@@ -4,6 +4,22 @@ import { createMockId, getCurrentUser, mockSkills, paginate } from '../state';
 type VisibilityFilter = 'all' | 'global' | 'private';
 
 const now = () => new Date().toISOString();
+const supportedTools = new Set([
+  'drive.listFolder',
+  'drive.countFiles',
+  'drive.searchFiles',
+  'drive.getFileInfo',
+  'drive.listRecent',
+  'drive.statsByCategory',
+  'drive.findDuplicates',
+  'drive.createFolder',
+  'drive.moveFile',
+  'drive.moveFolder',
+  'drive.renameFile',
+  'drive.renameFolder',
+  'drive.deleteFile',
+  'drive.deleteFolder',
+]);
 
 const slugify = (input: string) => {
   return String(input || 'skill')
@@ -20,6 +36,12 @@ function isVisibleToUser(skill: any, userId: string, visibility: VisibilityFilte
   if (visibility === 'global') return skill.visibility === 'global';
   if (visibility === 'private') return skill.visibility === 'private' && skill.ownerUserId === userId;
   return skill.visibility === 'global' || (skill.visibility === 'private' && skill.ownerUserId === userId);
+}
+
+function validateTools(raw: unknown) {
+  const tools = Array.isArray(raw) ? raw.map((item) => String(item).trim()).filter(Boolean) : [];
+  const unknownTools = tools.filter((tool) => !supportedTools.has(tool));
+  return { tools, unknownTools };
 }
 
 export const setupSkillMocks = () => {
@@ -89,6 +111,15 @@ export const setupSkillMocks = () => {
         data: null,
       };
     }
+    const { tools, unknownTools } = validateTools(payload.toolWhitelist);
+    if (unknownTools.length) {
+      return {
+        success: false,
+        code: 422,
+        message: 'Unknown agent tool in toolWhitelist',
+        data: { unknownTools },
+      };
+    }
 
     let key = '';
     for (let i = 0; i < 8; i += 1) {
@@ -103,7 +134,7 @@ export const setupSkillMocks = () => {
       name,
       description,
       triggersText: payload.triggersText ?? null,
-      toolWhitelist: Array.isArray(payload.toolWhitelist) ? payload.toolWhitelist : [],
+      toolWhitelist: tools,
       planTemplate: payload.planTemplate || {},
       inputsSchema: payload.inputsSchema || {},
       outputsSchema: payload.outputsSchema || {},
@@ -142,7 +173,18 @@ export const setupSkillMocks = () => {
     if (payload.name !== undefined) skill.name = String(payload.name || '').trim() || skill.name;
     if (payload.description !== undefined) skill.description = String(payload.description || '').trim() || skill.description;
     if (payload.triggersText !== undefined) skill.triggersText = payload.triggersText;
-    if (payload.toolWhitelist !== undefined) skill.toolWhitelist = Array.isArray(payload.toolWhitelist) ? payload.toolWhitelist : [];
+    if (payload.toolWhitelist !== undefined) {
+      const { tools, unknownTools } = validateTools(payload.toolWhitelist);
+      if (unknownTools.length) {
+        return {
+          success: false,
+          code: 422,
+          message: 'Unknown agent tool in toolWhitelist',
+          data: { unknownTools },
+        };
+      }
+      skill.toolWhitelist = tools;
+    }
     if (payload.planTemplate !== undefined) skill.planTemplate = payload.planTemplate || {};
     if (payload.inputsSchema !== undefined) skill.inputsSchema = payload.inputsSchema || {};
     if (payload.outputsSchema !== undefined) skill.outputsSchema = payload.outputsSchema || {};
@@ -227,6 +269,15 @@ export const setupSkillMocks = () => {
 
     const results: Array<{ skillKey: string; action: 'created' | 'updated' }> = [];
     for (const item of items) {
+      const { tools, unknownTools } = validateTools(item.toolWhitelist);
+      if (unknownTools.length) {
+        return {
+          success: false,
+          code: 422,
+          message: 'Unknown agent tool in toolWhitelist',
+          data: { unknownTools },
+        };
+      }
       const skillKey = String(item.skillKey || '').trim();
       const name = String(item.name || '').trim();
       const description = String(item.description || '').trim();
@@ -239,7 +290,7 @@ export const setupSkillMocks = () => {
           name,
           description,
           triggersText: item.triggersText ?? null,
-          toolWhitelist: Array.isArray(item.toolWhitelist) ? item.toolWhitelist : [],
+          toolWhitelist: tools,
           planTemplate: item.planTemplate || {},
           inputsSchema: item.inputsSchema || {},
           outputsSchema: item.outputsSchema || {},
@@ -253,7 +304,7 @@ export const setupSkillMocks = () => {
         existing.name = name;
         existing.description = description;
         existing.triggersText = item.triggersText ?? null;
-        existing.toolWhitelist = Array.isArray(item.toolWhitelist) ? item.toolWhitelist : [];
+        existing.toolWhitelist = tools;
         existing.planTemplate = item.planTemplate || {};
         existing.inputsSchema = item.inputsSchema || {};
         existing.outputsSchema = item.outputsSchema || {};

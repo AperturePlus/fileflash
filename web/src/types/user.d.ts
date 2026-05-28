@@ -23,6 +23,38 @@ export interface User {
   avatar?: string | null;
 }
 
+export interface AdminUserUsageStats {
+  trafficBytes: number;
+  agentTokens: number;
+}
+
+export interface AdminUserItem {
+  userId: string;
+  username: string;
+  email: string;
+  role: 'USER' | 'ADMIN';
+  status: UserStatus | 'pending_verification';
+  emailVerified: boolean;
+  emailVerifiedAt?: string | null;
+  storageLimit: number;
+  storageUsed: number;
+  usagePercentage: number;
+  lastLoginAt?: string | null;
+  lastActiveAt?: string | null;
+  createdAt: string;
+  usageStats: AdminUserUsageStats;
+}
+
+export interface GetAdminUsersParams {
+  page?: number;
+  perPage?: number;
+  search?: string;
+  status?: UserStatus;
+  role?: 'USER' | 'ADMIN';
+  usageFrom?: string;
+  usageTo?: string;
+}
+
 export interface LoginResponse {
   token: string;
   tokenType: string;

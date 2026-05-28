@@ -3,6 +3,7 @@ import { reactive, ref, watch } from 'vue';
 import Modal from '../../molecules/Modal.vue';
 import Button from '../../molecules/Button.vue';
 import TextField from '../../molecules/TextField.vue';
+import { useLocaleStore } from '../../../store/locale';
 import type { SkillForm } from '../../../composables/useAgentSkills';
 
 const props = defineProps<{
@@ -16,6 +17,9 @@ const emit = defineEmits<{
   close: [];
   submit: [form: SkillForm];
 }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const local = reactive({
   name: '',
@@ -48,14 +52,14 @@ const parseJsonOrError = (raw: string, label: string): Record<string, any> => {
   try {
     return raw.trim() ? JSON.parse(raw) : {};
   } catch {
-    throw new Error(`${label} JSON invalid`);
+    throw new Error(t('agent.v2.skills.editor.error.invalidJson').replace('{field}', label));
   }
 };
 
 const onSubmit = () => {
   error.value = null;
   if (!local.name.trim() || !local.description.trim()) {
-    error.value = 'Name and description are required.';
+    error.value = t('agent.v2.skills.editor.error.required');
     return;
   }
   let plan: Record<string, any>, inputs: Record<string, any>, outputs: Record<string, any>;
@@ -82,30 +86,30 @@ const onSubmit = () => {
 
 <template>
   <Modal :open="open" size="lg" @close="emit('close')">
-    <template #header>{{ editingKey ? 'Edit Skill' : 'New Skill' }}</template>
+    <template #header>{{ editingKey ? t('agent.v2.skills.editor.titleEdit') : t('agent.v2.skills.editor.titleNew') }}</template>
     <form class="ff-sep" @submit.prevent="onSubmit">
       <div class="ff-sep__grid">
-        <TextField v-model="local.name" label="NAME" />
-        <TextField v-model="local.triggersText" label="TRIGGERS" placeholder="organize, classify" />
+        <TextField v-model="local.name" :label="t('agent.v2.skills.editor.field.name')" />
+        <TextField v-model="local.triggersText" :label="t('agent.v2.skills.editor.field.triggers')" :placeholder="t('agent.v2.skills.editor.field.triggersPlaceholder')" />
       </div>
       <label class="ff-sep__field">
-        <span class="ff-sep__lbl">DESCRIPTION</span>
+        <span class="ff-sep__lbl">{{ t('agent.v2.skills.editor.field.description') }}</span>
         <textarea v-model="local.description" class="ff-sep__ta" rows="3" />
       </label>
-      <TextField v-model="local.toolsText" label="TOOLS" placeholder="tool.a, tool.b" />
+      <TextField v-model="local.toolsText" :label="t('agent.v2.skills.editor.field.tools')" :placeholder="t('agent.v2.skills.editor.field.toolsPlaceholder')" />
 
       <details :open="advancedOpen" class="ff-sep__adv" @toggle="advancedOpen = ($event.target as HTMLDetailsElement).open">
-        <summary class="ff-sep__sum">ADVANCED JSON</summary>
+        <summary class="ff-sep__sum">{{ t('agent.v2.skills.editor.advanced') }}</summary>
         <label class="ff-sep__field">
-          <span class="ff-sep__lbl">PLAN TEMPLATE</span>
+          <span class="ff-sep__lbl">{{ t('agent.v2.skills.editor.field.planTemplate') }}</span>
           <textarea v-model="local.planTemplate" class="ff-sep__ta ff-sep__ta--mono" rows="6" />
         </label>
         <label class="ff-sep__field">
-          <span class="ff-sep__lbl">INPUTS SCHEMA</span>
+          <span class="ff-sep__lbl">{{ t('agent.v2.skills.editor.field.inputsSchema') }}</span>
           <textarea v-model="local.inputsSchema" class="ff-sep__ta ff-sep__ta--mono" rows="6" />
         </label>
         <label class="ff-sep__field">
-          <span class="ff-sep__lbl">OUTPUTS SCHEMA</span>
+          <span class="ff-sep__lbl">{{ t('agent.v2.skills.editor.field.outputsSchema') }}</span>
           <textarea v-model="local.outputsSchema" class="ff-sep__ta ff-sep__ta--mono" rows="6" />
         </label>
       </details>
@@ -113,8 +117,8 @@ const onSubmit = () => {
       <div v-if="error" class="ff-sep__err">{{ error }}</div>
     </form>
     <template #footer>
-      <Button variant="ghost" @click="emit('close')">Cancel</Button>
-      <Button variant="primary" :loading="loading" @click="onSubmit">Save</Button>
+      <Button variant="ghost" @click="emit('close')">{{ t('agent.v2.skills.editor.cancel') }}</Button>
+      <Button variant="primary" :loading="loading" @click="onSubmit">{{ t('agent.v2.skills.editor.save') }}</Button>
     </template>
   </Modal>
 </template>
@@ -128,7 +132,7 @@ const onSubmit = () => {
 }
 .ff-sep__field { display: flex; flex-direction: column; gap: 6px; }
 .ff-sep__lbl {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-secondary);
 }
@@ -153,7 +157,7 @@ const onSubmit = () => {
 }
 .ff-sep__sum {
   cursor: pointer;
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
   padding: var(--sp-xs) 0;

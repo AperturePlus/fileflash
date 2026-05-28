@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,7 +28,7 @@ class AgentActionLogRepository:
             job_id=job_id,
             step_no=step_no,
             tool_name=tool_name,
-            inputs_json=inputs_json or {},
+            inputs_json=jsonable_encoder(inputs_json or {}),
             status=status,
             started_at=started_at or datetime.now(UTC),
         )
@@ -56,7 +57,7 @@ class AgentActionLogRepository:
         if entry is None:
             return None
 
-        entry.outputs_json = outputs_json or {}
+        entry.outputs_json = jsonable_encoder(outputs_json or {})
         entry.status = status
         entry.duration_ms = duration_ms
         entry.error_message = error_message

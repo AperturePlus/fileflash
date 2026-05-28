@@ -1,19 +1,31 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
-import Hls from 'hls.js';
-import Plyr from 'plyr';
-import 'plyr/dist/plyr.css';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import Viewer from 'viewerjs';
 import 'viewerjs/dist/viewer.css';
 import { downloadFile, previewFile } from '../../../api/file';
 import { getPreviewCapabilities } from '../../../utils/preview';
+import { useLocaleStore } from '../../../store/locale';
 import type { FileItem } from '../../../types/file';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-const props = defineProps<{ file: FileItem | null }>();
+type BlobLoader = (fileId: string) => Promise<Blob>;
+
+const props = withDefaults(defineProps<{
+  file: FileItem | null;
+  previewLoader?: BlobLoader;
+  downloadLoader?: BlobLoader;
+  showDownload?: boolean;
+}>(), {
+  previewLoader: previewFile,
+  downloadLoader: downloadFile,
+  showDownload: true,
+});
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 
 const isLoading = ref(false);
 const isPdfRendering = ref(false);
@@ -27,13 +39,10 @@ const pdfFallbackMode = ref(false);
 const pdfLastKnownWidth = ref(0);
 
 const imagePreviewRef = ref<HTMLImageElement | null>(null);
-const videoPreviewRef = ref<HTMLVideoElement | null>(null);
 const pdfCanvasRef = ref<HTMLCanvasElement | null>(null);
 const pdfCanvasWrapRef = ref<HTMLDivElement | null>(null);
 
 let imageViewer: Viewer | null = null;
-let hlsPlayer: Hls | null = null;
-let plyrPlayer: Plyr | null = null;
 let pdfRenderTask: RenderTask | null = null;
 let pdfResizeObserver: ResizeObserver | null = null;
 let pdfRenderToken = 0;
@@ -46,8 +55,6 @@ const isText = computed(() => previewCapabilities.value.isText);
 const isPdf = computed(() => previewCapabilities.value.isPdf);
 const isImage = computed(() => previewCapabilities.value.isImage);
 const isAudio = computed(() => previewCapabilities.value.isAudio);
-const isVideo = computed(() => previewCapabilities.value.isVideo);
-const isHlsPlaylist = computed(() => previewCapabilities.value.isHls);
 
 const formatBytes = (bytes: number | undefined) => {
   if (!bytes) return '--';
@@ -60,25 +67,16 @@ const formatBytes = (bytes: number | undefined) => {
 const canPrevPdfPage = computed(() => pdfPage.value > 1);
 const canNextPdfPage = computed(() => pdfPage.value < pdfTotalPages.value);
 
+const pdfPageLabel = computed(() =>
+  t('files.preview.pdf.page')
+    .replace('{page}', String(pdfPage.value))
+    .replace('{total}', String(pdfTotalPages.value || 1)),
+);
+
 const destroyImageViewer = () => {
   if (imageViewer) {
     imageViewer.destroy();
     imageViewer = null;
-  }
-};
-
-const destroyVideoPlayer = () => {
-  if (hlsPlayer) {
-    hlsPlayer.destroy();
-    hlsPlayer = null;
-  }
-  if (plyrPlayer) {
-    plyrPlayer.destroy();
-    plyrPlayer = null;
-  }
-  if (videoPreviewRef.value) {
-    videoPreviewRef.value.removeAttribute('src');
-    videoPreviewRef.value.load();
   }
 };
 
@@ -118,7 +116,6 @@ const resetState = () => {
   textContent.value = '';
   error.value = '';
   destroyImageViewer();
-  destroyVideoPlayer();
   destroyPdfState();
 
   if (objectUrl.value) {
@@ -193,7 +190,7 @@ const renderPdfPage = async (pageNumber: number) => {
       pdfFallbackMode.value = true;
       pdfRenderTask = null;
       if (!objectUrl.value) {
-        error.value = 'Unable to render PDF preview.';
+        error.value = t('files.preview.pdf.renderFailed');
       }
     }
   } finally {
@@ -208,9 +205,11 @@ const initImagePreview = async () => {
   destroyImageViewer();
 
   imageViewer = new Viewer(imagePreviewRef.value, {
-    inline: false,
+    inline: true,
     navbar: false,
     title: false,
+    backdrop: false,
+    button: false,
     toolbar: {
       zoomIn: true,
       zoomOut: true,
@@ -223,51 +222,10 @@ const initImagePreview = async () => {
       flipHorizontal: false,
       flipVertical: false,
     },
-  });
-};
-
-const initVideoPreview = () => {
-  if (!isVideo.value || !videoPreviewRef.value || !objectUrl.value) return;
-  destroyVideoPlayer();
-
-  const video = videoPreviewRef.value;
-  if (isHlsPlaylist.value && Hls.isSupported()) {
-    hlsPlayer = new Hls({
-      enableWorker: true,
-      lowLatencyMode: true,
-    });
-    hlsPlayer.loadSource(objectUrl.value);
-    hlsPlayer.attachMedia(video);
-    hlsPlayer.on(Hls.Events.ERROR, (_event: string, data: { fatal: boolean }) => {
-      if (data.fatal) {
-        error.value = 'Unable to play this HLS stream.';
-      }
-    });
-  } else {
-    video.src = objectUrl.value;
-  }
-
-  plyrPlayer = new Plyr(video, {
-    controls: [
-      'play-large',
-      'play',
-      'progress',
-      'current-time',
-      'mute',
-      'volume',
-      'settings',
-      'pip',
-      'fullscreen',
-    ],
-    settings: ['speed'],
-    speed: {
-      selected: 1,
-      options: [0.75, 1, 1.25, 1.5, 2],
-    },
-    keyboard: {
-      focused: true,
-      global: false,
-    },
+    zoomOnWheel: true,
+    movable: true,
+    scalable: false,
+    transition: false,
   });
 };
 
@@ -280,7 +238,7 @@ const loadPreview = async () => {
 
   isLoading.value = true;
   try {
-    const blob = await previewFile(props.file.id);
+    const blob = await props.previewLoader(props.file.id);
 
     if (isText.value) {
       textContent.value = await blob.text();
@@ -312,11 +270,9 @@ const loadPreview = async () => {
     await nextTick();
     if (isImage.value) {
       await initImagePreview();
-    } else if (isVideo.value) {
-      initVideoPreview();
     }
   } catch {
-    error.value = 'Unable to load file preview.';
+    error.value = t('files.preview.detail.loadFailed');
   } finally {
     isLoading.value = false;
   }
@@ -341,7 +297,7 @@ const downloadSelectedFile = async () => {
   if (!props.file) return;
 
   try {
-    const blob = await downloadFile(props.file.id);
+    const blob = await props.downloadLoader(props.file.id);
     const object = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = object;
@@ -351,7 +307,7 @@ const downloadSelectedFile = async () => {
     anchor.remove();
     URL.revokeObjectURL(object);
   } catch {
-    error.value = 'Unable to download this file.';
+    error.value = t('files.preview.detail.downloadFailed');
   }
 };
 
@@ -370,23 +326,23 @@ onUnmounted(() => {
       <header class="detail__header">
         <div>
           <h3 class="detail__filename" :title="file.name">{{ file.name }}</h3>
-          <p class="detail__meta">{{ selectedMime || 'unknown type' }} | {{ formatBytes(file.size) }}</p>
+          <p class="detail__meta">{{ selectedMime || t('files.preview.detail.unknownType') }} | {{ formatBytes(file.size) }}</p>
         </div>
       </header>
 
       <div class="detail__actions">
-        <button class="detail__action" @click="downloadSelectedFile">Download</button>
-        <button class="detail__action" @click="loadPreview">Reload Preview</button>
+        <button v-if="showDownload" class="detail__action" @click="downloadSelectedFile">{{ t('files.preview.detail.download') }}</button>
+        <button class="detail__action" @click="loadPreview">{{ t('files.preview.detail.reload') }}</button>
       </div>
 
       <div class="detail__content">
-        <div v-if="isLoading" class="detail__state">Loading preview...</div>
+        <div v-if="isLoading" class="detail__state">{{ t('files.preview.detail.loading') }}</div>
         <div v-else-if="error" class="detail__state detail__state--error">{{ error }}</div>
 
         <pre v-else-if="isText" class="detail__text">{{ textContent }}</pre>
 
         <div v-else-if="isImage" class="detail__image">
-          <img ref="imagePreviewRef" :src="objectUrl" alt="Image preview" />
+          <img ref="imagePreviewRef" :src="objectUrl" :alt="t('files.preview.image.alt')" />
         </div>
 
         <div v-else-if="isPdf" class="detail__pdf">
@@ -396,24 +352,24 @@ onUnmounted(() => {
               :disabled="!canPrevPdfPage || isPdfRendering || pdfFallbackMode"
               @click="goToPrevPdfPage"
             >
-              Prev
+              {{ t('files.preview.pdf.prev') }}
             </button>
-            <span v-if="!pdfFallbackMode">Page {{ pdfPage }} / {{ pdfTotalPages || 1 }}</span>
-            <span v-else>Browser PDF fallback mode</span>
+            <span v-if="!pdfFallbackMode">{{ pdfPageLabel }}</span>
+            <span v-else>{{ t('files.preview.pdf.fallbackMode') }}</span>
             <button
               class="detail__pdf-btn"
               :disabled="!canNextPdfPage || isPdfRendering || pdfFallbackMode"
               @click="goToNextPdfPage"
             >
-              Next
+              {{ t('files.preview.pdf.next') }}
             </button>
           </div>
 
           <div v-if="pdfFallbackMode" class="detail__pdf-fallback">
-            <p class="detail__pdf-fallback-note">In-app PDF rendering is unavailable in this environment.</p>
+            <p class="detail__pdf-fallback-note">{{ t('files.preview.pdf.fallbackNote') }}</p>
             <div class="detail__pdf-fallback-actions">
-              <button class="detail__pdf-btn" @click="loadPreview">Retry render</button>
-              <button class="detail__pdf-btn" @click="openPdfInNewTab">Open in new tab</button>
+              <button class="detail__pdf-btn" @click="loadPreview">{{ t('files.preview.pdf.retryRender') }}</button>
+              <button class="detail__pdf-btn" @click="openPdfInNewTab">{{ t('files.preview.pdf.openNewTab') }}</button>
             </div>
           </div>
           <div v-else ref="pdfCanvasWrapRef" class="detail__pdf-canvas">
@@ -425,16 +381,12 @@ onUnmounted(() => {
           <audio :src="objectUrl" controls preload="metadata" />
         </div>
 
-        <div v-else-if="isVideo" class="detail__media detail__media--video">
-          <video ref="videoPreviewRef" controls preload="metadata" playsinline />
-        </div>
-
-        <div v-else class="detail__state">Preview is not available for this file type.</div>
+        <div v-else class="detail__state">{{ t('files.preview.detail.notAvailable') }}</div>
       </div>
     </template>
 
     <div v-else class="detail__placeholder">
-      <p>Select a file to preview details.</p>
+      <p>{{ t('files.preview.detail.placeholder') }}</p>
     </div>
   </div>
 </template>
@@ -498,6 +450,9 @@ onUnmounted(() => {
   flex: 1;
   padding: var(--sp-md);
   overflow: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .detail__placeholder,
@@ -528,20 +483,20 @@ onUnmounted(() => {
   padding: var(--sp-md);
 }
 
-.detail__image img,
-.detail__media audio,
-.detail__media video {
-  width: 100%;
-}
-
-.detail__media--video {
-  border: 1px solid var(--border-default);
-  padding: 8px;
+.detail__image {
+  flex: 1;
+  min-height: 320px;
+  position: relative;
   background: var(--surface-inset);
+  border: 1px solid var(--border-default);
+  overflow: hidden;
+}
+.detail__image img {
+  display: none;
 }
 
-.detail__media video {
-  max-height: 320px;
+.detail__media audio {
+  width: 100%;
 }
 
 .detail__pdf {

@@ -36,7 +36,13 @@ onMounted(s.loadData);
     </template>
     <template v-else>
       <EmptyState v-if="!s.myShares.value.length" variant="empty" :message="t('sharing.empty.links')" />
-      <SharedLinksTable v-else :items="s.myShares.value" @copy="s.copyShare" @delete="s.removeShare" />
+      <SharedLinksTable
+        v-else
+        :items="s.myShares.value"
+        @copy="s.copyShare"
+        @delete="s.removeShare"
+        @regenerate-password="s.regenerateAndShowPassword"
+      />
     </template>
 
     <Transition name="bulk-bar">

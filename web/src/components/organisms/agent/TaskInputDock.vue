@@ -1,25 +1,41 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import Button from '../../molecules/Button.vue';
 import Select from '../../molecules/Select.vue';
-import type { AgentExecutionPolicy } from '../../../types/agent';
+import { useLocaleStore } from '../../../store/locale';
+import type { AgentExecutionPolicy, AgentReasoningEffort } from '../../../types/agent';
 
 defineProps<{
   modelValue: string;
   policy: AgentExecutionPolicy;
+  reasoningEffort: AgentReasoningEffort;
   disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
   'update:policy': [value: AgentExecutionPolicy];
+  'update:reasoningEffort': [value: AgentReasoningEffort];
   submit: [];
 }>();
 
-const POLICY_OPTIONS = [
-  { value: 'planOnly', label: 'PLAN ONLY' },
-  { value: 'confirm', label: 'CONFIRM' },
-  { value: 'autopilot', label: 'AUTOPILOT' },
-];
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
+const POLICY_OPTIONS = computed(() => [
+  { value: 'planOnly', label: t('agent.v2.input.policy.planOnly') },
+  { value: 'confirm', label: t('agent.v2.input.policy.confirm') },
+  { value: 'autopilot', label: t('agent.v2.input.policy.autopilot') },
+]);
+
+const REASONING_OPTIONS = computed(() => [
+  { value: 'adaptive', label: t('agent.v2.input.reasoning.adaptive') },
+  { value: 'low', label: t('agent.v2.input.reasoning.low') },
+  { value: 'medium', label: t('agent.v2.input.reasoning.medium') },
+  { value: 'high', label: t('agent.v2.input.reasoning.high') },
+  { value: 'xhigh', label: t('agent.v2.input.reasoning.xhigh') },
+  { value: 'max', label: t('agent.v2.input.reasoning.max') },
+]);
 
 const onInput = (e: Event) => {
   emit('update:modelValue', (e.target as HTMLTextAreaElement).value);
@@ -39,7 +55,7 @@ const onKey = (e: KeyboardEvent) => {
       class="ff-tid__ta"
       :value="modelValue"
       :disabled="disabled"
-      placeholder="Describe a task. Shift+Enter for newline."
+      :placeholder="t('agent.v2.input.placeholder')"
       rows="2"
       @input="onInput"
       @keydown="onKey"
@@ -51,11 +67,17 @@ const onKey = (e: KeyboardEvent) => {
         :options="POLICY_OPTIONS"
         @update:model-value="(v) => $emit('update:policy', v as AgentExecutionPolicy)"
       />
+      <Select
+        size="sm"
+        :model-value="reasoningEffort"
+        :options="REASONING_OPTIONS"
+        @update:model-value="(v) => $emit('update:reasoningEffort', v as AgentReasoningEffort)"
+      />
       <Button
         variant="primary"
         :disabled="!modelValue.trim() || disabled"
         @click="$emit('submit')"
-      >Send</Button>
+      >{{ t('agent.v2.input.send') }}</Button>
     </div>
   </footer>
 </template>

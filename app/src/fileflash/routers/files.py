@@ -1,18 +1,30 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
+from jwt import InvalidTokenError
 from starlette.background import BackgroundTask
 
-from ..core.deps import get_archive_service, get_current_user, get_file_service
+from ..core.deps import (
+    get_archive_service,
+    get_current_user,
+    get_download_rate_limit_service,
+    get_file_service,
+    get_settings_dep,
+)
 from ..core.errors import ApiError, api_success
+from ..core.security import create_file_preview_token, decode_file_preview_token
+from ..core.settings import Settings
 from ..models.tables_identity import User
 from ..schemas.archive import ArchiveExtractRequest
 from ..schemas.file import (
     BatchDownloadRequest,
     BatchFilesRequest,
+    FilePreviewUrlResponse,
     GetFilesQuery,
     MoveFileRequest,
     RenameFileRequest,
@@ -20,9 +32,17 @@ from ..schemas.file import (
 )
 from ..schemas.job import to_background_job_response
 from ..services.archive import ArchiveService
+from ..services.download_rate_limit import DownloadRateLimitService
 from ..services.file import FileService
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+
+def _content_length(headers: dict[str, str]) -> int:
+    try:
+        return max(0, int(headers.get("Content-Length") or 0))
+    except ValueError:
+        return 0
 
 
 @router.get("")
@@ -106,11 +126,14 @@ async def batch_download_files(
     payload: BatchDownloadRequest,
     current_user: User = Depends(get_current_user),
     file_service: FileService = Depends(get_file_service),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
-    archive_path, archive_name = await file_service.create_batch_download_archive(
+    plan = await file_service.create_batch_download_plan(
         user_id=current_user.user_id,
         payload=payload,
     )
+    await download_limiter.enforce_user(user=current_user, bytes_count=plan.estimated_bytes)
+    archive_path, archive_name = await file_service.create_batch_download_archive_from_plan(plan=plan)
     return FileResponse(
         archive_path,
         media_type="application/zip",
@@ -140,12 +163,14 @@ async def download_file(
     range_header: str | None = Header(default=None, alias="Range"),
     current_user: User = Depends(get_current_user),
     file_service: FileService = Depends(get_file_service),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
     result = await file_service.get_download_stream(
         user_id=current_user.user_id,
         file_id=file_id,
         range_header=range_header,
     )
+    await download_limiter.enforce_user(user=current_user, bytes_count=_content_length(result.headers))
     return StreamingResponse(
         result.stream,
         media_type=result.content_type,
@@ -160,12 +185,76 @@ async def preview_file(
     range_header: str | None = Header(default=None, alias="Range"),
     current_user: User = Depends(get_current_user),
     file_service: FileService = Depends(get_file_service),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
 ):
     result = await file_service.get_preview_stream(
         user_id=current_user.user_id,
         file_id=file_id,
         range_header=range_header,
     )
+    await download_limiter.enforce_user(user=current_user, bytes_count=_content_length(result.headers))
+    return StreamingResponse(
+        result.stream,
+        media_type=result.content_type,
+        headers=result.headers,
+        status_code=result.status_code,
+    )
+
+
+@router.post("/{file_id}/preview-url")
+async def create_file_preview_url(
+    file_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    file_service: FileService = Depends(get_file_service),
+    settings: Settings = Depends(get_settings_dep),
+):
+    try:
+        fid = int(file_id)
+    except ValueError as exc:
+        raise ApiError(status_code=400, code=400, message="Invalid fileId") from exc
+
+    await file_service.get_file(user_id=current_user.user_id, file_id=fid)
+    expires_at = datetime.now(UTC) + timedelta(seconds=settings.file_preview_url_ttl_seconds)
+    token = create_file_preview_token(
+        user_id=int(current_user.user_id),
+        file_id=fid,
+        settings=settings,
+        expires_at=expires_at,
+    )
+    stream_url = str(request.url_for("preview_file_stream", file_id=str(fid)))
+    result = FilePreviewUrlResponse(
+        url=f"{stream_url}?{urlencode({'token': token})}",
+        expires_at=expires_at,
+    )
+    return api_success(data=result.model_dump(by_alias=True))
+
+
+@router.get("/{file_id}/preview-stream", name="preview_file_stream")
+async def preview_file_stream(
+    file_id: str,
+    token: str = Query(..., min_length=1),
+    range_header: str | None = Header(default=None, alias="Range"),
+    file_service: FileService = Depends(get_file_service),
+    settings: Settings = Depends(get_settings_dep),
+    download_limiter: DownloadRateLimitService = Depends(get_download_rate_limit_service),
+):
+    try:
+        payload = decode_file_preview_token(token, settings)
+        user_id = int(payload["sub"])
+        token_file_id = str(payload["fileId"])
+    except (InvalidTokenError, KeyError, ValueError):
+        raise ApiError(status_code=401, code=401, message="Invalid or expired preview token") from None
+
+    if token_file_id != str(file_id):
+        raise ApiError(status_code=403, code=403, message="Preview token does not match file")
+
+    result = await file_service.get_preview_stream(
+        user_id=user_id,
+        file_id=file_id,
+        range_header=range_header,
+    )
+    await download_limiter.enforce_user_id(user_id=user_id, bytes_count=_content_length(result.headers))
     return StreamingResponse(
         result.stream,
         media_type=result.content_type,

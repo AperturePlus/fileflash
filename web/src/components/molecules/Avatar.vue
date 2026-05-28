@@ -34,7 +34,7 @@ const initials = computed(() => {
   overflow: hidden;
   flex-shrink: 0;
 }
-.ff-avatar--md { width: 28px; height: 28px; font-size: 11px; }
-.ff-avatar--sm { width: 20px; height: 20px; font-size: 9px; }
+.ff-avatar--md { width: 28px; height: 28px; font-size: var(--text-small); }
+.ff-avatar--sm { width: 20px; height: 20px; font-size: var(--text-label); }
 .ff-avatar img { width: 100%; height: 100%; object-fit: cover; }
 </style>

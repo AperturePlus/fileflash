@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, type PropType } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed, type PropType } from 'vue';
 import { useUserStore } from '../../store/user';
 import type { StorageStats } from '../../types/user';
+import { eventBus } from '../../utils/eventBus';
 
 const props = defineProps({
   stats: {
@@ -15,6 +16,33 @@ const localStats = ref<StorageStats | null>(null);
 const isLoading = ref(false);
 
 const storageData = computed(() => props.stats || localStats.value);
+const progressPercentage = computed(() => {
+  const stats = storageData.value;
+  if (!stats) return 0;
+
+  const raw = Number(stats.storagePercentage);
+  let normalizedPercentage: number;
+
+  if (Number.isFinite(raw)) {
+    normalizedPercentage = raw > 0 && raw <= 1 && stats.storageUsed > 0
+      ? raw * 100
+      : raw;
+  } else if (stats.storageLimit > 0) {
+    normalizedPercentage = (stats.storageUsed / stats.storageLimit) * 100;
+  } else {
+    normalizedPercentage = 0;
+  }
+
+  return Math.min(100, Math.max(0, normalizedPercentage));
+});
+const progressWidthPercentage = computed(() => {
+  const stats = storageData.value;
+  if (!stats) return 0;
+  if (stats.storageUsed > 0 && progressPercentage.value > 0 && progressPercentage.value < 1) {
+    return 1;
+  }
+  return progressPercentage.value;
+});
 
 const formatBytes = (bytes: number, decimals = 2) => {
   if (bytes === 0) return '0 Bytes';
@@ -25,18 +53,38 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
-onMounted(async () => {
-  if (!props.stats) {
-    isLoading.value = true;
-    try {
-      await userStore.fetchStorageStats();
-      localStats.value = userStore.storageStats;
-    } catch (error) {
-      console.error('Failed to load storage stats in component:', error);
-    } finally {
-      isLoading.value = false;
+watch(
+  () => userStore.storageStats,
+  (nextStats) => {
+    if (!props.stats) {
+      localStats.value = nextStats;
     }
+  },
+  { immediate: true },
+);
+
+function refreshStorageStats() {
+  userStore.scheduleStorageStatsRefresh();
+}
+
+onMounted(async () => {
+  eventBus.on('refresh-file-tree', refreshStorageStats);
+  if (props.stats) {
+    return;
   }
+  isLoading.value = true;
+  try {
+    await userStore.fetchStorageStats();
+    localStats.value = userStore.storageStats;
+  } catch (error) {
+    console.error('Failed to load storage stats in component:', error);
+  } finally {
+    isLoading.value = false;
+  }
+});
+
+onUnmounted(() => {
+  eventBus.off('refresh-file-tree', refreshStorageStats);
 });
 </script>
 
@@ -50,7 +98,7 @@ onMounted(async () => {
         <div class="progress-bar">
           <div 
             class="progress-bar-fill" 
-            :style="{ width: storageData.storagePercentage + '%' }"
+            :style="{ width: progressWidthPercentage + '%' }"
           ></div>
         </div>
       </div>
@@ -70,17 +118,19 @@ onMounted(async () => {
   padding: var(--spacing-sm) 0;
 }
 .progress-bar-wrapper {
+  margin-bottom: var(--spacing-sm);
+}
+.progress-bar {
   width: 100%;
   height: 12px;
   background-color: var(--color-bg-tertiary);
   border-radius: 6px;
   overflow: hidden;
-  margin-bottom: var(--spacing-sm);
 }
 .progress-bar-fill {
   height: 100%;
   background-color: var(--color-primary);
-  border-radius: 6px;
+  border-radius: inherit;
   transition: width 0.5s ease-in-out;
 }
 .stats-text {

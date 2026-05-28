@@ -1,6 +1,13 @@
 from fastapi import APIRouter
 
 from .auth import router as auth_router
+from .admin_users import router as admin_users_router
+from .admin_storage import router as admin_storage_router
+from .admin_files import router as admin_files_router
+from .admin_moderation import router as admin_moderation_router
+from .admin_logs import router as admin_logs_router
+from .admin_notifications import router as admin_notifications_router
+from .admin_system import router as admin_system_router
 from .admin_registration_email_domain_rules import router as admin_registration_email_domain_rules_router
 from .files import router as files_router
 from .folders import router as folders_router
@@ -10,10 +17,18 @@ from .recycle import router as recycle_router
 from .shares import router as shares_router
 from .storage import router as storage_router
 from .uploads import router as uploads_router
+from .agent import router as agent_router
 from .agent_skills import router as agent_skills_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
+api_router.include_router(admin_users_router)
+api_router.include_router(admin_storage_router)
+api_router.include_router(admin_files_router)
+api_router.include_router(admin_moderation_router)
+api_router.include_router(admin_logs_router)
+api_router.include_router(admin_notifications_router)
+api_router.include_router(admin_system_router)
 api_router.include_router(admin_registration_email_domain_rules_router)
 api_router.include_router(files_router)
 api_router.include_router(folders_router)
@@ -23,6 +38,7 @@ api_router.include_router(recycle_router)
 api_router.include_router(shares_router)
 api_router.include_router(storage_router)
 api_router.include_router(uploads_router)
+api_router.include_router(agent_router)
 api_router.include_router(agent_skills_router)
 
 __all__ = ["api_router"]

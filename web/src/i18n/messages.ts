@@ -13,11 +13,21 @@ export type LocaleKey =
   | 'header.userMenu'
   | 'header.menu.profile'
   | 'header.menu.settings'
-  | 'header.menu.dashboard'
+  | 'header.menu.console'
   | 'header.menu.logout'
   | 'header.menu.admin'
   | 'header.menu.defaultUserName'
   | 'header.menu.defaultEmail'
+  | 'console.title'
+  | 'console.nav.overview'
+  | 'console.nav.users'
+  | 'console.nav.storage'
+  | 'console.nav.content'
+  | 'console.nav.moderation'
+  | 'console.nav.system'
+  | 'console.nav.logs'
+  | 'console.nav.notifications'
+  | 'console.nav.rules'
   | 'sidebar.myFiles'
   | 'sidebar.shared'
   | 'sidebar.recycleBin'
@@ -27,6 +37,7 @@ export type LocaleKey =
   | 'sidebar.storage'
   | 'sidebar.skills'
   | 'sidebar.agent'
+  | 'sidebar.myFiles.uploadingAria'
   | 'agent.pageTitle'
   | 'agent.pageDescription'
   | 'agent.nav.workspace'
@@ -216,6 +227,17 @@ export type LocaleKey =
   | 'files.empty.noMatch'
   | 'files.drag.dropToUpload'
   | 'files.upload.queueTitle'
+  | 'files.upload.action.cancel'
+  | 'files.upload.action.resume'
+  | 'files.upload.state.hashing'
+  | 'files.upload.state.uploading'
+  | 'files.upload.state.paused'
+  | 'files.upload.state.canceling'
+  | 'files.upload.state.succeeded'
+  | 'files.upload.state.failed'
+  | 'files.upload.state.canceled'
+  | 'files.upload.hint.sessionExpired'
+  | 'files.upload.hint.needReselect'
   | 'files.bulk.selected'
   | 'files.bulk.move'
   | 'files.bulk.download'
@@ -294,6 +316,7 @@ export type LocaleKey =
   | 'sharing.table.links.visitsDownloads'
   | 'sharing.table.links.createdAt'
   | 'sharing.table.links.copy'
+  | 'sharing.table.links.regeneratePassword'
   | 'sharing.table.links.delete'
   | 'sharing.batch.selected'
   | 'sharing.batch.acceptSelected'
@@ -301,11 +324,18 @@ export type LocaleKey =
   | 'sharing.confirm.deleteLink.title'
   | 'sharing.confirm.deleteLink.message'
   | 'sharing.confirm.deleteLink.confirm'
+  | 'sharing.confirm.regeneratePassword.title'
+  | 'sharing.confirm.regeneratePassword.message'
+  | 'sharing.confirm.regeneratePassword.confirm'
   | 'sharing.toast.linkDeleted'
   | 'sharing.toast.linkDeleteFailed'
   | 'sharing.toast.linkCopied'
+  | 'sharing.toast.passwordRegenerated'
+  | 'sharing.toast.passwordRegenerateFailed'
   | 'sharing.copyDialog.title'
   | 'sharing.copyDialog.message'
+  | 'sharing.passwordDialog.title'
+  | 'sharing.passwordDialog.message'
   | 'trash.page.title'
   | 'trash.page.description'
   | 'trash.page.clearBin'
@@ -409,6 +439,12 @@ export type LocaleKey =
   | 'share.dialog.copyLink.title'
   | 'share.dialog.copyLink.message'
   | 'share.dialog.publicHiddenNotice'
+  | 'share.dialog.pendingApplyNotice'
+  | 'share.dialog.confirmRevoke.title'
+  | 'share.dialog.confirmRevoke.message'
+  | 'share.dialog.confirmRevoke.confirm'
+  | 'share.dialog.generatedPassword.title'
+  | 'share.dialog.generatedPassword.message'
   | 'share.dialog.done'
   | 'move.dialog.title.single'
   | 'move.dialog.title.multiple'
@@ -423,6 +459,134 @@ export type LocaleKey =
   | 'move.dialog.loading'
   | 'move.dialog.empty'
   | 'move.dialog.cancel'
+  | 'files.preview.detail.unknownType'
+  | 'files.preview.detail.download'
+  | 'files.preview.detail.reload'
+  | 'files.preview.detail.loading'
+  | 'files.preview.detail.notAvailable'
+  | 'files.preview.detail.placeholder'
+  | 'files.preview.detail.loadFailed'
+  | 'files.preview.detail.downloadFailed'
+  | 'files.preview.image.alt'
+  | 'files.preview.pdf.prev'
+  | 'files.preview.pdf.next'
+  | 'files.preview.pdf.page'
+  | 'files.preview.pdf.fallbackMode'
+  | 'files.preview.pdf.fallbackNote'
+  | 'files.preview.pdf.retryRender'
+  | 'files.preview.pdf.openNewTab'
+  | 'files.preview.pdf.renderFailed'
+  | 'files.preview.video.loading'
+  | 'files.preview.video.loadFailed'
+  | 'files.preview.video.downloadFailed'
+  | 'files.preview.video.mimeFallback'
+  | 'agent.v2.layout.brand'
+  | 'agent.v2.layout.tab.workspace'
+  | 'agent.v2.layout.tab.skills'
+  | 'agent.v2.sessions.label'
+  | 'agent.v2.sessions.new'
+  | 'agent.v2.sessions.empty'
+  | 'agent.v2.sessions.delete'
+  | 'agent.v2.sessions.relative.justNow'
+  | 'agent.v2.sessions.relative.minutes'
+  | 'agent.v2.sessions.relative.hours'
+  | 'agent.v2.sessions.relative.days'
+  | 'agent.v2.timeline.label'
+  | 'agent.v2.timeline.welcomeHint'
+  | 'agent.v2.timeline.hint.organize'
+  | 'agent.v2.timeline.hint.duplicates'
+  | 'agent.v2.timeline.hint.tagInvoices'
+  | 'agent.v2.input.placeholder'
+  | 'agent.v2.input.send'
+  | 'agent.v2.input.policy.planOnly'
+  | 'agent.v2.input.policy.confirm'
+  | 'agent.v2.input.policy.autopilot'
+  | 'agent.v2.input.reasoning.adaptive'
+  | 'agent.v2.input.reasoning.low'
+  | 'agent.v2.input.reasoning.medium'
+  | 'agent.v2.input.reasoning.high'
+  | 'agent.v2.input.reasoning.xhigh'
+  | 'agent.v2.input.reasoning.max'
+  | 'agent.v2.turn.role'
+  | 'agent.v2.turn.status.pending'
+  | 'agent.v2.turn.status.running'
+  | 'agent.v2.turn.status.succeeded'
+  | 'agent.v2.turn.status.failed'
+  | 'agent.v2.turn.status.canceled'
+  | 'agent.v2.turn.status.waiting_for_user'
+  | 'agent.v2.turn.status.paused'
+  | 'agent.v2.turn.controls.pause'
+  | 'agent.v2.turn.controls.resume'
+  | 'agent.v2.turn.controls.skip'
+  | 'agent.v2.turn.controls.approve'
+  | 'agent.v2.turn.controls.deny'
+  | 'agent.v2.turn.ask.placeholder'
+  | 'agent.v2.turn.ask.send'
+  | 'agent.v2.turn.ask.timeout'
+  | 'agent.v2.turn.progress.label'
+  | 'agent.v2.turn.thinking.label'
+  | 'agent.v2.turn.thinking.toggle'
+  | 'agent.v2.turn.cost.label'
+  | 'agent.v2.turn.cost.tokens'
+  | 'agent.v2.turn.cost.calls'
+  | 'agent.v2.turn.cost.est'
+  | 'agent.v2.turn.evidence.label'
+  | 'agent.v2.turn.evidence.more'
+  | 'agent.v2.turn.warn.label'
+  | 'agent.v2.turn.execute'
+  | 'agent.v2.turn.cancel'
+  | 'agent.v2.inspector.label'
+  | 'agent.v2.inspector.empty'
+  | 'agent.v2.inspector.skill'
+  | 'agent.v2.inspector.planHash'
+  | 'agent.v2.inspector.copied'
+  | 'agent.v2.inspector.tokens'
+  | 'agent.v2.inspector.calls'
+  | 'agent.v2.inspector.estSec'
+  | 'agent.v2.inspector.actions'
+  | 'agent.v2.inspector.warnings'
+  | 'agent.v2.skills.search.label'
+  | 'agent.v2.skills.search.placeholder'
+  | 'agent.v2.skills.tab.marketplace'
+  | 'agent.v2.skills.tab.mySkills'
+  | 'agent.v2.skills.newSkill'
+  | 'agent.v2.skills.empty'
+  | 'agent.v2.skills.card.edit'
+  | 'agent.v2.skills.card.delete'
+  | 'agent.v2.skills.editor.titleEdit'
+  | 'agent.v2.skills.editor.titleNew'
+  | 'agent.v2.skills.editor.field.name'
+  | 'agent.v2.skills.editor.field.triggers'
+  | 'agent.v2.skills.editor.field.triggersPlaceholder'
+  | 'agent.v2.skills.editor.field.description'
+  | 'agent.v2.skills.editor.field.tools'
+  | 'agent.v2.skills.editor.field.toolsPlaceholder'
+  | 'agent.v2.skills.editor.advanced'
+  | 'agent.v2.skills.editor.field.planTemplate'
+  | 'agent.v2.skills.editor.field.inputsSchema'
+  | 'agent.v2.skills.editor.field.outputsSchema'
+  | 'agent.v2.skills.editor.error.required'
+  | 'agent.v2.skills.editor.error.invalidJson'
+  | 'agent.v2.skills.editor.cancel'
+  | 'agent.v2.skills.editor.save'
+  | 'agent.v2.skills.import.label'
+  | 'agent.v2.skills.import.mode.upsert'
+  | 'agent.v2.skills.import.mode.insertOnly'
+  | 'agent.v2.skills.import.dropHint'
+  | 'agent.v2.skills.import.jsonLabel'
+  | 'agent.v2.skills.import.jsonPlaceholder'
+  | 'agent.v2.skills.import.submit'
+  | 'agent.v2.skills.import.resultsLabel'
+  | 'agent.v2.skills.import.error.readFailed'
+  | 'agent.v2.skills.import.error.emptyJson'
+  | 'agent.v2.confirm.highRisk.title'
+  | 'agent.v2.confirm.highRisk.message'
+  | 'agent.v2.confirm.highRisk.confirm'
+  | 'agent.v2.confirm.highRisk.cancel'
+  | 'agent.v2.confirm.deleteSession.title'
+  | 'agent.v2.confirm.deleteSession.message'
+  | 'agent.v2.confirm.deleteSession.confirm'
+  | 'agent.v2.confirm.deleteSession.cancel'
   | 'footer.termsOfService'
   | 'footer.privacyPolicy';
 
@@ -444,11 +608,21 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'header.userMenu': '用户菜单',
     'header.menu.profile': '个人资料',
     'header.menu.settings': '设置',
-    'header.menu.dashboard': '仪表盘',
+    'header.menu.console': '控制台',
     'header.menu.logout': '退出登录',
     'header.menu.admin': '管理员',
     'header.menu.defaultUserName': '用户',
     'header.menu.defaultEmail': 'user@example.com',
+    'console.title': '控制台',
+    'console.nav.overview': '概览',
+    'console.nav.users': '用户',
+    'console.nav.storage': '存储',
+    'console.nav.content': '内容审计',
+    'console.nav.moderation': '违规处理',
+    'console.nav.system': '系统状态',
+    'console.nav.logs': '操作日志',
+    'console.nav.notifications': '通知',
+    'console.nav.rules': '注册规则',
     'sidebar.myFiles': '我的文件',
     'sidebar.shared': '共享',
     'sidebar.recycleBin': '回收站',
@@ -458,6 +632,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.storage': '存储',
     'sidebar.skills': '技能',
     'sidebar.agent': 'Agent',
+    'sidebar.myFiles.uploadingAria': '我的文件有上传进行中',
     'agent.pageTitle': 'Cloud Agent',
     'agent.pageDescription': '以云端 Agent 模式规划并执行文件操作。',
     'agent.nav.workspace': '工作台',
@@ -647,6 +822,17 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.empty.noMatch': '未找到匹配项',
     'files.drag.dropToUpload': '松开以上传文件',
     'files.upload.queueTitle': '上传队列',
+    'files.upload.action.cancel': '取消上传',
+    'files.upload.action.resume': '继续上传',
+    'files.upload.state.hashing': '计算校验中',
+    'files.upload.state.uploading': '上传中',
+    'files.upload.state.paused': '已暂停',
+    'files.upload.state.canceling': '取消中',
+    'files.upload.state.succeeded': '已完成',
+    'files.upload.state.failed': '失败',
+    'files.upload.state.canceled': '已取消',
+    'files.upload.hint.sessionExpired': '上传会话已失效，请重新上传该文件。',
+    'files.upload.hint.needReselect': '请重新选择同一个文件以继续断点续传。',
     'files.bulk.selected': '已选',
     'files.bulk.move': '移动',
     'files.bulk.download': '下载',
@@ -725,6 +911,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sharing.table.links.visitsDownloads': '访问 / 下载',
     'sharing.table.links.createdAt': '创建时间',
     'sharing.table.links.copy': '复制',
+    'sharing.table.links.regeneratePassword': '重置并查看密码',
     'sharing.table.links.delete': '删除',
     'sharing.batch.selected': '已选',
     'sharing.batch.acceptSelected': '接收所选',
@@ -732,11 +919,18 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sharing.confirm.deleteLink.title': '删除共享链接',
     'sharing.confirm.deleteLink.message': '确定删除共享链接 {shareLink} 吗？',
     'sharing.confirm.deleteLink.confirm': '删除',
+    'sharing.confirm.regeneratePassword.title': '重置并查看密码',
+    'sharing.confirm.regeneratePassword.message': '确定重置共享链接 {shareLink} 的访问密码吗？旧密码将立即失效。',
+    'sharing.confirm.regeneratePassword.confirm': '确认重置',
     'sharing.toast.linkDeleted': '共享链接已删除。',
     'sharing.toast.linkDeleteFailed': '删除共享链接失败。',
     'sharing.toast.linkCopied': '共享链接已复制。',
+    'sharing.toast.passwordRegenerated': '已重置密码，请妥善保存新密码。',
+    'sharing.toast.passwordRegenerateFailed': '重置密码失败，请重试。',
     'sharing.copyDialog.title': '复制共享链接',
     'sharing.copyDialog.message': '剪贴板不可用，请手动复制此链接：',
+    'sharing.passwordDialog.title': '新共享密码',
+    'sharing.passwordDialog.message': '请立即保存该密码，旧密码已失效：',
     'trash.page.title': '回收站',
     'trash.page.description': '项目会保留最多 30 天，之后系统会自动清理。',
     'trash.page.clearBin': '清空回收站',
@@ -840,6 +1034,12 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'share.dialog.copyLink.title': '复制链接',
     'share.dialog.copyLink.message': '剪贴板不可用，请手动复制此链接：',
     'share.dialog.publicHiddenNotice': '当前仅在弹窗中隐藏公开链接，已有链接仍保持可用。',
+    'share.dialog.pendingApplyNotice': '所有改动将在点击“完成”后生效。',
+    'share.dialog.confirmRevoke.title': '关闭公开链接',
+    'share.dialog.confirmRevoke.message': '继续操作将导致当前共享链接失效，确认继续吗？',
+    'share.dialog.confirmRevoke.confirm': '确认关闭',
+    'share.dialog.generatedPassword.title': '已生成共享密码',
+    'share.dialog.generatedPassword.message': '系统已自动生成密码，请先保存再关闭：',
     'share.dialog.done': '完成',
     'move.dialog.title.single': '移动“{itemName}”',
     'move.dialog.title.multiple': '移动 {count} 个项目',
@@ -854,6 +1054,134 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'move.dialog.loading': '加载中...',
     'move.dialog.empty': '暂无可用文件夹。',
     'move.dialog.cancel': '取消',
+    'files.preview.detail.unknownType': '未知类型',
+    'files.preview.detail.download': '下载',
+    'files.preview.detail.reload': '重新加载预览',
+    'files.preview.detail.loading': '正在加载预览...',
+    'files.preview.detail.notAvailable': '该文件类型暂不支持预览。',
+    'files.preview.detail.placeholder': '选择一个文件以查看详情。',
+    'files.preview.detail.loadFailed': '无法加载文件预览。',
+    'files.preview.detail.downloadFailed': '无法下载该文件。',
+    'files.preview.image.alt': '图片预览',
+    'files.preview.pdf.prev': '上一页',
+    'files.preview.pdf.next': '下一页',
+    'files.preview.pdf.page': '第 {page} / {total} 页',
+    'files.preview.pdf.fallbackMode': '使用浏览器 PDF 兜底渲染',
+    'files.preview.pdf.fallbackNote': '当前环境不支持应用内 PDF 渲染。',
+    'files.preview.pdf.retryRender': '重试渲染',
+    'files.preview.pdf.openNewTab': '在新标签页打开',
+    'files.preview.pdf.renderFailed': '无法渲染 PDF 预览。',
+    'files.preview.video.loading': '正在加载预览...',
+    'files.preview.video.loadFailed': '无法加载视频预览。',
+    'files.preview.video.downloadFailed': '无法下载该文件。',
+    'files.preview.video.mimeFallback': 'video',
+    'agent.v2.layout.brand': '[ FILEFLASH · AGENT ]',
+    'agent.v2.layout.tab.workspace': '工作台',
+    'agent.v2.layout.tab.skills': '技能',
+    'agent.v2.sessions.label': '会话',
+    'agent.v2.sessions.new': '新建会话',
+    'agent.v2.sessions.empty': '暂无会话。',
+    'agent.v2.sessions.delete': '删除会话',
+    'agent.v2.sessions.relative.justNow': '刚刚',
+    'agent.v2.sessions.relative.minutes': '{value} 分钟前',
+    'agent.v2.sessions.relative.hours': '{value} 小时前',
+    'agent.v2.sessions.relative.days': '{value} 天前',
+    'agent.v2.timeline.label': '时间线',
+    'agent.v2.timeline.welcomeHint': '在下方输入任务以开始。',
+    'agent.v2.timeline.hint.organize': '按日期把我的截图整理到不同文件夹',
+    'agent.v2.timeline.hint.duplicates': '在我的照片库中查找重复项',
+    'agent.v2.timeline.hint.tagInvoices': '为发票打标签并移动到 /finance',
+    'agent.v2.input.placeholder': '描述一个任务，Shift+Enter 换行。',
+    'agent.v2.input.send': '发送',
+    'agent.v2.input.policy.planOnly': '仅生成计划',
+    'agent.v2.input.policy.confirm': '确认执行',
+    'agent.v2.input.policy.autopilot': '自动执行',
+    'agent.v2.input.reasoning.adaptive': '自适应推理',
+    'agent.v2.input.reasoning.low': '低推理',
+    'agent.v2.input.reasoning.medium': '中推理',
+    'agent.v2.input.reasoning.high': '高推理',
+    'agent.v2.input.reasoning.xhigh': '超高推理',
+    'agent.v2.input.reasoning.max': '最大推理',
+    'agent.v2.turn.role': 'AGENT',
+    'agent.v2.turn.status.pending': '等待中',
+    'agent.v2.turn.status.running': '运行中',
+    'agent.v2.turn.status.succeeded': '已完成',
+    'agent.v2.turn.status.failed': '失败',
+    'agent.v2.turn.status.canceled': '已取消',
+    'agent.v2.turn.status.waiting_for_user': '等待你回复',
+    'agent.v2.turn.status.paused': '已暂停',
+    'agent.v2.turn.controls.pause': '暂停',
+    'agent.v2.turn.controls.resume': '继续',
+    'agent.v2.turn.controls.skip': '跳过此步',
+    'agent.v2.turn.controls.approve': '批准',
+    'agent.v2.turn.controls.deny': '拒绝',
+    'agent.v2.turn.ask.placeholder': '输入回答…',
+    'agent.v2.turn.ask.send': '发送',
+    'agent.v2.turn.ask.timeout': '剩余 {value}',
+    'agent.v2.turn.progress.label': '进度',
+    'agent.v2.turn.thinking.label': '思考过程',
+    'agent.v2.turn.thinking.toggle': '展开 / 收起',
+    'agent.v2.turn.cost.label': '消耗',
+    'agent.v2.turn.cost.tokens': 'tokens',
+    'agent.v2.turn.cost.calls': '调用',
+    'agent.v2.turn.cost.est': '预计',
+    'agent.v2.turn.evidence.label': '规划依据',
+    'agent.v2.turn.evidence.more': '更多',
+    'agent.v2.turn.warn.label': '警告',
+    'agent.v2.turn.execute': '执行',
+    'agent.v2.turn.cancel': '取消',
+    'agent.v2.inspector.label': '检视器',
+    'agent.v2.inspector.empty': '选择一个回合以查看其计划详情。',
+    'agent.v2.inspector.skill': 'SKILL',
+    'agent.v2.inspector.planHash': 'PLAN HASH',
+    'agent.v2.inspector.copied': '已复制',
+    'agent.v2.inspector.tokens': 'TOKENS',
+    'agent.v2.inspector.calls': 'CALLS',
+    'agent.v2.inspector.estSec': '预计秒数',
+    'agent.v2.inspector.actions': '步骤数',
+    'agent.v2.inspector.warnings': '警告',
+    'agent.v2.skills.search.label': '搜索',
+    'agent.v2.skills.search.placeholder': '搜索技能...',
+    'agent.v2.skills.tab.marketplace': '技能市场',
+    'agent.v2.skills.tab.mySkills': '我的技能',
+    'agent.v2.skills.newSkill': '新增技能',
+    'agent.v2.skills.empty': '暂无技能。',
+    'agent.v2.skills.card.edit': '编辑',
+    'agent.v2.skills.card.delete': '删除',
+    'agent.v2.skills.editor.titleEdit': '编辑 Skill',
+    'agent.v2.skills.editor.titleNew': '新建 Skill',
+    'agent.v2.skills.editor.field.name': '名称',
+    'agent.v2.skills.editor.field.triggers': '触发词',
+    'agent.v2.skills.editor.field.triggersPlaceholder': '整理, 分类',
+    'agent.v2.skills.editor.field.description': '描述',
+    'agent.v2.skills.editor.field.tools': '工具',
+    'agent.v2.skills.editor.field.toolsPlaceholder': 'tool.a, tool.b',
+    'agent.v2.skills.editor.advanced': '高级 JSON',
+    'agent.v2.skills.editor.field.planTemplate': '计划模板',
+    'agent.v2.skills.editor.field.inputsSchema': '输入 Schema',
+    'agent.v2.skills.editor.field.outputsSchema': '输出 Schema',
+    'agent.v2.skills.editor.error.required': '名称和描述为必填项。',
+    'agent.v2.skills.editor.error.invalidJson': '{field} JSON 格式错误',
+    'agent.v2.skills.editor.cancel': '取消',
+    'agent.v2.skills.editor.save': '保存',
+    'agent.v2.skills.import.label': '导入技能',
+    'agent.v2.skills.import.mode.upsert': 'Upsert',
+    'agent.v2.skills.import.mode.insertOnly': '仅新增',
+    'agent.v2.skills.import.dropHint': '拖入 .json 文件或点击浏览',
+    'agent.v2.skills.import.jsonLabel': 'JSON',
+    'agent.v2.skills.import.jsonPlaceholder': '[{ "skillKey": "...", "name": "...", "description": "..." }]',
+    'agent.v2.skills.import.submit': '导入',
+    'agent.v2.skills.import.resultsLabel': '导入结果',
+    'agent.v2.skills.import.error.readFailed': '读取文件失败。',
+    'agent.v2.skills.import.error.emptyJson': '请先粘贴 JSON 或拖入文件。',
+    'agent.v2.confirm.highRisk.title': '高风险操作确认',
+    'agent.v2.confirm.highRisk.message': '本计划包含高风险动作，是否继续？',
+    'agent.v2.confirm.highRisk.confirm': '继续执行',
+    'agent.v2.confirm.highRisk.cancel': '取消',
+    'agent.v2.confirm.deleteSession.title': '删除会话',
+    'agent.v2.confirm.deleteSession.message': '将删除会话「{title}」及其全部回合，此操作无法撤销。',
+    'agent.v2.confirm.deleteSession.confirm': '删除',
+    'agent.v2.confirm.deleteSession.cancel': '取消',
     'footer.termsOfService': '使用条款',
     'footer.privacyPolicy': '隐私政策',
   },
@@ -870,11 +1198,21 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'header.userMenu': 'User menu',
     'header.menu.profile': 'Profile',
     'header.menu.settings': 'Settings',
-    'header.menu.dashboard': 'Dashboard',
+    'header.menu.console': 'Console',
     'header.menu.logout': 'Log out',
     'header.menu.admin': 'Admin',
     'header.menu.defaultUserName': 'User',
     'header.menu.defaultEmail': 'user@example.com',
+    'console.title': 'Console',
+    'console.nav.overview': 'Overview',
+    'console.nav.users': 'Users',
+    'console.nav.storage': 'Storage',
+    'console.nav.content': 'Content Audit',
+    'console.nav.moderation': 'Moderation',
+    'console.nav.system': 'System',
+    'console.nav.logs': 'Logs',
+    'console.nav.notifications': 'Notifications',
+    'console.nav.rules': 'Registration Rules',
     'sidebar.myFiles': 'My Files',
     'sidebar.shared': 'Shared',
     'sidebar.recycleBin': 'Recycle Bin',
@@ -884,6 +1222,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sidebar.storage': 'Storage',
     'sidebar.skills': 'Skills',
     'sidebar.agent': 'Agent',
+    'sidebar.myFiles.uploadingAria': 'My Files has uploads in progress',
     'agent.pageTitle': 'Cloud Agent',
     'agent.pageDescription': 'Plan and execute cloud agent workflows for file operations.',
     'agent.nav.workspace': 'Workspace',
@@ -1073,6 +1412,17 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'files.empty.noMatch': 'No matches for',
     'files.drag.dropToUpload': 'Drop files to upload',
     'files.upload.queueTitle': 'Upload Queue',
+    'files.upload.action.cancel': 'Cancel',
+    'files.upload.action.resume': 'Resume',
+    'files.upload.state.hashing': 'Hashing',
+    'files.upload.state.uploading': 'Uploading',
+    'files.upload.state.paused': 'Paused',
+    'files.upload.state.canceling': 'Canceling',
+    'files.upload.state.succeeded': 'Done',
+    'files.upload.state.failed': 'Failed',
+    'files.upload.state.canceled': 'Canceled',
+    'files.upload.hint.sessionExpired': 'Upload session expired. Please upload this file again.',
+    'files.upload.hint.needReselect': 'Please reselect the same file to resume upload.',
     'files.bulk.selected': 'Selected',
     'files.bulk.move': 'Move',
     'files.bulk.download': 'Download',
@@ -1151,6 +1501,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sharing.table.links.visitsDownloads': 'Visits / Downloads',
     'sharing.table.links.createdAt': 'Created At',
     'sharing.table.links.copy': 'Copy',
+    'sharing.table.links.regeneratePassword': 'Reset & Show Password',
     'sharing.table.links.delete': 'Delete',
     'sharing.batch.selected': 'SELECTED',
     'sharing.batch.acceptSelected': 'Accept Selected',
@@ -1158,11 +1509,18 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'sharing.confirm.deleteLink.title': 'Delete Share Link',
     'sharing.confirm.deleteLink.message': 'Delete share link {shareLink}?',
     'sharing.confirm.deleteLink.confirm': 'Delete',
+    'sharing.confirm.regeneratePassword.title': 'Reset and Show Password',
+    'sharing.confirm.regeneratePassword.message': 'Reset the password for share link {shareLink}? The old password will be invalid immediately.',
+    'sharing.confirm.regeneratePassword.confirm': 'Reset Password',
     'sharing.toast.linkDeleted': 'Share link deleted.',
     'sharing.toast.linkDeleteFailed': 'Failed to delete share link.',
     'sharing.toast.linkCopied': 'Share link copied.',
+    'sharing.toast.passwordRegenerated': 'Password reset successfully. Save the new password now.',
+    'sharing.toast.passwordRegenerateFailed': 'Failed to reset password.',
     'sharing.copyDialog.title': 'Copy Share Link',
     'sharing.copyDialog.message': 'Clipboard is unavailable. Copy this link manually:',
+    'sharing.passwordDialog.title': 'New Share Password',
+    'sharing.passwordDialog.message': 'Save this password now. The old password is no longer valid:',
     'trash.page.title': 'Recycle Bin',
     'trash.page.description': 'Items are kept for up to 30 days before automatic cleanup.',
     'trash.page.clearBin': 'Clear Bin',
@@ -1266,6 +1624,12 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'share.dialog.copyLink.title': 'Copy Link',
     'share.dialog.copyLink.message': 'Clipboard is unavailable. Copy this link manually:',
     'share.dialog.publicHiddenNotice': 'Public link hidden in this dialog. Existing links are kept.',
+    'share.dialog.pendingApplyNotice': 'All changes will take effect only after you click "Done".',
+    'share.dialog.confirmRevoke.title': 'Disable Public Link',
+    'share.dialog.confirmRevoke.message': 'Continuing will invalidate this share link. Do you want to proceed?',
+    'share.dialog.confirmRevoke.confirm': 'Disable Link',
+    'share.dialog.generatedPassword.title': 'Generated Share Password',
+    'share.dialog.generatedPassword.message': 'A password was generated automatically. Save it before closing:',
     'share.dialog.done': 'Done',
     'move.dialog.title.single': 'Move "{itemName}"',
     'move.dialog.title.multiple': 'Move {count} items',
@@ -1280,6 +1644,134 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'move.dialog.loading': 'Loading...',
     'move.dialog.empty': 'No folders available.',
     'move.dialog.cancel': 'Cancel',
+    'files.preview.detail.unknownType': 'Unknown type',
+    'files.preview.detail.download': 'Download',
+    'files.preview.detail.reload': 'Reload Preview',
+    'files.preview.detail.loading': 'Loading preview...',
+    'files.preview.detail.notAvailable': 'Preview is not available for this file type.',
+    'files.preview.detail.placeholder': 'Select a file to preview details.',
+    'files.preview.detail.loadFailed': 'Unable to load file preview.',
+    'files.preview.detail.downloadFailed': 'Unable to download this file.',
+    'files.preview.image.alt': 'Image preview',
+    'files.preview.pdf.prev': 'Prev',
+    'files.preview.pdf.next': 'Next',
+    'files.preview.pdf.page': 'Page {page} / {total}',
+    'files.preview.pdf.fallbackMode': 'Browser PDF fallback mode',
+    'files.preview.pdf.fallbackNote': 'In-app PDF rendering is unavailable in this environment.',
+    'files.preview.pdf.retryRender': 'Retry render',
+    'files.preview.pdf.openNewTab': 'Open in new tab',
+    'files.preview.pdf.renderFailed': 'Unable to render PDF preview.',
+    'files.preview.video.loading': 'Loading preview...',
+    'files.preview.video.loadFailed': 'Unable to load video preview.',
+    'files.preview.video.downloadFailed': 'Unable to download this file.',
+    'files.preview.video.mimeFallback': 'video',
+    'agent.v2.layout.brand': '[ FILEFLASH · AGENT ]',
+    'agent.v2.layout.tab.workspace': 'WORKSPACE',
+    'agent.v2.layout.tab.skills': 'SKILLS',
+    'agent.v2.sessions.label': 'SESSIONS',
+    'agent.v2.sessions.new': 'New session',
+    'agent.v2.sessions.empty': 'No sessions yet.',
+    'agent.v2.sessions.delete': 'Delete session',
+    'agent.v2.sessions.relative.justNow': 'just now',
+    'agent.v2.sessions.relative.minutes': '{value}m',
+    'agent.v2.sessions.relative.hours': '{value}h',
+    'agent.v2.sessions.relative.days': '{value}d',
+    'agent.v2.timeline.label': 'TIMELINE',
+    'agent.v2.timeline.welcomeHint': 'Type a task below to get started.',
+    'agent.v2.timeline.hint.organize': 'Organize my screenshots into folders by date',
+    'agent.v2.timeline.hint.duplicates': 'Find duplicates across my photo library',
+    'agent.v2.timeline.hint.tagInvoices': 'Tag invoices and move them under /finance',
+    'agent.v2.input.placeholder': 'Describe a task. Shift+Enter for newline.',
+    'agent.v2.input.send': 'Send',
+    'agent.v2.input.policy.planOnly': 'PLAN ONLY',
+    'agent.v2.input.policy.confirm': 'CONFIRM',
+    'agent.v2.input.policy.autopilot': 'AUTOPILOT',
+    'agent.v2.input.reasoning.adaptive': 'ADAPTIVE',
+    'agent.v2.input.reasoning.low': 'LOW',
+    'agent.v2.input.reasoning.medium': 'MEDIUM',
+    'agent.v2.input.reasoning.high': 'HIGH',
+    'agent.v2.input.reasoning.xhigh': 'XHIGH',
+    'agent.v2.input.reasoning.max': 'MAX',
+    'agent.v2.turn.role': 'AGENT',
+    'agent.v2.turn.status.pending': 'pending',
+    'agent.v2.turn.status.running': 'running',
+    'agent.v2.turn.status.succeeded': 'succeeded',
+    'agent.v2.turn.status.failed': 'failed',
+    'agent.v2.turn.status.canceled': 'canceled',
+    'agent.v2.turn.status.waiting_for_user': 'WAITING FOR YOU',
+    'agent.v2.turn.status.paused': 'PAUSED',
+    'agent.v2.turn.controls.pause': 'Pause',
+    'agent.v2.turn.controls.resume': 'Resume',
+    'agent.v2.turn.controls.skip': 'Skip step',
+    'agent.v2.turn.controls.approve': 'Approve',
+    'agent.v2.turn.controls.deny': 'Deny',
+    'agent.v2.turn.ask.placeholder': 'Type your answer…',
+    'agent.v2.turn.ask.send': 'Send',
+    'agent.v2.turn.ask.timeout': '{value} left',
+    'agent.v2.turn.progress.label': 'PROGRESS',
+    'agent.v2.turn.thinking.label': 'THINKING',
+    'agent.v2.turn.thinking.toggle': 'Expand / Collapse',
+    'agent.v2.turn.cost.label': 'COST',
+    'agent.v2.turn.cost.tokens': 'tokens',
+    'agent.v2.turn.cost.calls': 'calls',
+    'agent.v2.turn.cost.est': 'est',
+    'agent.v2.turn.evidence.label': 'PLANNING EVIDENCE',
+    'agent.v2.turn.evidence.more': 'more',
+    'agent.v2.turn.warn.label': 'WARN',
+    'agent.v2.turn.execute': 'Execute',
+    'agent.v2.turn.cancel': 'Cancel',
+    'agent.v2.inspector.label': 'INSPECTOR',
+    'agent.v2.inspector.empty': 'Select a turn to inspect its plan.',
+    'agent.v2.inspector.skill': 'SKILL',
+    'agent.v2.inspector.planHash': 'PLAN HASH',
+    'agent.v2.inspector.copied': 'COPIED',
+    'agent.v2.inspector.tokens': 'TOKENS',
+    'agent.v2.inspector.calls': 'CALLS',
+    'agent.v2.inspector.estSec': 'EST SEC',
+    'agent.v2.inspector.actions': 'ACTIONS',
+    'agent.v2.inspector.warnings': 'WARNINGS',
+    'agent.v2.skills.search.label': 'SEARCH',
+    'agent.v2.skills.search.placeholder': 'Search skills...',
+    'agent.v2.skills.tab.marketplace': 'MARKETPLACE',
+    'agent.v2.skills.tab.mySkills': 'MY SKILLS',
+    'agent.v2.skills.newSkill': 'New Skill',
+    'agent.v2.skills.empty': 'No skills here yet.',
+    'agent.v2.skills.card.edit': 'Edit',
+    'agent.v2.skills.card.delete': 'Delete',
+    'agent.v2.skills.editor.titleEdit': 'Edit Skill',
+    'agent.v2.skills.editor.titleNew': 'New Skill',
+    'agent.v2.skills.editor.field.name': 'NAME',
+    'agent.v2.skills.editor.field.triggers': 'TRIGGERS',
+    'agent.v2.skills.editor.field.triggersPlaceholder': 'organize, classify',
+    'agent.v2.skills.editor.field.description': 'DESCRIPTION',
+    'agent.v2.skills.editor.field.tools': 'TOOLS',
+    'agent.v2.skills.editor.field.toolsPlaceholder': 'tool.a, tool.b',
+    'agent.v2.skills.editor.advanced': 'ADVANCED JSON',
+    'agent.v2.skills.editor.field.planTemplate': 'PLAN TEMPLATE',
+    'agent.v2.skills.editor.field.inputsSchema': 'INPUTS SCHEMA',
+    'agent.v2.skills.editor.field.outputsSchema': 'OUTPUTS SCHEMA',
+    'agent.v2.skills.editor.error.required': 'Name and description are required.',
+    'agent.v2.skills.editor.error.invalidJson': '{field} JSON invalid',
+    'agent.v2.skills.editor.cancel': 'Cancel',
+    'agent.v2.skills.editor.save': 'Save',
+    'agent.v2.skills.import.label': 'IMPORT SKILLS',
+    'agent.v2.skills.import.mode.upsert': 'UPSERT',
+    'agent.v2.skills.import.mode.insertOnly': 'INSERT ONLY',
+    'agent.v2.skills.import.dropHint': 'Drop a .json file or click to browse',
+    'agent.v2.skills.import.jsonLabel': 'JSON',
+    'agent.v2.skills.import.jsonPlaceholder': '[{ "skillKey": "...", "name": "...", "description": "..." }]',
+    'agent.v2.skills.import.submit': 'Import',
+    'agent.v2.skills.import.resultsLabel': 'RESULTS',
+    'agent.v2.skills.import.error.readFailed': 'Failed to read file.',
+    'agent.v2.skills.import.error.emptyJson': 'Paste JSON or drop a file first.',
+    'agent.v2.confirm.highRisk.title': 'High-risk action',
+    'agent.v2.confirm.highRisk.message': 'This plan contains high-risk actions. Continue?',
+    'agent.v2.confirm.highRisk.confirm': 'Continue',
+    'agent.v2.confirm.highRisk.cancel': 'Cancel',
+    'agent.v2.confirm.deleteSession.title': 'Delete session',
+    'agent.v2.confirm.deleteSession.message': 'Delete session "{title}" and all of its turns? This cannot be undone.',
+    'agent.v2.confirm.deleteSession.confirm': 'Delete',
+    'agent.v2.confirm.deleteSession.cancel': 'Cancel',
     'footer.termsOfService': 'Terms of Service',
     'footer.privacyPolicy': 'Privacy Policy',
   },

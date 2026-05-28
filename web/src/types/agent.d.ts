@@ -2,6 +2,8 @@ import type { BackgroundJob } from './file';
 
 export type AgentExecutionPolicy = 'planOnly' | 'confirm' | 'autopilot';
 export type AgentActionSideEffect = 'read' | 'write';
+export type AgentActionRiskLevel = 'low' | 'medium' | 'high';
+export type AgentReasoningEffort = 'adaptive' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type AgentJobPhase =
   | 'planning'
   | 'awaiting_confirm'
@@ -10,6 +12,22 @@ export type AgentJobPhase =
   | 'completed'
   | 'failed'
   | 'canceled';
+export type AgentJobEventType =
+  | 'job.queued'
+  | 'job.running'
+  | 'plan.ready'
+  | 'tool.started'
+  | 'tool.succeeded'
+  | 'tool.failed'
+  | 'tool.partial'
+  | 'agent.thinking'
+  | 'agent.progress'
+  | 'agent.ask'
+  | 'agent.paused'
+  | 'agent.resumed'
+  | 'job.succeeded'
+  | 'job.failed'
+  | 'job.canceled';
 
 export interface AgentDataPolicy {
   allowFileContent: boolean;
@@ -21,6 +39,7 @@ export interface AgentHints {
   preferSkillId: string | null;
   maxSteps: number;
   budgetTokens: number;
+  reasoningEffort: AgentReasoningEffort;
 }
 
 export interface AgentPlanContext {
@@ -49,6 +68,9 @@ export interface AgentProposedAction {
   tool: string;
   input: Record<string, any>;
   sideEffect: AgentActionSideEffect;
+  riskLevel: AgentActionRiskLevel;
+  requiresConfirmation: boolean;
+  confirmationReason?: string | null;
 }
 
 export interface AgentCostEstimate {
@@ -62,6 +84,13 @@ export interface AgentChosenSkill {
   name: string;
 }
 
+export interface AgentPlanningEvidence {
+  step: number;
+  tool: string;
+  input: Record<string, any>;
+  outputPreview: Record<string, any>;
+}
+
 export interface AgentPlanResult {
   planJobId: string;
   planHash: string;
@@ -70,6 +99,7 @@ export interface AgentPlanResult {
   summary: string;
   requiresConfirmation: boolean;
   costEstimate: AgentCostEstimate;
+  planningEvidence?: AgentPlanningEvidence[] | null;
 }
 
 export interface ExecuteAgentRequest {
@@ -78,6 +108,8 @@ export interface ExecuteAgentRequest {
   approval: {
     confirmedBy: string;
     confirmedAt: string;
+    highRiskConfirmed?: boolean;
+    highRiskConfirmedAt?: string;
   };
 }
 
@@ -87,23 +119,80 @@ export interface ExecuteAgentResponse {
   taskType: 'agent.execute';
 }
 
-export interface CancelAgentResponse {
-  jobId: string;
-  status: string;
-  canceledAt: string;
-}
-
 export interface AgentExecutionResult {
   planJobId: string;
   executeJobId: string;
   summary: string;
+  answer?: string | null;
   appliedActions: number;
   skippedActions: number;
   warnings: string[];
   finishedAt: string;
 }
 
+export interface AgentJobEvent {
+  id: string;
+  jobId: string;
+  taskType: string;
+  type: AgentJobEventType;
+  status: string;
+  agentPhase?: AgentJobPhase | string | null;
+  message: string;
+  data: Record<string, any>;
+  timestamp: string;
+}
+
 export type AgentBackgroundJob<T = Record<string, any>> = BackgroundJob<T> & {
   agentPhase?: AgentJobPhase | null;
   cancelRequestedAt?: string | null;
 };
+
+// ----------------- Inbox (upstream channel) -----------------
+
+export type AgentInboxMessageKind =
+  | 'reply'
+  | 'control.pause'
+  | 'control.resume'
+  | 'control.approve'
+  | 'control.deny'
+  | 'control.skip'
+  | 'control.cancel';
+
+export interface AgentInboxMessageRequest {
+  kind: AgentInboxMessageKind;
+  replyTo?: string;
+  value?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentInboxMessageResponse {
+  inboxMessageId: string;
+  kind: AgentInboxMessageKind;
+  acceptedAt: string;
+}
+
+// ----------------- New event payloads -----------------
+
+export interface AgentAskPayload {
+  messageId: string;
+  prompt: string;
+  schema: Record<string, unknown>;
+  timeoutSec: number;
+}
+
+export interface AgentProgressPayload {
+  step: number;
+  total: number;
+  message?: string;
+  percent?: number;
+}
+
+export interface AgentThinkingPayload {
+  text: string;
+}
+
+export interface AgentToolPartialPayload {
+  step: number;
+  tool: string;
+  chunk: unknown;
+}

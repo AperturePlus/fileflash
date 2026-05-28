@@ -1,0 +1,29 @@
+FROM docker.m.daocloud.io/library/python:3.12-slim
+
+WORKDIR /app
+
+# 换成阿里云 debian 镜像源
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
+
+# 再安装 ffmpeg
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# pip 走阿里云
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+RUN pip install --no-cache-dir uv
+
+# uv 走阿里云
+ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+
+# Layer 1: 仅依赖（除非 pyproject.toml / uv.lock 变动，否则缓存命中）
+COPY app/pyproject.toml app/uv.lock ./
+RUN uv sync --no-dev --frozen --no-install-project
+
+# Layer 2: 源码 + 安装项目本身
+COPY app/src ./src
+COPY app/README.md ./README.md
+RUN uv sync --no-dev --frozen
+
+EXPOSE 8080
+
+CMD ["uv", "run", "uvicorn", "fileflash.main:app", "--host", "0.0.0.0", "--port", "8080"]

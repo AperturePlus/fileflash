@@ -169,6 +169,162 @@ async def test_preflight_returns_503_when_storage_is_unavailable(monkeypatch: py
 
 
 @pytest.mark.asyncio
+async def test_preflight_allows_20gb_file_size_boundary(monkeypatch: pytest.MonkeyPatch):
+    max_file_size = 20 * 1024 * 1024 * 1024
+    settings = make_settings(UPLOAD_SINGLE_FILE_SIZE_MAX=str(max_file_size))
+    session = DummySession()
+    service, _storage = make_service(session, settings=settings)
+
+    monkeypatch.setattr(service, "_cleanup_expired_tasks", AsyncMock())
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=7))
+    monkeypatch.setattr(service, "_find_storage_object", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_find_active_task", AsyncMock(return_value=None))
+
+    response = await service.preflight(
+        user_id=2,
+        payload=UploadPreflightRequest(
+            fileHash="b" * 64,
+            fileName="video.mp4",
+            fileSize=max_file_size,
+            mimeType="video/mp4",
+            parentId="7",
+        ),
+    )
+
+    assert response.status == "UPLOADING"
+    assert response.upload_id is not None
+
+
+@pytest.mark.asyncio
+async def test_preflight_rejects_file_size_over_20gb():
+    max_file_size = 20 * 1024 * 1024 * 1024
+    settings = make_settings(UPLOAD_SINGLE_FILE_SIZE_MAX=str(max_file_size))
+    session = DummySession()
+    service, storage = make_service(session, settings=settings)
+
+    with pytest.raises(ApiError) as exc:
+        await service.preflight(
+            user_id=2,
+            payload=UploadPreflightRequest(
+                fileHash="b" * 64,
+                fileName="video.mp4",
+                fileSize=max_file_size + 1,
+                mimeType="video/mp4",
+                parentId="7",
+            ),
+        )
+
+    assert exc.value.status_code == 413
+    assert exc.value.code == 413
+    storage.ensure_bucket.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_list_recoverable_sessions_returns_only_active_non_expired_tasks():
+    session = DummySession()
+    service, _storage = make_service(session)
+    now = datetime.now(UTC)
+    active_uploading = UploadTask(
+        task_id=100,
+        user_id=1,
+        folder_id=7,
+        file_name="resume.bin",
+        mime_type="application/octet-stream",
+        bucket_name="fileflash",
+        object_key="objects/u1/resume",
+        object_hash="a" * 64,
+        total_size=100,
+        uploaded_bytes=140,
+        chunk_size=None,
+        upload_id="upload-resume-1",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=now + timedelta(hours=1),
+        updated_at=now,
+    )
+    active_init = UploadTask(
+        task_id=101,
+        user_id=1,
+        folder_id=None,
+        file_name="init.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/init",
+        object_hash="b" * 64,
+        total_size=20,
+        uploaded_bytes=5,
+        chunk_size=10,
+        upload_id="upload-resume-2",
+        status=UploadTaskStatus.INIT,
+        expired_at=now + timedelta(hours=2),
+        updated_at=now,
+    )
+    expired_task = UploadTask(
+        task_id=102,
+        user_id=1,
+        folder_id=9,
+        file_name="expired.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/expired",
+        object_hash="c" * 64,
+        total_size=30,
+        chunk_size=10,
+        upload_id="upload-expired",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=now - timedelta(minutes=1),
+        updated_at=now,
+    )
+    failed_task = UploadTask(
+        task_id=103,
+        user_id=1,
+        folder_id=9,
+        file_name="failed.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/failed",
+        object_hash="d" * 64,
+        total_size=30,
+        chunk_size=10,
+        upload_id="upload-failed",
+        status=UploadTaskStatus.FAILED,
+        expired_at=now + timedelta(hours=1),
+        updated_at=now,
+    )
+    missing_hash_task = UploadTask(
+        task_id=104,
+        user_id=1,
+        folder_id=9,
+        file_name="missing-hash.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/nohash",
+        object_hash=None,
+        total_size=30,
+        chunk_size=10,
+        upload_id="upload-nohash",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=now + timedelta(hours=1),
+        updated_at=now,
+    )
+    session.scalars_queue = [[active_uploading, active_init, expired_task, failed_task, missing_hash_task]]
+
+    sessions = await service.list_recoverable_sessions(user_id=1)
+
+    assert len(sessions) == 2
+    first = sessions[0]
+    assert first.upload_id == "upload-resume-1"
+    assert first.file_size == 100
+    assert first.uploaded_bytes == 100
+    assert first.chunk_size == 5 * 1024 * 1024
+    assert first.parent_id == "7"
+    assert first.status == "uploading"
+    second = sessions[1]
+    assert second.upload_id == "upload-resume-2"
+    assert second.parent_id == "root"
+    assert second.status == "init"
+
+
+@pytest.mark.asyncio
 async def test_upload_chunk_rejects_out_of_range_index(monkeypatch: pytest.MonkeyPatch):
     session = DummySession()
     service, _storage = make_service(session)
@@ -199,6 +355,108 @@ async def test_upload_chunk_rejects_out_of_range_index(monkeypatch: pytest.Monke
 
     assert exc.value.status_code == 400
     assert "out of range" in exc.value.message
+
+
+@pytest.mark.asyncio
+async def test_cancel_upload_session_marks_aborted_and_cleans_objects(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    task = UploadTask(
+        task_id=9,
+        user_id=1,
+        folder_id=1,
+        file_name="clip.mp4",
+        mime_type="video/mp4",
+        bucket_name="fileflash",
+        object_key="objects/u1/demo",
+        object_hash="a" * 64,
+        total_size=1024,
+        chunk_size=512,
+        upload_id="upload-cancel-active",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(
+        service,
+        "_collect_task_cleanup_keys",
+        AsyncMock(return_value=["objects/u1/demo", "temp/u1/upload-cancel-active/part-00000000"]),
+    )
+
+    response = await service.cancel_upload_session(user_id=1, upload_id="upload-cancel-active")
+
+    assert response.upload_id == "upload-cancel-active"
+    assert task.status == UploadTaskStatus.ABORTED
+    assert task.last_error == "Upload canceled by client"
+    assert session.commits == 1
+    storage.remove_objects.assert_awaited_once_with(
+        object_keys=["objects/u1/demo", "temp/u1/upload-cancel-active/part-00000000"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_cancel_upload_session_is_idempotent_for_aborted_task(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    canceled_at = datetime.now(UTC)
+    task = UploadTask(
+        task_id=10,
+        user_id=1,
+        folder_id=1,
+        file_name="already-aborted.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/aborted",
+        object_hash="b" * 64,
+        total_size=8,
+        chunk_size=4,
+        upload_id="upload-cancel-aborted",
+        status=UploadTaskStatus.ABORTED,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+        updated_at=canceled_at,
+    )
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    collect_mock = AsyncMock(return_value=["objects/u1/aborted"])
+    monkeypatch.setattr(service, "_collect_task_cleanup_keys", collect_mock)
+
+    response = await service.cancel_upload_session(user_id=1, upload_id="upload-cancel-aborted")
+
+    assert response.upload_id == "upload-cancel-aborted"
+    assert response.canceled_at == canceled_at
+    assert session.commits == 0
+    collect_mock.assert_not_awaited()
+    storage.remove_objects.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancel_upload_session_rejects_completed_task(monkeypatch: pytest.MonkeyPatch):
+    session = DummySession()
+    service, storage = make_service(session)
+    task = UploadTask(
+        task_id=11,
+        user_id=1,
+        folder_id=1,
+        file_name="done.txt",
+        mime_type="text/plain",
+        bucket_name="fileflash",
+        object_key="objects/u1/done",
+        object_hash="c" * 64,
+        total_size=8,
+        chunk_size=4,
+        upload_id="upload-cancel-completed",
+        status=UploadTaskStatus.COMPLETED,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+
+    with pytest.raises(ApiError) as exc:
+        await service.cancel_upload_session(user_id=1, upload_id="upload-cancel-completed")
+
+    assert exc.value.status_code == 409
+    assert "already completed" in exc.value.message
+    assert session.commits == 0
+    storage.remove_objects.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -251,9 +509,56 @@ async def test_merge_returns_conflict_without_strategy(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
-async def test_merge_marks_failed_on_hash_mismatch(monkeypatch: pytest.MonkeyPatch):
+async def test_merge_skips_full_hash_verification_in_fast_mode(monkeypatch: pytest.MonkeyPatch):
     session = DummySession()
     service, storage = make_service(session)
+    task = UploadTask(
+        task_id=19,
+        user_id=2,
+        folder_id=2,
+        file_name="asset.bin",
+        mime_type="application/octet-stream",
+        bucket_name="fileflash",
+        object_key="objects/u2/new",
+        object_hash="a" * 64,
+        total_size=4,
+        chunk_size=2,
+        upload_id="upload-fast-mode",
+        status=UploadTaskStatus.UPLOADING,
+        expired_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    parts = [
+        UploadTaskPart(task_id=19, part_number=0, part_size=2, status=UploadPartStatus.UPLOADED),
+        UploadTaskPart(task_id=19, part_number=1, part_size=2, status=UploadPartStatus.UPLOADED),
+    ]
+    session.scalars_queue = [parts]
+
+    monkeypatch.setattr(service, "_get_task_for_update", AsyncMock(return_value=task))
+    monkeypatch.setattr(service, "_resolve_folder_id", AsyncMock(return_value=2))
+    monkeypatch.setattr(service, "_find_conflict_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "_find_storage_object", AsyncMock(return_value=None))
+
+    response = await service.merge_chunks(
+        user_id=2,
+        upload_id="upload-fast-mode",
+        payload=MergeChunksRequest(
+            fileHash="a" * 64,
+            fileName="asset.bin",
+            mimeType="application/octet-stream",
+            parentId="2",
+            conflictStrategy="rename",
+        ),
+    )
+
+    assert response.file_name == "asset.bin"
+    storage.compute_object_hash.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_merge_marks_failed_on_hash_mismatch(monkeypatch: pytest.MonkeyPatch):
+    settings = make_settings(UPLOAD_VERIFY_MERGED_OBJECT_HASH=True)
+    session = DummySession()
+    service, storage = make_service(session, settings=settings)
     task = UploadTask(
         task_id=20,
         user_id=2,

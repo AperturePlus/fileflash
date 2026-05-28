@@ -35,7 +35,7 @@ class AgentMcpRepository:
             FROM v_agent_mcp_catalog
             WHERE (
                     visibility = 'system'
-                 OR (:user_id IS NOT NULL AND owner_user_id = :user_id)
+                 OR owner_user_id = CAST(:user_id AS BIGINT)
                   )
               AND (:enabled_only = FALSE OR enabled = TRUE)
             ORDER BY CASE WHEN visibility = 'system' THEN 0 ELSE 1 END, created_at DESC

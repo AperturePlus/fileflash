@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import StatBlock from '../../molecules/StatBlock.vue';
+import { useLocaleStore } from '../../../store/locale';
+import { useUserStore } from '../../../store/user';
 import type { AgentTurn } from '../../../composables/useAgentSession';
 
 const props = defineProps<{ turn?: AgentTurn | null }>();
+
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+const userStore = useUserStore();
+const isAdmin = computed(() => userStore.isAdmin);
 
 const plan = computed(() => props.turn?.agent.planResult ?? null);
 const skillName = computed(() => plan.value?.chosenSkill?.name ?? '—');
@@ -27,15 +34,15 @@ const copyHash = async () => {
 
 <template>
   <aside class="ff-pi">
-    <header class="ff-pi__label">INSPECTOR</header>
-    <div v-if="!turn" class="ff-pi__empty">Select a turn to inspect its plan.</div>
+    <header class="ff-pi__label">{{ t('agent.v2.inspector.label') }}</header>
+    <div v-if="!turn" class="ff-pi__empty">{{ t('agent.v2.inspector.empty') }}</div>
     <div v-else class="ff-pi__body">
       <section class="ff-pi__sect">
-        <span class="ff-pi__key">SKILL</span>
+        <span class="ff-pi__key">{{ t('agent.v2.inspector.skill') }}</span>
         <span class="ff-pi__val">{{ skillName }}</span>
       </section>
-      <section class="ff-pi__sect">
-        <span class="ff-pi__key">PLAN HASH</span>
+      <section v-if="isAdmin" class="ff-pi__sect">
+        <span class="ff-pi__key">{{ t('agent.v2.inspector.planHash') }}</span>
         <button
           type="button"
           class="ff-pi__hash"
@@ -44,22 +51,22 @@ const copyHash = async () => {
           @click="copyHash"
         >
           {{ planHash || '—' }}
-          <span v-if="copied" class="ff-pi__copied">COPIED</span>
+          <span v-if="copied" class="ff-pi__copied">{{ t('agent.v2.inspector.copied') }}</span>
         </button>
       </section>
 
       <section v-if="cost" class="ff-pi__cost">
-        <StatBlock label="TOKENS" :value="cost.tokens" />
-        <StatBlock label="CALLS" :value="cost.toolCalls" />
-        <StatBlock label="EST SEC" :value="cost.durationSecEstimate" />
+        <StatBlock :label="t('agent.v2.inspector.tokens')" :value="cost.tokens" />
+        <StatBlock :label="t('agent.v2.inspector.calls')" :value="cost.toolCalls" />
+        <StatBlock :label="t('agent.v2.inspector.estSec')" :value="cost.durationSecEstimate" />
       </section>
 
       <section class="ff-pi__sect">
-        <span class="ff-pi__key">ACTIONS</span>
+        <span class="ff-pi__key">{{ t('agent.v2.inspector.actions') }}</span>
         <span class="ff-pi__val">{{ actions }}</span>
       </section>
       <section class="ff-pi__sect">
-        <span class="ff-pi__key">WARNINGS</span>
+        <span class="ff-pi__key">{{ t('agent.v2.inspector.warnings') }}</span>
         <span class="ff-pi__val">{{ warnings }}</span>
       </section>
     </div>
@@ -78,21 +85,21 @@ const copyHash = async () => {
 .ff-pi__label {
   padding: var(--sp-sm) var(--sp-lg);
   border-bottom: 1px solid var(--border-default);
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }
 .ff-pi__empty {
   padding: var(--sp-xl) var(--sp-lg);
   color: var(--text-tertiary);
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   text-align: center;
 }
 .ff-pi__body { padding: var(--sp-lg); display: flex; flex-direction: column; gap: var(--sp-md); }
 .ff-pi__sect { display: flex; flex-direction: column; gap: 2px; }
 .ff-pi__key {
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }
@@ -115,7 +122,7 @@ const copyHash = async () => {
 .ff-pi__hash:disabled { opacity: 0.5; cursor: not-allowed; }
 .ff-pi__hash:hover:not(:disabled) { border-color: var(--ac); }
 .ff-pi__copied {
-  font-size: 9px; color: var(--ac);
+  font-size: var(--text-small); color: var(--ac);
   letter-spacing: var(--tracking-wide);
 }
 .ff-pi__cost {

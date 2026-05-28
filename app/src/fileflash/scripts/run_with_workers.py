@@ -48,6 +48,17 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Start API only (without file workers).",
     )
+    parser.add_argument(
+        "--no-agent-worker",
+        action="store_true",
+        help="Do not start agent workers even when AGENT_ENABLED=true.",
+    )
+    parser.add_argument(
+        "--agent-worker-count",
+        type=int,
+        default=max(1, int(getattr(settings, "agent_worker_concurrency", 1))),
+        help="Number of agent worker consumer processes when AGENT_ENABLED=true.",
+    )
     return parser
 
 
@@ -160,6 +171,20 @@ def main() -> int:
             for index in range(args.worker_count):
                 worker_name = f"worker-{index + 1}"
                 worker_cmd = [python, "-m", "fileflash.workers.consumer"]
+                worker_proc = _spawn_process(worker_name, worker_cmd, cwd)
+                processes.append(worker_proc)
+                print(f"[run-with-workers] started {worker_name}: {_format_cmd(worker_cmd)}")
+
+        settings = get_settings()
+        should_start_agent_workers = (
+            not args.no_worker
+            and getattr(settings, "agent_enabled", False)
+            and not args.no_agent_worker
+        )
+        if should_start_agent_workers:
+            for index in range(max(1, int(args.agent_worker_count))):
+                worker_name = f"agent-worker-{index + 1}"
+                worker_cmd = [python, "-m", "fileflash.agents.worker"]
                 worker_proc = _spawn_process(worker_name, worker_cmd, cwd)
                 processes.append(worker_proc)
                 print(f"[run-with-workers] started {worker_name}: {_format_cmd(worker_cmd)}")

@@ -5,6 +5,7 @@ import {
   getCurrentUser,
   mockLogs,
   mockRegistrationEmailDomainRules,
+  mockUsageEvents,
   mockUsers,
   paginate,
 } from '../state';
@@ -43,6 +44,32 @@ function isAllowedEmailDomain(email: string) {
   });
 }
 
+function usageWindow(url: URL) {
+  const usageFrom = url.searchParams.get('usageFrom');
+  const usageTo = url.searchParams.get('usageTo');
+  const now = Date.now();
+  const from = usageFrom ? Date.parse(usageFrom) : now - 7 * 24 * 60 * 60 * 1000;
+  const to = usageTo ? Date.parse(usageTo) : now;
+  return {
+    from: Number.isFinite(from) ? from : now - 7 * 24 * 60 * 60 * 1000,
+    to: Number.isFinite(to) ? to : now,
+  };
+}
+
+function usageStatsForUser(userId: string, window: { from: number; to: number }) {
+  return mockUsageEvents.reduce((stats, event) => {
+    if (event.userId !== userId) return stats;
+    const occurredAt = Date.parse(event.occurredAt);
+    if (!Number.isFinite(occurredAt) || occurredAt < window.from || occurredAt > window.to) {
+      return stats;
+    }
+    return {
+      trafficBytes: stats.trafficBytes + event.trafficBytes,
+      agentTokens: stats.agentTokens + event.agentTokens,
+    };
+  }, { trafficBytes: 0, agentTokens: 0 });
+}
+
 export const setupUserMocks = () => {
   Mock.mock(/\/api\/v1\/users(?:\?.*)?$/, 'get', (options) => {
     const url = new URL(options.url, 'http://localhost');
@@ -77,8 +104,23 @@ export const setupUserMocks = () => {
     const url = new URL(options.url, 'http://localhost');
     const page = Number(url.searchParams.get('page') || 1);
     const perPage = Number(url.searchParams.get('perPage') || 20);
+    const search = (url.searchParams.get('search') || '').toLowerCase();
+    const statusFilter = url.searchParams.get('status');
+    const roleFilter = url.searchParams.get('role');
+    const window = usageWindow(url);
 
-    const users = mockUsers.map((user) => ({
+    const filtered = mockUsers.filter((user) => {
+      if (search) {
+        const hit = user.username.toLowerCase().includes(search)
+          || user.email.toLowerCase().includes(search);
+        if (!hit) return false;
+      }
+      if (statusFilter && user.status !== statusFilter) return false;
+      if (roleFilter && user.role.toUpperCase() !== roleFilter.toUpperCase()) return false;
+      return true;
+    });
+
+    const users = filtered.map((user) => ({
       userId: user.userId,
       username: user.username,
       email: user.email,
@@ -87,9 +129,12 @@ export const setupUserMocks = () => {
       emailVerified: user.emailVerified,
       emailVerifiedAt: user.emailVerifiedAt,
       createdAt: user.createdAt,
-      role: user.role,
+      role: user.role.toUpperCase(),
       status: user.status,
+      usagePercentage: Number(((user.storageUsed / user.storageLimit) * 100).toFixed(2)),
+      usageStats: usageStatsForUser(user.userId, window),
       lastActiveAt: new Date(Date.now() - Mock.Random.integer(1, 72) * 3600000).toISOString(),
+      lastLoginAt: new Date(Date.now() - Mock.Random.integer(1, 240) * 3600000).toISOString(),
     }));
 
     return {

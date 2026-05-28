@@ -149,7 +149,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick));
 
 .ff-select__menu {
   position: absolute; left: 0; right: 0;
-  top: calc(100% + 2px);
+  bottom: calc(100% + 2px); top: auto;
   background: var(--surface-raised);
   border: 1px solid var(--border-default);
   border-radius: 0;

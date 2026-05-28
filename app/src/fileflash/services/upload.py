@@ -33,7 +33,14 @@ from ..models.enums import (
 from ..models.tables_storage import File, FileMediaMetadata, Folder, StorageObject, UploadTask, UploadTaskPart
 from ..models.tables_worker import BackgroundJob
 from ..s3.minio_client import MinioObjectStorageClient, ObjectStorageError
-from ..schemas.file import MergeChunksRequest, MergeChunksResponse, UploadPreflightRequest, UploadPreflightResponse
+from ..schemas.file import (
+    MergeChunksRequest,
+    MergeChunksResponse,
+    RecoverableUploadSession,
+    UploadCancelResponse,
+    UploadPreflightRequest,
+    UploadPreflightResponse,
+)
 from .background_jobs import BackgroundJobService
 
 logger = logging.getLogger(__name__)
@@ -148,6 +155,65 @@ class UploadService:
             if is_retryable_database_error(exc) or is_unique_violation_error(exc):
                 raise to_retryable_concurrency_error(exc) from exc
             raise
+
+    async def list_recoverable_sessions(self, *, user_id: int) -> list[RecoverableUploadSession]:
+        now = datetime.now(UTC)
+        rows = list(
+            await self.db.scalars(
+                select(UploadTask)
+                .where(
+                    and_(
+                        UploadTask.user_id == user_id,
+                        UploadTask.upload_id.is_not(None),
+                        UploadTask.status.in_((UploadTaskStatus.INIT, UploadTaskStatus.UPLOADING)),
+                        or_(UploadTask.expired_at.is_(None), UploadTask.expired_at > now),
+                    )
+                )
+                .order_by(UploadTask.updated_at.desc(), UploadTask.task_id.desc())
+            )
+        )
+
+        sessions: list[RecoverableUploadSession] = []
+        for row in rows:
+            if row.expired_at and row.expired_at <= now:
+                continue
+            if row.status not in (UploadTaskStatus.INIT, UploadTaskStatus.UPLOADING):
+                continue
+            upload_id = (row.upload_id or "").strip()
+            file_name = (row.file_name or "").strip()
+            file_hash = self._normalize_task_hash(row.object_hash)
+            if not upload_id or not file_name or not file_hash:
+                continue
+
+            file_size = max(0, int(row.total_size or 0))
+            uploaded_bytes = max(0, min(file_size, int(row.uploaded_bytes or 0)))
+            chunk_size = int(row.chunk_size or self._resolved_chunk_size())
+            parent_id = str(row.folder_id) if row.folder_id is not None else "root"
+            status = "init" if row.status == UploadTaskStatus.INIT else "uploading"
+            resolved_mime_type = resolve_file_mime_type(
+                mime_type=row.mime_type,
+                file_ext=self._extract_ext(file_name),
+                file_name=file_name,
+                default=DEFAULT_MIME_TYPE,
+            )
+
+            sessions.append(
+                RecoverableUploadSession(
+                    upload_id=upload_id,
+                    file_name=file_name,
+                    file_size=file_size,
+                    uploaded_bytes=uploaded_bytes,
+                    chunk_size=max(1, chunk_size),
+                    file_hash=file_hash,
+                    mime_type=resolved_mime_type,
+                    parent_id=parent_id,
+                    updated_at=row.updated_at or now,
+                    expired_at=row.expired_at,
+                    status=status,
+                )
+            )
+
+        return sessions
 
     async def upload_chunk(self, *, user_id: int, upload_id: str, chunk_index: int, chunk_bytes: bytes) -> None:
         if chunk_index < 0:
@@ -445,16 +511,17 @@ class UploadService:
                 await self.db.commit()
                 raise ApiError(status_code=422, code=422, message="Composed file size mismatch")
 
-            actual_hash = await self.storage.compute_object_hash(
-                object_key=task.object_key,
-                algorithm=hash_algorithm,
-            )
-            if actual_hash != object_hash:
-                await self.storage.remove_object(object_key=task.object_key)
-                task.status = UploadTaskStatus.FAILED
-                task.last_error = "Composed file hash mismatch"
-                await self.db.commit()
-                raise ApiError(status_code=422, code=422, message="Composed file hash mismatch")
+            if self.settings.upload_verify_merged_object_hash:
+                actual_hash = await self.storage.compute_object_hash(
+                    object_key=task.object_key,
+                    algorithm=hash_algorithm,
+                )
+                if actual_hash != object_hash:
+                    await self.storage.remove_object(object_key=task.object_key)
+                    task.status = UploadTaskStatus.FAILED
+                    task.last_error = "Composed file hash mismatch"
+                    await self.db.commit()
+                    raise ApiError(status_code=422, code=422, message="Composed file hash mismatch")
 
             storage_object = await self._find_storage_object(
                 object_hash=object_hash,
@@ -546,6 +613,34 @@ class UploadService:
                 raise to_retryable_concurrency_error(exc) from exc
             raise
 
+    async def cancel_upload_session(self, *, user_id: int, upload_id: str) -> UploadCancelResponse:
+        task = await self._get_task_for_update(user_id=user_id, upload_id=upload_id)
+        if task is None:
+            raise ApiError(status_code=404, code=404, message="Upload session not found")
+        if task.status == UploadTaskStatus.COMPLETED:
+            raise ApiError(status_code=409, code=409, message="Upload session already completed")
+        if task.status == UploadTaskStatus.FAILED:
+            raise ApiError(status_code=409, code=409, message="Upload session is not cancelable")
+        if task.status == UploadTaskStatus.ABORTED:
+            return UploadCancelResponse(
+                upload_id=upload_id,
+                canceled_at=task.updated_at or datetime.now(UTC),
+            )
+
+        canceled_at = datetime.now(UTC)
+        cleanup_keys = await self._collect_task_cleanup_keys(task=task)
+        task.status = UploadTaskStatus.ABORTED
+        task.last_error = "Upload canceled by client"
+        await self.db.commit()
+
+        if cleanup_keys:
+            try:
+                await self.storage.remove_objects(object_keys=cleanup_keys)
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to cleanup canceled upload temp objects uploadId=%s", upload_id)
+
+        return UploadCancelResponse(upload_id=upload_id, canceled_at=canceled_at)
+
     async def _cleanup_expired_tasks(self, *, user_id: int) -> None:
         now = datetime.now(UTC)
         expired_tasks = list(
@@ -567,10 +662,7 @@ class UploadService:
         for task in expired_tasks:
             task.status = UploadTaskStatus.ABORTED
             task.last_error = "Upload session expired"
-            if task.object_key:
-                cleanup_keys.append(task.object_key)
-            part_indexes = await self._list_uploaded_indexes(task_id=task.task_id)
-            cleanup_keys.extend(self._build_part_object_key(task=task, chunk_index=index) for index in part_indexes)
+            cleanup_keys.extend(await self._collect_task_cleanup_keys(task=task))
 
         await self.db.commit()
         if cleanup_keys:
@@ -757,6 +849,15 @@ class UploadService:
                 .order_by(UploadTaskPart.part_number.asc())
             )
         )
+
+    async def _collect_task_cleanup_keys(self, *, task: UploadTask) -> list[str]:
+        keys: list[str] = []
+        if task.object_key:
+            keys.append(task.object_key)
+        part_indexes = await self._list_uploaded_indexes(task_id=task.task_id)
+        keys.extend(self._build_part_object_key(task=task, chunk_index=index) for index in part_indexes)
+        # Preserve order but deduplicate possible repeated entries.
+        return list(dict.fromkeys(keys))
 
     async def _abort_task(self, *, task: UploadTask, reason: str) -> None:
         task.status = UploadTaskStatus.ABORTED

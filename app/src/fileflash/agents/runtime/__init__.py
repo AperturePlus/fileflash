@@ -1,5 +1,5 @@
-from .execute_runner import ExecuteRunner
+from .execute_runner import AgentJobCanceled, ExecuteRunner
 from .plan_runner import PlanRunner
 from .subagent_runner import SubagentRunner
 
-__all__ = ["ExecuteRunner", "PlanRunner", "SubagentRunner"]
+__all__ = ["AgentJobCanceled", "ExecuteRunner", "PlanRunner", "SubagentRunner"]

@@ -2,6 +2,7 @@ from .archive import ArchiveService
 from .agent import ExecuteService, McpService, MemoryService, PlanService, SessionService, SettingsService, SkillService
 from .auth import AuthService
 from .background_jobs import BackgroundJobService
+from .download_rate_limit import DownloadRateLimitService
 from .email_delivery import VerificationEmailDeliveryService
 from .file import FileService
 from .folder import FolderService
@@ -17,6 +18,7 @@ __all__ = [
     "AuthService",
     "ArchiveService",
     "BackgroundJobService",
+    "DownloadRateLimitService",
     "VerificationEmailDeliveryService",
     "ExecuteService",
     "FileService",

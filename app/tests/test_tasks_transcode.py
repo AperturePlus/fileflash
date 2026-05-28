@@ -5,7 +5,9 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-from fileflash.tasks.transcode import build_ffmpeg_command, run_media_transcode
+import pytest
+
+from fileflash.tasks.transcode import _run_command, build_ffmpeg_command, run_media_transcode
 
 
 def test_build_ffmpeg_command_for_video_contains_profile_flags():
@@ -24,7 +26,51 @@ def test_build_ffmpeg_command_for_video_contains_profile_flags():
     assert "+faststart" in command
     assert "-pix_fmt" in command
     assert "yuv420p" in command
+    assert "-ac" in command
+    assert command[command.index("-ac") + 1] == "2"
     assert command[-1] == "output.mp4"
+
+
+def test_build_ffmpeg_command_for_audio_forces_stereo():
+    command = build_ffmpeg_command(
+        input_path=Path("input.wav"),
+        output_path=Path("output.m4a"),
+        media_type="audio",
+        ffmpeg_binary="ffmpeg",
+        payload={},
+    )
+
+    assert command[:4] == ["ffmpeg", "-y", "-i", "input.wav"]
+    assert "-vn" in command
+    assert "-c:a" in command
+    assert "-ac" in command
+    assert command[command.index("-ac") + 1] == "2"
+    assert command[-1] == "output.m4a"
+
+
+def test_run_command_raises_value_error_for_deterministic_ffmpeg_encoder_failure(monkeypatch):
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (check, capture_output, text, timeout)
+        return subprocess.CompletedProcess(
+            command,
+            returncode=1,
+            stdout="",
+            stderr='[aac @ 0000020b7eff3d00] Unsupported channel layout "6 channels"\n'
+            "Error while opening encoder - maybe incorrect parameters\n"
+            "[af#0:1 @ 0000020b003fde00] Task finished with error code: -22 (Invalid argument)",
+        )
+
+    monkeypatch.setattr("fileflash.tasks.transcode.subprocess.run", fake_run)
+
+    with pytest.raises(ValueError, match="Command failed"):
+        _run_command(["ffmpeg", "-i", "input.mp4", "output.mp4"], timeout_seconds=30)
 
 
 def test_run_media_transcode_storage_mode_with_mocked_subprocess(monkeypatch, tmp_path: Path):

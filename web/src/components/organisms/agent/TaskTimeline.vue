@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import TurnEntry from './TurnEntry.vue';
+import { useLocaleStore } from '../../../store/locale';
 import type { AgentExecutionPolicy } from '../../../types/agent';
 import type { AgentTurn } from '../../../composables/useAgentSession';
 
@@ -13,15 +14,24 @@ const props = defineProps<{
 defineEmits<{
   execute: [id: string];
   cancel: [id: string];
+  reply: [id: string, value: unknown];
+  pause: [id: string];
+  resume: [id: string];
+  skip: [id: string];
+  approve: [id: string];
+  deny: [id: string];
   'focus-turn': [id: string];
   'hint-pick': [text: string];
 }>();
 
-const HINTS = [
-  'Organize my screenshots into folders by date',
-  'Find duplicates across my photo library',
-  'Tag invoices and move them under /finance',
-];
+const localeStore = useLocaleStore();
+const t = localeStore.t;
+
+const hints = computed(() => [
+  t('agent.v2.timeline.hint.organize'),
+  t('agent.v2.timeline.hint.duplicates'),
+  t('agent.v2.timeline.hint.tagInvoices'),
+]);
 
 const scrollEl = ref<HTMLElement | null>(null);
 
@@ -36,12 +46,12 @@ watch(
 
 <template>
   <div ref="scrollEl" class="ff-tt">
-    <header class="ff-tt__label">TIMELINE</header>
+    <header class="ff-tt__label">{{ t('agent.v2.timeline.label') }}</header>
     <div v-if="!turns.length" class="ff-tt__welcome">
-      <p class="ff-tt__hint">Type a task below to get started.</p>
+      <p class="ff-tt__hint">{{ t('agent.v2.timeline.welcomeHint') }}</p>
       <div class="ff-tt__chips">
         <button
-          v-for="h in HINTS"
+          v-for="h in hints"
           :key="h"
           type="button"
           class="ff-tt__chip"
@@ -52,14 +62,20 @@ watch(
       </div>
     </div>
     <TurnEntry
-      v-for="t in turns"
-      :key="t.agent.id"
-      :turn="t"
+      v-for="turn in turns"
+      :key="turn.agent.id"
+      :turn="turn"
       :policy="policy"
-      :focused="t.agent.id === focusedId"
-      @execute="$emit('execute', t.agent.id)"
-      @cancel="$emit('cancel', t.agent.id)"
-      @focus="$emit('focus-turn', t.agent.id)"
+      :focused="turn.agent.id === focusedId"
+      @execute="$emit('execute', turn.agent.id)"
+      @cancel="$emit('cancel', turn.agent.id)"
+      @reply="(value) => $emit('reply', turn.agent.id, value)"
+      @pause="$emit('pause', turn.agent.id)"
+      @resume="$emit('resume', turn.agent.id)"
+      @skip="$emit('skip', turn.agent.id)"
+      @approve="$emit('approve', turn.agent.id)"
+      @deny="$emit('deny', turn.agent.id)"
+      @focus="$emit('focus-turn', turn.agent.id)"
     />
   </div>
 </template>
@@ -75,7 +91,7 @@ watch(
   padding: var(--sp-sm) var(--sp-lg);
   background: var(--surface-base);
   border-bottom: 1px solid var(--border-default);
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }
@@ -86,7 +102,7 @@ watch(
 .ff-tt__hint {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-label);
+  font-size: var(--text-small);
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
   color: var(--text-tertiary);

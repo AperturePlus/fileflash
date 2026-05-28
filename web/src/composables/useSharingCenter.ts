@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import { acceptSharedItem, deleteShare, getSharedItems, getShares } from '../api/share';
+import { acceptSharedItem, deleteShare, getSharedItems, getShares, updateShareSettings } from '../api/share';
 import { useLocaleStore } from '../store/locale';
 import { useFileSelection } from './useFileSelection';
 import type { Share, SharedItem } from '../types/share';
@@ -80,8 +80,48 @@ export function useSharingCenter() {
     }
   };
 
+  const regenerateAndShowPassword = async (share: Share) => {
+    if (!share.settings.passwordProtected) return;
+
+    const ok = await ui.confirm({
+      title: t('sharing.confirm.regeneratePassword.title'),
+      message: t('sharing.confirm.regeneratePassword.message').replace('{shareLink}', share.shareLink),
+      confirmText: t('sharing.confirm.regeneratePassword.confirm'),
+      danger: true,
+    });
+    if (!ok) return;
+
+    try {
+      const updated = await updateShareSettings(share.shareLink, {
+        passwordProtected: true,
+        regeneratePassword: true,
+      });
+      const nextPassword = updated.settings.password?.trim() || '';
+      if (!nextPassword) {
+        ui.toast({ type: 'error', message: t('sharing.toast.passwordRegenerateFailed') });
+        await loadLinks();
+        return;
+      }
+      await ui.copyText({
+        title: t('sharing.passwordDialog.title'),
+        message: t('sharing.passwordDialog.message'),
+        text: nextPassword,
+      });
+      myShares.value = myShares.value.map((item) => {
+        if (item.shareId === updated.shareId) return updated;
+        if (item.shareLink === share.shareLink) return updated;
+        return item;
+      });
+      ui.toast({ type: 'success', message: t('sharing.toast.passwordRegenerated') });
+    } catch (e) {
+      console.error('Failed to regenerate share password', e);
+      ui.toast({ type: 'error', message: t('sharing.toast.passwordRegenerateFailed') });
+      await loadLinks();
+    }
+  };
+
   return {
     activeTab, isLoading, sharedItems, myShares, selection, showBatch,
-    loadData, switchTab, toggleAll, acceptOne, acceptSelected, removeShare, copyShare,
+    loadData, switchTab, toggleAll, acceptOne, acceptSelected, removeShare, copyShare, regenerateAndShowPassword,
   };
 }

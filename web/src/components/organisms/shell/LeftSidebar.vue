@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { getStarredFiles } from '../../../api/file';
 import { getFolderPath } from '../../../api/folder';
 import { useFileStore } from '../../../store/file';
+import { useUploadStore } from '../../../store/upload';
 import type { ContentItem, FolderItem, PathItem } from '../../../types/file';
 import { eventBus } from '../../../utils/eventBus';
 import { useLocaleStore } from '../../../store/locale';
@@ -15,9 +17,11 @@ import StorageStatusWidget from './StorageStatusWidget.vue';
 defineProps<{ collapsed: boolean }>();
 
 const fileStore = useFileStore();
+const uploadStore = useUploadStore();
 const router = useRouter();
 const localeStore = useLocaleStore();
 const t = localeStore.t;
+const { activeUploadingCount } = storeToRefs(uploadStore);
 const folderPathCache = new Map<string, string>();
 
 const rootNode = ref<FolderItem>({
@@ -142,6 +146,12 @@ onUnmounted(() => { eventBus.off('refresh-file-tree', refreshAllTrees); });
         <li v-for="item in navItems" :key="item.to" class="nav-item">
           <router-link :to="item.to" class="nav-link" active-class="active">
             <Icon :name="item.icon" :size="16" />
+            <span
+              v-if="item.to === '/files' && activeUploadingCount > 0"
+              class="upload-indicator"
+              :aria-label="t('sidebar.myFiles.uploadingAria')"
+              role="status"
+            />
             <span v-if="!collapsed" class="link-text">{{ item.label }}</span>
           </router-link>
         </li>
@@ -204,6 +214,14 @@ onUnmounted(() => { eventBus.off('refresh-file-tree', refreshAllTrees); });
 .nav-link.active { background: rgba(var(--ac-rgb), 0.12); color: var(--ac); font-weight: var(--weight-medium); }
 .left-sidebar.collapsed .nav-link { justify-content: center; padding: 0; }
 .link-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upload-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ac);
+  box-shadow: 0 0 0 rgba(var(--ac-rgb), 0.4);
+  animation: upload-pulse 1.2s ease-in-out infinite;
+}
 .tree-panel {
   min-height: 0;
   flex: 1;
@@ -276,5 +294,14 @@ onUnmounted(() => { eventBus.off('refresh-file-tree', refreshAllTrees); });
   color: var(--text-dim);
   font-size: 11px;
   padding: 0 10px;
+}
+
+@keyframes upload-pulse {
+  0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(var(--ac-rgb), 0.5); }
+  60% { transform: scale(1); box-shadow: 0 0 0 6px rgba(var(--ac-rgb), 0); }
+  100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(var(--ac-rgb), 0); }
+}
+[data-motion="reduced"] .upload-indicator {
+  animation: none;
 }
 </style>

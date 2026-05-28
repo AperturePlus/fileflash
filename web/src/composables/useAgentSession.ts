@@ -1,19 +1,55 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import {
-  cancelAgentJob,
+  approveAgentStep,
+  cancelAgentTurn,
+  denyAgentStep,
   executeAgentPlan,
   getAgentJob,
+  pauseAgentJob,
   planAgentTask,
+  resumeAgentJob,
+  sendAgentReply,
+  skipAgentStep,
+  streamAgentJobEvents,
 } from '../api/agent';
 import { useUserStore } from '../store/user';
+import { useLocaleStore } from '../store/locale';
+import { ui } from '../utils/ui';
 import type {
+  AgentAskPayload,
   AgentExecutionPolicy,
   AgentExecutionResult,
+  AgentJobEvent,
   AgentPlanResult,
+  AgentProgressPayload,
+  AgentReasoningEffort,
+  AgentThinkingPayload,
+  AgentToolPartialPayload,
   PlanAgentRequest,
 } from '../types/agent';
 
-export type MsgStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
+export type MsgStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'canceled'
+  | 'waiting_for_user'
+  | 'paused';
+
+export interface PendingAsk {
+  messageId: string;
+  prompt: string;
+  schema: Record<string, unknown>;
+  timeoutSec: number;
+  askedAt: string;
+}
+
+export interface ToolPartial {
+  step: number;
+  tool: string;
+  chunks: unknown[];
+}
 
 export interface ChatMessage {
   id: string;
@@ -25,8 +61,14 @@ export interface ChatMessage {
   planResult?: AgentPlanResult;
   executeJobId?: string;
   executeResult?: AgentExecutionResult;
+  events: AgentJobEvent[];
   errorMessage?: string;
   timestamp: string;
+  pendingAsk?: PendingAsk;
+  pauseRequestedAt?: string;
+  progress?: { step: number; total: number; message?: string; percent?: number };
+  thinking?: string;
+  partials?: Record<number, ToolPartial>;
 }
 
 export interface Session {
@@ -43,11 +85,21 @@ export interface AgentTurn {
 }
 
 const STORAGE_KEY = 'fileflash.agent.sessions.v1';
+const POLL_INTERVAL_MS = 1200;
 
 const isTerminalStatus = (s?: string | null) =>
   s === 'succeeded' || s === 'failed' || s === 'canceled';
 
 const isEmptySession = (session: Session) => session.messages.length === 0;
+
+const isReadOnlyAutoExecutable = (plan: AgentPlanResult): boolean =>
+  plan.proposedActions.length > 0 &&
+  plan.proposedActions.every(
+    (action) =>
+      action.sideEffect === 'read' &&
+      action.riskLevel === 'low' &&
+      !action.requiresConfirmation,
+  );
 
 const toTurns = (messages: ChatMessage[]): AgentTurn[] => {
   const out: AgentTurn[] = [];
@@ -79,7 +131,10 @@ const normalizeSessions = (value: unknown): Session[] => {
     const session: Session = {
       id: record.id,
       title: typeof record.title === 'string' ? record.title : 'New session',
-      messages: record.messages as ChatMessage[],
+      messages: (record.messages as ChatMessage[]).map((message) => ({
+        ...message,
+        events: Array.isArray(message.events) ? message.events : [],
+      })),
       createdAt: typeof record.createdAt === 'string' ? record.createdAt : now,
       updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : now,
     };
@@ -123,9 +178,13 @@ interface SessionState {
   sessions: Ref<Session[]>;
   activeSessionId: Ref<string | null>;
   policy: Ref<AgentExecutionPolicy>;
+  reasoningEffort: Ref<AgentReasoningEffort>;
   taskInput: Ref<string>;
   isSending: Ref<boolean>;
-  pollTimers: Map<string, ReturnType<typeof setInterval>>;
+  pollGenerations: Map<string, number>;
+  pollSleepTimers: Map<string, ReturnType<typeof setTimeout>>;
+  streamControllers: Map<string, AbortController>;
+  canceledTurns: Set<string>;
 }
 
 let _state: SessionState | null = null;
@@ -136,26 +195,49 @@ const getState = (): SessionState => {
   const sessions = ref<Session[]>(loaded.sessions);
   const activeSessionId = ref<string | null>(sessions.value[0]?.id ?? null);
   const policy = ref<AgentExecutionPolicy>('confirm');
+  const reasoningEffort = ref<AgentReasoningEffort>('adaptive');
   const taskInput = ref<string>('');
   const isSending = ref<boolean>(false);
-  const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
+  const pollGenerations = new Map<string, number>();
+  const pollSleepTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const streamControllers = new Map<string, AbortController>();
+  const canceledTurns = new Set<string>();
 
   watch(sessions, (v) => persistSessions(v), { deep: true });
   if (loaded.shouldPersist) persistSessions(sessions.value);
 
-  _state = { sessions, activeSessionId, policy, taskInput, isSending, pollTimers };
+  _state = {
+    sessions,
+    activeSessionId,
+    policy,
+    reasoningEffort,
+    taskInput,
+    isSending,
+    pollGenerations,
+    pollSleepTimers,
+    streamControllers,
+    canceledTurns,
+  };
   return _state;
 };
 
 export const __resetForTests = () => {
   if (_state) {
-    _state.pollTimers.forEach((t) => clearInterval(t));
-    _state.pollTimers.clear();
+    _state.pollSleepTimers.forEach((t) => clearTimeout(t));
+    _state.pollSleepTimers.clear();
+    _state.streamControllers.forEach((controller) => controller.abort());
+    _state.streamControllers.clear();
+    _state.pollGenerations.clear();
+    _state.canceledTurns.clear();
   }
   _state = null;
 };
 
-const buildPlanPayload = (input: string, policy: AgentExecutionPolicy): PlanAgentRequest => ({
+const buildPlanPayload = (
+  input: string,
+  policy: AgentExecutionPolicy,
+  reasoningEffort: AgentReasoningEffort,
+): PlanAgentRequest => ({
   input,
   context: {
     rootFolderId: 'root',
@@ -169,12 +251,34 @@ const buildPlanPayload = (input: string, policy: AgentExecutionPolicy): PlanAgen
     maxReadBytes: 1048576,
     allowedMimeTypes: ['*/*'],
   },
-  hints: { preferSkillId: null, maxSteps: 12, budgetTokens: 8000 },
+  hints: { preferSkillId: null, maxSteps: 12, budgetTokens: 8000, reasoningEffort },
 });
+
+const extractErrorMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === 'object') {
+    const response = (error as { response?: { data?: { message?: unknown } } }).response;
+    const responseMessage = response?.data?.message;
+    if (typeof responseMessage === 'string' && responseMessage.trim()) {
+      return responseMessage.trim();
+    }
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (error && typeof error === 'object') {
+    const plainMessage = (error as { message?: unknown }).message;
+    if (typeof plainMessage === 'string' && plainMessage.trim()) {
+      return plainMessage.trim();
+    }
+  }
+  return fallback;
+};
 
 export default function useAgentSession() {
   const s = getState();
   const userStore = useUserStore();
+  const localeStore = useLocaleStore();
+  const t = localeStore.t;
 
   const activeSession = computed(() => {
     if (!s.activeSessionId.value) return null;
@@ -183,17 +287,79 @@ export default function useAgentSession() {
 
   const activeTurns = computed<AgentTurn[]>(() => toTurns(activeSession.value?.messages ?? []));
 
+  const nextPollGeneration = (key: string): number => {
+    const generation = (s.pollGenerations.get(key) ?? 0) + 1;
+    s.pollGenerations.set(key, generation);
+    return generation;
+  };
+
+  const clearSleepTimer = (key: string) => {
+    const timer = s.pollSleepTimers.get(key);
+    if (!timer) return;
+    clearTimeout(timer);
+    s.pollSleepTimers.delete(key);
+  };
+
   const stopPolling = (key: string) => {
-    const t = s.pollTimers.get(key);
-    if (t) {
-      clearInterval(t);
-      s.pollTimers.delete(key);
-    }
+    nextPollGeneration(key);
+    clearSleepTimer(key);
+  };
+
+  const stopStream = (key: string) => {
+    const controller = s.streamControllers.get(key);
+    if (!controller) return;
+    controller.abort();
+    s.streamControllers.delete(key);
   };
 
   const stopAllPolling = () => {
-    s.pollTimers.forEach((t) => clearInterval(t));
-    s.pollTimers.clear();
+    s.pollSleepTimers.forEach((t) => clearTimeout(t));
+    s.pollSleepTimers.clear();
+    s.streamControllers.forEach((controller) => controller.abort());
+    s.streamControllers.clear();
+    s.pollGenerations.clear();
+  };
+
+  const isTurnCanceled = (msg: ChatMessage): boolean => s.canceledTurns.has(msg.id);
+
+  const clearTurnCanceled = (msg: ChatMessage) => {
+    s.canceledTurns.delete(msg.id);
+  };
+
+  const markTurnCanceled = (msg: ChatMessage) => {
+    s.canceledTurns.add(msg.id);
+  };
+
+  const ensureTurnNotCanceled = (msg: ChatMessage): boolean =>
+    !isTurnCanceled(msg) && msg.status !== 'canceled';
+
+  const startPollLoop = async (
+    key: string,
+    msg: ChatMessage,
+    tick: (generation: number) => Promise<boolean>,
+  ): Promise<void> => {
+    const generation = nextPollGeneration(key);
+    const run = async (): Promise<void> => {
+      if (s.pollGenerations.get(key) !== generation) return;
+      if (!ensureTurnNotCanceled(msg)) {
+        stopPolling(key);
+        return;
+      }
+      const shouldContinue = await tick(generation);
+      if (s.pollGenerations.get(key) !== generation) return;
+      if (!shouldContinue) {
+        stopPolling(key);
+        return;
+      }
+      const timer = setTimeout(() => {
+        if (s.pollSleepTimers.get(key) === timer) {
+          s.pollSleepTimers.delete(key);
+        }
+        void run();
+      }, POLL_INTERVAL_MS);
+      s.pollSleepTimers.set(key, timer);
+    };
+    await run();
   };
 
   const createSession = () => {
@@ -231,6 +397,14 @@ export default function useAgentSession() {
   const deleteSession = (id: string) => {
     const idx = s.sessions.value.findIndex((c) => c.id === id);
     if (idx === -1) return;
+    const target = s.sessions.value[idx];
+    target.messages.forEach((msg) => {
+      clearTurnCanceled(msg);
+      stopPolling(`${msg.id}:plan`);
+      stopPolling(`${msg.id}:execute`);
+      stopStream(`${msg.id}:plan`);
+      stopStream(`${msg.id}:execute`);
+    });
     s.sessions.value.splice(idx, 1);
     if (s.activeSessionId.value === id) {
       stopAllPolling();
@@ -242,6 +416,13 @@ export default function useAgentSession() {
 
   const resetActiveSession = () => {
     if (!activeSession.value) return;
+    activeSession.value.messages.forEach((msg) => {
+      clearTurnCanceled(msg);
+      stopPolling(`${msg.id}:plan`);
+      stopPolling(`${msg.id}:execute`);
+      stopStream(`${msg.id}:plan`);
+      stopStream(`${msg.id}:execute`);
+    });
     stopAllPolling();
     activeSession.value.messages = [];
     activeSession.value.title = 'New session';
@@ -250,13 +431,129 @@ export default function useAgentSession() {
 
   const ensureSession = (): Session => activeSession.value ?? createSession();
 
+  const appendAgentEvent = (msg: ChatMessage, event: AgentJobEvent) => {
+    if (msg.events.some((item) => item.id === event.id)) return;
+    msg.events.push(event);
+  };
+
+  const applyAgentEvent = (msg: ChatMessage, event: AgentJobEvent, kind: 'plan' | 'execute') => {
+    appendAgentEvent(msg, event);
+
+    if (event.type === 'job.queued') {
+      msg.status = 'pending';
+    } else if (event.type === 'job.running' || event.type === 'tool.started') {
+      if (msg.status !== 'waiting_for_user' && msg.status !== 'paused') {
+        msg.status = 'running';
+      }
+    } else if (event.type === 'job.failed' || event.type === 'tool.failed') {
+      msg.status = 'failed';
+      const errorMessage = event.data?.errorMessage;
+      msg.errorMessage = typeof errorMessage === 'string' ? errorMessage : event.message;
+    } else if (event.type === 'job.canceled') {
+      msg.status = 'canceled';
+    } else if (event.type === 'job.succeeded') {
+      msg.status = 'succeeded';
+      msg.pendingAsk = undefined;
+      msg.pauseRequestedAt = undefined;
+    }
+
+    if (event.type === 'agent.ask') {
+      const payload = event.data as AgentAskPayload;
+      msg.pendingAsk = {
+        messageId: payload.messageId,
+        prompt: payload.prompt,
+        schema: payload.schema,
+        timeoutSec: payload.timeoutSec,
+        askedAt: event.timestamp,
+      };
+      msg.status = 'waiting_for_user';
+    } else if (event.type === 'agent.paused') {
+      msg.status = 'paused';
+      msg.pauseRequestedAt = event.timestamp;
+    } else if (event.type === 'agent.resumed') {
+      msg.status = 'running';
+      msg.pauseRequestedAt = undefined;
+    } else if (event.type === 'agent.progress') {
+      const payload = event.data as AgentProgressPayload;
+      msg.progress = {
+        step: payload.step,
+        total: payload.total,
+        message: payload.message,
+        percent: payload.percent,
+      };
+    } else if (event.type === 'agent.thinking') {
+      const payload = event.data as AgentThinkingPayload;
+      msg.thinking = (msg.thinking || '') + (payload.text || '');
+    } else if (event.type === 'tool.partial') {
+      const payload = event.data as AgentToolPartialPayload;
+      msg.partials = msg.partials || {};
+      const slot = msg.partials[payload.step] || {
+        step: payload.step,
+        tool: payload.tool,
+        chunks: [],
+      };
+      slot.chunks = [...slot.chunks, payload.chunk];
+      msg.partials[payload.step] = slot;
+    }
+
+    const result = event.data?.result;
+    if (event.type === 'plan.ready' && result) {
+      msg.planResult = result as AgentPlanResult;
+      msg.planHash = msg.planResult.planHash;
+    }
+    if (event.type === 'job.succeeded' && result) {
+      if (kind === 'plan') {
+        msg.planResult = result as AgentPlanResult;
+        msg.planHash = msg.planResult.planHash;
+      } else {
+        msg.executeResult = result as AgentExecutionResult;
+      }
+    }
+  };
+
+  const shouldAutoExecutePlan = (msg: ChatMessage): boolean =>
+    Boolean(
+      msg.planResult &&
+        ((s.policy.value === 'autopilot' && !msg.planResult.requiresConfirmation) ||
+          (s.policy.value === 'confirm' && isReadOnlyAutoExecutable(msg.planResult))),
+    );
+
+  async function streamJobEvents(
+    kind: 'plan' | 'execute',
+    msg: ChatMessage,
+    jobId: string,
+  ): Promise<boolean> {
+    const timerKey = `${msg.id}:${kind}`;
+    stopStream(timerKey);
+    const controller = new AbortController();
+    s.streamControllers.set(timerKey, controller);
+    try {
+      await streamAgentJobEvents(
+        jobId,
+        {
+          onEvent: (event) => {
+            if (!ensureTurnNotCanceled(msg)) return;
+            applyAgentEvent(msg, event, kind);
+          },
+        },
+        controller.signal,
+      );
+      return true;
+    } catch {
+      return controller.signal.aborted;
+    } finally {
+      if (s.streamControllers.get(timerKey) === controller) {
+        s.streamControllers.delete(timerKey);
+      }
+    }
+  }
+
   async function pollPlanJob(msg: ChatMessage, jobId: string): Promise<void> {
     const timerKey = `${msg.id}:plan`;
-    stopPolling(timerKey);
-
-    const tick = async () => {
+    await startPollLoop(timerKey, msg, async (generation) => {
       try {
         const job = await getAgentJob<AgentPlanResult>(jobId);
+        if (s.pollGenerations.get(timerKey) !== generation || !ensureTurnNotCanceled(msg)) return false;
         msg.status = (job.status as MsgStatus) || 'running';
 
         if (job.status === 'succeeded' && job.result) {
@@ -267,29 +564,25 @@ export default function useAgentSession() {
           msg.errorMessage = job.errorMessage || 'Plan failed.';
         }
         if (isTerminalStatus(job.status)) {
-          stopPolling(timerKey);
-          if (msg.planResult && s.policy.value === 'autopilot') {
+          if (shouldAutoExecutePlan(msg)) {
             await runExecute(msg);
           }
+          return false;
         }
+        return true;
       } catch {
         // network blips: skip this tick
+        return true;
       }
-    };
-
-    await tick();
-    if (!isTerminalStatus(msg.status)) {
-      s.pollTimers.set(timerKey, setInterval(tick, 1200));
-    }
+    });
   }
 
   async function pollExecuteJob(msg: ChatMessage, jobId: string): Promise<void> {
     const timerKey = `${msg.id}:execute`;
-    stopPolling(timerKey);
-
-    const tick = async () => {
+    await startPollLoop(timerKey, msg, async (generation) => {
       try {
         const job = await getAgentJob<AgentExecutionResult>(jobId);
+        if (s.pollGenerations.get(timerKey) !== generation || !ensureTurnNotCanceled(msg)) return false;
         msg.status = (job.status as MsgStatus) || 'running';
 
         if (job.status === 'succeeded' && job.result) {
@@ -298,16 +591,13 @@ export default function useAgentSession() {
         if (job.status === 'failed' || job.status === 'canceled') {
           msg.errorMessage = job.errorMessage || 'Execute failed.';
         }
-        if (isTerminalStatus(job.status)) stopPolling(timerKey);
+        if (isTerminalStatus(job.status)) return false;
+        return true;
       } catch {
         // skip
+        return true;
       }
-    };
-
-    await tick();
-    if (!isTerminalStatus(msg.status)) {
-      s.pollTimers.set(timerKey, setInterval(tick, 1200));
-    }
+    });
   }
 
   async function sendMessage(): Promise<void> {
@@ -322,6 +612,7 @@ export default function useAgentSession() {
       role: 'user',
       content: input,
       status: 'succeeded',
+      events: [],
       timestamp: now,
     };
     const agentMsg: ChatMessage = {
@@ -329,6 +620,7 @@ export default function useAgentSession() {
       role: 'agent',
       content: '',
       status: 'pending',
+      events: [],
       timestamp: now,
     };
     session.messages.push(userMsg, agentMsg);
@@ -339,15 +631,30 @@ export default function useAgentSession() {
     s.taskInput.value = '';
 
     const reactiveAgent = session.messages[session.messages.length - 1];
+    clearTurnCanceled(reactiveAgent);
 
     try {
-      const res = await planAgentTask(buildPlanPayload(input, s.policy.value));
+      const res = await planAgentTask(buildPlanPayload(input, s.policy.value, s.reasoningEffort.value));
       reactiveAgent.planJobId = res.jobId;
+      if (isTurnCanceled(reactiveAgent) || reactiveAgent.status === 'canceled') {
+        try {
+          await cancelAgentTurn(res.jobId);
+        } catch {
+          // ignore cancellation sync errors after local cancel
+        }
+        return;
+      }
       reactiveAgent.status = 'pending';
-      await pollPlanJob(reactiveAgent, res.jobId);
-    } catch {
+      const streamed = await streamJobEvents('plan', reactiveAgent, res.jobId);
+      if (!streamed && ensureTurnNotCanceled(reactiveAgent)) {
+        await pollPlanJob(reactiveAgent, res.jobId);
+      } else if (streamed && ensureTurnNotCanceled(reactiveAgent) && shouldAutoExecutePlan(reactiveAgent)) {
+        await runExecute(reactiveAgent);
+      }
+    } catch (error) {
+      if (isTurnCanceled(reactiveAgent) || reactiveAgent.status === 'canceled') return;
       reactiveAgent.status = 'failed';
-      reactiveAgent.errorMessage = 'Plan failed.';
+      reactiveAgent.errorMessage = extractErrorMessage(error, 'Plan failed.');
     } finally {
       s.isSending.value = false;
     }
@@ -355,6 +662,27 @@ export default function useAgentSession() {
 
   async function runExecute(msg: ChatMessage): Promise<void> {
     if (!msg.planResult || !msg.planHash) return;
+    if (msg.executeJobId) return;
+    if (msg.status !== 'succeeded') return;
+    if (isTurnCanceled(msg)) return;
+    const highRisk = msg.planResult.proposedActions.some(
+      (action) => action.riskLevel === 'high' || action.requiresConfirmation,
+    );
+    const confirmedAt = new Date().toISOString();
+    if (highRisk) {
+      const reason =
+        msg.planResult.proposedActions.find((action) => action.riskLevel === 'high' || action.requiresConfirmation)
+          ?.confirmationReason || t('agent.v2.confirm.highRisk.message');
+      const ok = await ui.confirm({
+        title: t('agent.v2.confirm.highRisk.title'),
+        message: reason,
+        confirmText: t('agent.v2.confirm.highRisk.confirm'),
+        cancelText: t('agent.v2.confirm.highRisk.cancel'),
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    if (!ensureTurnNotCanceled(msg)) return;
     msg.status = 'running';
     msg.errorMessage = '';
     msg.executeResult = undefined;
@@ -365,27 +693,116 @@ export default function useAgentSession() {
         planHash: msg.planHash,
         approval: {
           confirmedBy: userStore.user?.userId || 'current-user',
-          confirmedAt: new Date().toISOString(),
+          confirmedAt,
+          highRiskConfirmed: highRisk,
+          highRiskConfirmedAt: highRisk ? confirmedAt : undefined,
         },
       });
       msg.executeJobId = res.jobId;
-      await pollExecuteJob(msg, res.jobId);
-    } catch {
+      if (!ensureTurnNotCanceled(msg)) {
+        try {
+          await cancelAgentTurn(res.jobId);
+        } catch {
+          // ignore cancellation sync errors after local cancel
+        }
+        return;
+      }
+      const streamed = await streamJobEvents('execute', msg, res.jobId);
+      if (!streamed && ensureTurnNotCanceled(msg)) {
+        await pollExecuteJob(msg, res.jobId);
+      }
+    } catch (error) {
+      if (!ensureTurnNotCanceled(msg)) return;
       msg.status = 'failed';
-      msg.errorMessage = 'Execute failed.';
+      msg.errorMessage = extractErrorMessage(error, 'Execute failed.');
+    }
+  }
+
+  const activeJobId = (msg: ChatMessage): string | undefined =>
+    msg.executeJobId || msg.planJobId;
+
+  async function replyToAsk(msg: ChatMessage, value: unknown): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId || !msg.pendingAsk) return;
+    const pendingAsk = msg.pendingAsk;
+    msg.pendingAsk = undefined;
+    msg.status = 'running';
+    try {
+      await sendAgentReply(jobId, pendingAsk.messageId, value);
+    } catch (error) {
+      msg.status = 'waiting_for_user';
+      msg.pendingAsk = pendingAsk;
+      msg.errorMessage = extractErrorMessage(error, 'Reply failed.');
+    }
+  }
+
+  async function pauseTurn(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    msg.pauseRequestedAt = new Date().toISOString();
+    try {
+      await pauseAgentJob(jobId);
+    } catch (error) {
+      msg.pauseRequestedAt = undefined;
+      msg.errorMessage = extractErrorMessage(error, 'Pause failed.');
+    }
+  }
+
+  async function resumeTurn(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    try {
+      await resumeAgentJob(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Resume failed.');
+    }
+  }
+
+  async function approveStep(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    try {
+      await approveAgentStep(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Approve failed.');
+    }
+  }
+
+  async function denyStep(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    try {
+      await denyAgentStep(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Deny failed.');
+    }
+  }
+
+  async function skipStep(msg: ChatMessage): Promise<void> {
+    const jobId = activeJobId(msg);
+    if (!jobId) return;
+    try {
+      await skipAgentStep(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Skip failed.');
     }
   }
 
   async function cancel(msg: ChatMessage): Promise<void> {
-    const jobId = msg.executeJobId || msg.planJobId;
+    markTurnCanceled(msg);
+    msg.status = 'canceled';
+    msg.pendingAsk = undefined;
+    msg.pauseRequestedAt = undefined;
     stopPolling(`${msg.id}:plan`);
     stopPolling(`${msg.id}:execute`);
+    stopStream(`${msg.id}:plan`);
+    stopStream(`${msg.id}:execute`);
+    const jobId = activeJobId(msg);
     if (!jobId) return;
     try {
-      await cancelAgentJob(jobId);
-      msg.status = 'canceled';
-    } catch {
-      msg.errorMessage = 'Cancel failed.';
+      await cancelAgentTurn(jobId);
+    } catch (error) {
+      msg.errorMessage = extractErrorMessage(error, 'Cancel failed.');
     }
   }
 
@@ -401,6 +818,7 @@ export default function useAgentSession() {
     activeSession,
     activeTurns,
     policy: s.policy,
+    reasoningEffort: s.reasoningEffort,
     taskInput: s.taskInput,
     isSending: s.isSending,
     createSession,
@@ -410,5 +828,11 @@ export default function useAgentSession() {
     sendMessage,
     runExecute,
     cancel,
+    replyToAsk,
+    pauseTurn,
+    resumeTurn,
+    approveStep,
+    denyStep,
+    skipStep,
   };
 }

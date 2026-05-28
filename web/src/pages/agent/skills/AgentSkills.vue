@@ -9,17 +9,20 @@ import Pagination from '../../../components/molecules/Pagination.vue';
 import TextField from '../../../components/molecules/TextField.vue';
 import Button from '../../../components/molecules/Button.vue';
 import { useUserStore } from '../../../store/user';
+import { useLocaleStore } from '../../../store/locale';
 
 const s = useAgentSkills();
 const userStore = useUserStore();
+const localeStore = useLocaleStore();
+const t = localeStore.t;
 const isAdmin = computed(() => userStore.user?.role === 'admin');
 
 type TabId = 'marketplace' | 'my';
 const activeTab = ref<TabId>('marketplace');
-const TAB_OPTIONS = [
-  { value: 'marketplace', label: 'MARKETPLACE' },
-  { value: 'my', label: 'MY SKILLS' },
-];
+const TAB_OPTIONS = computed(() => [
+  { value: 'marketplace', label: t('agent.v2.skills.tab.marketplace') },
+  { value: 'my', label: t('agent.v2.skills.tab.mySkills') },
+]);
 
 const activeData = computed(() =>
   activeTab.value === 'marketplace' ? s.marketplace.value : s.mySkills.value,
@@ -38,10 +41,10 @@ onMounted(() => { s.loadMarketplace(); s.loadMySkills(); });
 <template>
   <div class="as">
     <header class="as__head">
-      <TextField v-model="s.queryText.value" label="SEARCH" placeholder="Search skills..." />
+      <TextField v-model="s.queryText.value" :label="t('agent.v2.skills.search.label')" :placeholder="t('agent.v2.skills.search.placeholder')" />
       <div class="as__tabs">
         <SegmentedControl v-model="activeTab" :options="TAB_OPTIONS" />
-        <Button v-if="activeTab === 'my'" variant="primary" size="sm" @click="s.openNewSkill">New Skill</Button>
+        <Button v-if="activeTab === 'my'" variant="primary" size="sm" @click="s.openNewSkill">{{ t('agent.v2.skills.newSkill') }}</Button>
       </div>
     </header>
 
@@ -54,7 +57,7 @@ onMounted(() => { s.loadMarketplace(); s.loadMySkills(); });
         @edit="s.openEditSkill(sk)"
         @delete="s.removeSkill(sk.skillKey)"
       />
-      <p v-if="!activeData?.items?.length" class="as__empty">No skills here yet.</p>
+      <p v-if="!activeData?.items?.length" class="as__empty">{{ t('agent.v2.skills.empty') }}</p>
     </section>
 
     <Pagination v-model:page="activePage" :page-size="20" :total="activeTotal" />
@@ -85,7 +88,7 @@ onMounted(() => { s.loadMarketplace(); s.loadMySkills(); });
 .as__grid { display: grid; gap: var(--sp-md); grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 .as__empty {
   grid-column: 1 / -1; padding: var(--sp-xl); text-align: center;
-  font-family: var(--font-mono); font-size: var(--text-label);
+  font-family: var(--font-mono); font-size: var(--text-small);
   letter-spacing: var(--tracking-wide); text-transform: uppercase;
   color: var(--text-tertiary);
 }

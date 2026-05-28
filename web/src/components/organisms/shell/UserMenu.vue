@@ -41,7 +41,7 @@ function close() { open.value = false; }
         <Divider />
         <MenuItem icon="folder" @click="router.push('/profile'); close()">{{ t('header.menu.profile') }}</MenuItem>
         <MenuItem icon="more" @click="router.push('/settings'); close()">{{ t('header.menu.settings') }}</MenuItem>
-        <MenuItem v-if="isAdmin" icon="search" @click="router.push('/dashboard'); close()">{{ t('header.menu.dashboard') }}</MenuItem>
+        <MenuItem v-if="isAdmin" icon="search" @click="router.push('/console/overview'); close()">{{ t('header.menu.console') }}</MenuItem>
         <Divider />
         <MenuItem variant="danger" icon="trash" @click="handleLogout(); close()">{{ t('header.menu.logout') }}</MenuItem>
       </div>

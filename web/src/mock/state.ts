@@ -15,6 +15,13 @@ export type MockUserRecord = User & {
   preference: UserPreference;
 };
 
+export interface MockUsageEvent {
+  userId: string;
+  occurredAt: string;
+  trafficBytes: number;
+  agentTokens: number;
+}
+
 const now = () => new Date().toISOString();
 
 const randomRecentTime = (maxHours = 72) => {
@@ -35,7 +42,22 @@ export const mockSkills: AgentSkillItem[] = [
     name: 'Organize By Type',
     description: 'Organize files into folders by mime/type.',
     triggersText: 'organize, classify, sort by type',
-    toolWhitelist: ['files.list', 'folders.create', 'files.move'],
+    toolWhitelist: [
+      'drive.listFolder',
+      'drive.countFiles',
+      'drive.searchFiles',
+      'drive.getFileInfo',
+      'drive.listRecent',
+      'drive.statsByCategory',
+      'drive.findDuplicates',
+      'drive.createFolder',
+      'drive.moveFile',
+      'drive.moveFolder',
+      'drive.renameFile',
+      'drive.renameFolder',
+      'drive.deleteFile',
+      'drive.deleteFolder',
+    ],
     planTemplate: {},
     inputsSchema: {},
     outputsSchema: {},
@@ -50,7 +72,7 @@ export const mockSkills: AgentSkillItem[] = [
     name: 'Cleanup Downloads',
     description: 'Find and cleanup old downloads.',
     triggersText: 'cleanup, downloads, remove old files',
-    toolWhitelist: ['files.list', 'files.delete'],
+    toolWhitelist: ['drive.searchFiles', 'drive.listRecent', 'drive.deleteFile'],
     planTemplate: {},
     inputsSchema: {},
     outputsSchema: {},
@@ -173,6 +195,25 @@ export const mockUsers: MockUserRecord[] = [
     },
   },
 ];
+
+export const mockUsageEvents: MockUsageEvent[] = mockUsers.flatMap((user, index) => {
+  const recentAt = new Date(Date.now() - (index + 1) * 24 * 60 * 60 * 1000).toISOString();
+  const olderAt = new Date(Date.now() - (index + 20) * 24 * 60 * 60 * 1000).toISOString();
+  return [
+    {
+      userId: user.userId,
+      occurredAt: recentAt,
+      trafficBytes: (index + 1) * 256 * 1024 * 1024,
+      agentTokens: (index + 1) * 1250,
+    },
+    {
+      userId: user.userId,
+      occurredAt: olderAt,
+      trafficBytes: (index + 1) * 64 * 1024 * 1024,
+      agentTokens: (index + 1) * 300,
+    },
+  ];
+});
 
 export const mockShares: Array<Share & { ownerUserId: string }> = [
   {
