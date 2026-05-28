@@ -1,0 +1,159 @@
+services:
+  # ========== PostgreSQL + Flyway 迁移 ==========
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:16
+    container_name: ff-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: 539b537cec0417e79748d68b6fa67bce
+      POSTGRES_DB: fileflash
+      TZ: Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d fileflash"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fileflash
+
+  flyway:
+    image: docker.m.daocloud.io/flyway/flyway:latest
+    container_name: ff-flyway
+    command: >
+      -url=jdbc:postgresql://postgres:5432/fileflash
+      -user=admin
+      -password=539b537cec0417e79748d68b6fa67bce
+      -connectRetries=15
+      migrate
+    volumes:
+      - ./flyway/migrations:/flyway/sql
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - fileflash
+
+  # ========== Redis ==========
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: ff-redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fileflash
+
+  # ========== MinIO 对象存储 ==========
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: ff-minio
+    restart: always
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: b6d4e8ed2ca164ced8e7b2f0ed252c97
+    volumes:
+      - minio_data:/data
+    command: server /data
+    healthcheck:
+      test: ["CMD", "curl" ,"-f","http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - fileflash
+
+  # ========== FastAPI 后端 ==========
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: ff-backend
+    restart: always
+    env_file:
+      - .env.production
+    depends_on:
+      flyway:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - fileflash
+
+  # ========== Worker 后台任务(转码/扫描等) ==========
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: ff-worker
+    restart: always
+    env_file:
+      - .env.production
+    command: ["uv", "run", "python", "-m", "fileflash.workers.consumer"]
+    depends_on:
+      flyway:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - fileflash
+
+  # ========== Agent Worker (开启 AGENT_ENABLED=true 时需要) ==========
+  agent-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: ff-agent-worker
+    restart: always
+    env_file:
+      - .env.production
+    command: ["uv", "run", "python", "-m", "fileflash.agents.worker"]
+    depends_on:
+      flyway:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - fileflash
+    profiles:
+      - agent
+
+  # ========== Vue 前端 + nginx ==========
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_BASE_URL: /api/v1
+        VITE_ENABLE_MOCKS: 'false'
+    container_name: ff-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - fileflash
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  fileflash:
+    driver: bridge

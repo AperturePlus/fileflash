@@ -1,0 +1,48 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Node
+web/node_modules/
+web/dist/
+web/electron/
+web/.nuxt/
+web/.output/
+
+# Python
+app/__pycache__/
+app/src/__pycache__/
+app/.venv/
+app/.uv/
+**/*.pyc
+**/*.pyo
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+
+# Docker
+docker/data/
+docker/postgresql-16/data/
+docker/redis/data/
+docker/minio/data/
+
+# Docs
+docs/
+/*.md
+*.drawio
+
+# Tests
+app/tests/
+web/src/**/*.test.ts
+web/src/**/*.spec.ts
+
+# Misc
+.claude/
+.superpowers/
