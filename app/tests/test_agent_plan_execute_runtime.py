@@ -2933,6 +2933,229 @@ async def test_execute_runner_canceled_via_inbox_at_step_boundary(
     assert dropped == [1]
 
 
+def _control_message(
+    *,
+    inbox_message_id: int,
+    kind: AgentInboxKind,
+    step: int,
+    reason: str | None = None,
+) -> SimpleNamespace:
+    metadata: dict[str, Any] = {"step": step}
+    if reason is not None:
+        metadata["reason"] = reason
+    return SimpleNamespace(
+        inbox_message_id=inbox_message_id,
+        kind=kind,
+        payload_json={"metadata": metadata},
+    )
+
+
+def _patch_execute_dependencies_with_actions(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    actions: list[dict[str, Any]],
+    controls: list[list[SimpleNamespace]],
+    dropped: list[int],
+) -> None:
+    monkeypatch.setattr(
+        execute_module,
+        "AgentPlanRepository",
+        lambda _db: SimpleNamespace(
+            get_for_execute_binding=AsyncMock(
+                return_value=SimpleNamespace(proposed_actions_json=actions)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "AgentWorkSessionRepository",
+        lambda _db: SimpleNamespace(
+            create_for_job=AsyncMock(return_value=None),
+            close_session=AsyncMock(return_value=None),
+        ),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "AgentActionLogRepository",
+        lambda _db: SimpleNamespace(
+            append_step=AsyncMock(return_value=None),
+            finish_step=AsyncMock(return_value=None),
+        ),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "ToolRouter",
+        lambda **kwargs: SimpleNamespace(
+            dispatch=AsyncMock(
+                return_value={
+                    "totalItems": 1,
+                    "category": "video",
+                    "recursive": True,
+                    "folderId": "1",
+                    "byMimeType": {"video/mp4": 1},
+                    "sampleItems": [],
+                }
+            )
+        ),
+    )
+
+    class FakeInboxRepository:
+        def __init__(self, _db) -> None:  # noqa: ANN001
+            return None
+
+        async def list_pending_controls(self, *, job_id: int):  # noqa: ARG002
+            if controls:
+                return controls.pop(0)
+            return []
+
+        async def mark_dropped(self, *, inbox_message_id: int) -> None:
+            dropped.append(inbox_message_id)
+
+    monkeypatch.setattr(execute_module, "AgentInboxMessageRepository", FakeInboxRepository)
+
+
+@pytest.mark.asyncio
+async def test_execute_control_deny_skips_matching_step(monkeypatch: pytest.MonkeyPatch):
+    actions = [
+        {
+            "step": 1,
+            "tool": "drive.countFiles",
+            "input": {"folderId": "root", "recursive": True, "category": "video"},
+            "sideEffect": "read",
+            "riskLevel": "low",
+            "requiresConfirmation": False,
+        },
+        {
+            "step": 2,
+            "tool": "drive.countFiles",
+            "input": {"folderId": "root", "recursive": True, "category": "image"},
+            "sideEffect": "read",
+            "riskLevel": "low",
+            "requiresConfirmation": False,
+        },
+    ]
+    deny_ctrl = _control_message(
+        inbox_message_id=10,
+        kind=AgentInboxKind.CONTROL_DENY,
+        step=1,
+        reason="user changed mind",
+    )
+    controls = [[deny_ctrl], []]
+    dropped: list[int] = []
+    _patch_execute_dependencies_with_actions(
+        monkeypatch, actions=actions, controls=controls, dropped=dropped
+    )
+    db = DummyDb()
+    db.refresh = AsyncMock()
+
+    result = await ExecuteRunner(
+        event_bus=_CaptureBus(),
+        answer_client=SimpleNamespace(create_answer=AsyncMock(return_value="ok")),  # type: ignore[arg-type]
+    ).run(db=db, job=_execute_job_for_controls())  # type: ignore[arg-type]
+
+    assert result.applied_actions == 1
+    assert result.skipped_actions == 1
+    assert dropped == [10]
+    assert any("denied by user" in w and "Step 1" in w for w in result.warnings)
+    assert any("user changed mind" in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_execute_control_deny_does_not_affect_wrong_step(monkeypatch: pytest.MonkeyPatch):
+    deny_ctrl = _control_message(
+        inbox_message_id=11,
+        kind=AgentInboxKind.CONTROL_DENY,
+        step=2,
+        reason="not this step",
+    )
+    controls = [[deny_ctrl]]
+    dropped: list[int] = []
+    _patch_execute_dependencies(monkeypatch, controls=controls, dropped=dropped)
+    db = DummyDb()
+    db.refresh = AsyncMock()
+
+    result = await ExecuteRunner(
+        event_bus=_CaptureBus(),
+        answer_client=SimpleNamespace(create_answer=AsyncMock(return_value="ok")),  # type: ignore[arg-type]
+    ).run(db=db, job=_execute_job_for_controls())  # type: ignore[arg-type]
+
+    assert result.applied_actions == 1
+    assert result.skipped_actions == 0
+    assert dropped == []
+    assert not any("denied by user" in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_execute_control_approve_proceeds(monkeypatch: pytest.MonkeyPatch):
+    approve_ctrl = _control_message(
+        inbox_message_id=12,
+        kind=AgentInboxKind.CONTROL_APPROVE,
+        step=1,
+    )
+    controls = [[approve_ctrl]]
+    dropped: list[int] = []
+    _patch_execute_dependencies(monkeypatch, controls=controls, dropped=dropped)
+    db = DummyDb()
+    db.refresh = AsyncMock()
+
+    result = await ExecuteRunner(
+        event_bus=_CaptureBus(),
+        answer_client=SimpleNamespace(create_answer=AsyncMock(return_value="ok")),  # type: ignore[arg-type]
+    ).run(db=db, job=_execute_job_for_controls())  # type: ignore[arg-type]
+
+    assert result.applied_actions == 1
+    assert result.skipped_actions == 0
+    assert dropped == [12]
+    assert not any("skipped by user" in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_execute_control_skip_step_matching(monkeypatch: pytest.MonkeyPatch):
+    actions = [
+        {
+            "step": 1,
+            "tool": "drive.countFiles",
+            "input": {"folderId": "root", "recursive": True, "category": "video"},
+            "sideEffect": "read",
+            "riskLevel": "low",
+            "requiresConfirmation": False,
+        },
+        {
+            "step": 2,
+            "tool": "drive.countFiles",
+            "input": {"folderId": "root", "recursive": True, "category": "image"},
+            "sideEffect": "read",
+            "riskLevel": "low",
+            "requiresConfirmation": False,
+        },
+    ]
+    skip_ctrl = _control_message(
+        inbox_message_id=20,
+        kind=AgentInboxKind.CONTROL_SKIP,
+        step=2,
+    )
+    # The control persists across both step boundaries (not dropped at step 1
+    # because the step-matching guard skips it), then fires at step 2.
+    controls = [[skip_ctrl], [skip_ctrl]]
+    dropped: list[int] = []
+    _patch_execute_dependencies_with_actions(
+        monkeypatch, actions=actions, controls=controls, dropped=dropped
+    )
+    db = DummyDb()
+    db.refresh = AsyncMock()
+
+    result = await ExecuteRunner(
+        event_bus=_CaptureBus(),
+        answer_client=SimpleNamespace(create_answer=AsyncMock(return_value="ok")),  # type: ignore[arg-type]
+    ).run(db=db, job=_execute_job_for_controls())  # type: ignore[arg-type]
+
+    assert result.applied_actions == 1
+    assert result.skipped_actions == 1
+    assert dropped == [20]
+    assert any("Step 2 skipped by user" in w for w in result.warnings)
+    assert not any("Step 1 skipped by user" in w for w in result.warnings)
+
+
 @pytest.mark.asyncio
 async def test_execute_runner_publish_state_ignores_event_bus_failures():
     bus = SimpleNamespace(publish=AsyncMock(side_effect=RuntimeError("boom")))
