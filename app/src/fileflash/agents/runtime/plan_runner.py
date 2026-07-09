@@ -114,7 +114,7 @@ class PlanRunner:
         planning_evidence: list[AgentPlanningEvidence] = []
 
         async def _planning_tool_executor(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-            nonlocal planned_tool_calls, permission, skill, allowed_tools, allowed_tool_set
+            nonlocal planned_tool_calls, permission, skill, allowed_tools, allowed_tool_set, exploration_tools, planning_exploration_tools
             planned_tool_calls += 1
             if planned_tool_calls > tool_call_budget:
                 raise ApiError(
@@ -141,6 +141,12 @@ class PlanRunner:
                     )
                     allowed_tools = tuple(sorted(permission.allowed_tools))
                     allowed_tool_set = set(allowed_tools)
+                    exploration_tools = tuple(
+                        tool_name
+                        for tool_name in allowed_tools
+                        if REGISTRY.get(tool_name).side_effect == "read"
+                    )
+                    planning_exploration_tools = exploration_tools + ("agent.useSkill",)
                 if len(planning_evidence) < 12:
                     planning_evidence.append(
                         AgentPlanningEvidence(
@@ -151,11 +157,11 @@ class PlanRunner:
                         )
                     )
                 return payload
-            # All other tools: gate via PolicyGuard (phase=planning denies writes/content-read).
+            # All other tools: gate via PolicyGuard (phase=planning denies content-read; writes blocked below).
             decision = await policy_guard.evaluate(
                 ctx=ToolContext(db=db, user_id=user_id, file_service=None, folder_service=None),
                 action=AgentProposedAction(
-                    step=planned_tool_calls, tool=tool_name, input=args, side_effect="read"
+                    step=planned_tool_calls, tool=tool_name, input=args, side_effect=classify_tool_side_effect(tool_name)
                 ),
                 permission=permission,
                 phase="planning",
