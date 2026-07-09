@@ -383,6 +383,19 @@ async def _read_file(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
             "note": "Binary content not sent to model.",
         }
 
+    # Empty file or offset beyond end of file: return clean empty content.
+    if size == 0 or offset >= size:
+        return {
+            "fileId": str(file_id),
+            "name": str(row.file_name),
+            "mime": mime,
+            "size": size,
+            "content": "",
+            "truncated": False,
+            "bytesReturned": 0,
+            "offset": offset,
+        }
+
     end = min(offset + max_bytes - 1, size - 1) if size > 0 else 0
     chunks: list[bytes] = []
     received = 0
