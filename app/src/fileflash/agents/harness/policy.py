@@ -95,6 +95,35 @@ class PolicyGuard:
             )
         return PolicyDecision(allowed=True)
 
+    async def evaluate_tool_call(
+        self,
+        *,
+        tool_name: str,
+        high_risk_confirmed: bool = False,
+    ) -> PolicyDecision:
+        """Backward-compat shim retained until execute_runner migrates to ``evaluate``.
+
+        Replicates the pre-Task-2 3-rule decision logic exactly:
+        unsupported tool -> deny; high-risk without confirmation -> deny;
+        otherwise allow. Does NOT perform content-read or whitelist checks
+        (the old method never did).
+        """
+        try:
+            REGISTRY.get(tool_name)
+        except KeyError:
+            return PolicyDecision(
+                allowed=False,
+                reasons=[f"Unsupported agent tool: {tool_name}"],
+            )
+        if classify_tool_risk(tool_name) == "high" and not high_risk_confirmed:
+            return PolicyDecision(
+                allowed=False,
+                reasons=[
+                    "High-risk delete action requires explicit user confirmation."
+                ],
+            )
+        return PolicyDecision(allowed=True)
+
     async def _check_content_read(
         self,
         *,
