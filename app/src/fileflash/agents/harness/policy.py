@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from sqlalchemy import and_, select
 
-from ...core.errors import ApiError
 from ...core.mime import resolve_file_mime_type
 from ...models import File
 from ...models.enums import FileStatus
@@ -136,12 +135,12 @@ class PolicyGuard:
                 allowed=False,
                 reasons=["File content access disabled by dataPolicy."],
             )
-        max_bytes = self._byte_range(action.input)
-        if max_bytes > permission.data_policy.max_read_bytes:
+        bytes_requested = self._bytes_requested(action.input)
+        if bytes_requested > permission.data_policy.max_read_bytes:
             return PolicyDecision(
                 allowed=False,
                 reasons=[
-                    f"Requested bytes ({max_bytes}) exceed max_read_bytes "
+                    f"Requested bytes ({bytes_requested}) exceed max_read_bytes "
                     f"({permission.data_policy.max_read_bytes})."
                 ],
             )
@@ -155,10 +154,9 @@ class PolicyGuard:
             )
         return None
 
-    def _byte_range(self, action_input: dict[str, Any]) -> int:
+    def _bytes_requested(self, action_input: dict[str, Any]) -> int:
         max_bytes = int(action_input.get("maxBytes", 262144) or 262144)
-        offset = int(action_input.get("offset", 0) or 0)
-        return max_bytes + offset
+        return max_bytes
 
 
 def _mime_allowed(mime: str, allowed: list[str]) -> bool:

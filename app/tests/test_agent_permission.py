@@ -86,7 +86,6 @@ async def test_effective_mime_intersection_empty_denies_content():
 # Task 2: PolicyGuard.evaluate — single permission choke point
 # ---------------------------------------------------------------------------
 
-from datetime import datetime  # noqa: E402
 from unittest.mock import AsyncMock  # noqa: E402
 
 from fileflash.agents.harness.policy import PolicyGuard, PolicyDecision  # noqa: E402
@@ -217,5 +216,51 @@ async def test_evaluate_allowed_read_tool_passes():
         action=AgentProposedAction(step=1, tool="drive.listFolder", input={"folderId": "root"}, side_effect="read"),
         permission=_perm(allowed_tools=["drive.listFolder"]),
         phase="executing",
+    )
+    assert decision.allowed is True
+
+
+@pytest.mark.asyncio
+async def test_evaluate_readfile_max_read_bytes_exceeded_denied():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(
+            step=1,
+            tool="drive.readFile",
+            input={"fileId": "1", "maxBytes": 2097152},
+            side_effect="read",
+        ),
+        permission=_perm(allowed_tools=["drive.readFile"]),
+        phase="executing",
+    )
+    assert decision.allowed is False
+    assert any("max_read_bytes" in r.lower() for r in decision.reasons)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_readfile_small_read_at_large_offset_allowed():
+    # Regression guard for the old `+ offset` logic: reading 1 byte at offset
+    # 1MB with max_read_bytes=1MB must be ALLOWED (bytes read, not position).
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(
+            step=1,
+            tool="drive.readFile",
+            input={"fileId": "1", "maxBytes": 1, "offset": 1048576},
+            side_effect="read",
+        ),
+        permission=_perm(allowed_tools=["drive.readFile"]),
+        phase="executing",
+    )
+    assert decision.allowed is True
+
+
+@pytest.mark.asyncio
+async def test_evaluate_planonly_planning_allowed():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(step=1, tool="drive.listFolder", input={"folderId": "root"}, side_effect="read"),
+        permission=_perm(allowed_tools=["drive.listFolder"], policy="planOnly"),
+        phase="planning",
     )
     assert decision.allowed is True
