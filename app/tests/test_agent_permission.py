@@ -264,3 +264,22 @@ async def test_evaluate_planonly_planning_allowed():
         phase="planning",
     )
     assert decision.allowed is True
+
+
+# ---------------------------------------------------------------------------
+# Task 4: regression guard for _merge_data_policy take-strictest bytes
+# ---------------------------------------------------------------------------
+
+from fileflash.agents.harness.permission import _merge_data_policy  # noqa: E402
+
+
+def test_setting_default_data_policy_merges_take_strictest_bytes():
+    setting = AgentUserSetting(
+        user_id=1,
+        default_data_policy_json={"allowFileContent": True, "maxReadBytes": 512},
+    )
+    merged = _merge_data_policy(
+        AgentDataPolicy(allow_file_content=True, max_read_bytes=4096, allowed_mime_types=["*/*"]),
+        setting,
+    )
+    assert merged.max_read_bytes == 512  # min wins

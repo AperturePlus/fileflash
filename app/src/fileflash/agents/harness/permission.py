@@ -107,4 +107,26 @@ def _skill_key(skill: Any) -> str | None:
     return str(getattr(skill, "skill_key", None) or "")
 
 
-__all__ = ["EffectivePermission", "PermissionResolver"]
+def _apply_setting_defaults(
+    request: PlanAgentRequest, setting: AgentUserSetting | None
+) -> PlanAgentRequest:
+    if setting is None:
+        return request
+    merged_policy = _merge_data_policy(request.data_policy, setting)
+    budget = request.hints.budget_tokens
+    if budget == 8000 and setting.default_budget_tokens:
+        budget = int(setting.default_budget_tokens)
+    max_steps = request.hints.max_steps
+    if max_steps == 12 and setting.default_max_steps:
+        max_steps = int(setting.default_max_steps)
+    return request.model_copy(
+        update={
+            "data_policy": merged_policy,
+            "hints": request.hints.model_copy(
+                update={"budget_tokens": budget, "max_steps": max_steps}
+            ),
+        }
+    )
+
+
+__all__ = ["EffectivePermission", "PermissionResolver", "_apply_setting_defaults"]

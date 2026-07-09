@@ -159,6 +159,8 @@ class Settings(BaseSettings):
     agent_tool_timeout_sec: int = Field(default=30, alias="AGENT_TOOL_TIMEOUT_SEC")
     agent_job_max_tokens: int = Field(default=50000, alias="AGENT_JOB_MAX_TOKENS")
     agent_job_max_tool_calls: int = Field(default=100, alias="AGENT_JOB_MAX_TOOL_CALLS")
+    agent_read_file_max_bytes: int = Field(default=1048576, alias="AGENT_READ_FILE_MAX_BYTES")
+    agent_skill_candidate_k: int = Field(default=3, alias="AGENT_SKILL_CANDIDATE_K")
     agent_compact_threshold: float = Field(default=0.75, alias="AGENT_COMPACT_THRESHOLD")
     agent_user_daily_limit: int = Field(default=50, alias="AGENT_USER_DAILY_LIMIT")
     agent_user_concurrent_limit: int = Field(default=2, alias="AGENT_USER_CONCURRENT_LIMIT")
