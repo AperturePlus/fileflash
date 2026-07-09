@@ -32,7 +32,7 @@ from fileflash.services.agent.plan_service import PlanService
 
 class DummyDb:
     def __init__(self) -> None:
-        self.scalar = AsyncMock()
+        self.scalar = AsyncMock(return_value=None)
         self.execute = AsyncMock()
         self.scalars = AsyncMock()
         self.get = AsyncMock()
@@ -64,6 +64,11 @@ class FakeJobs:
         )
 
 
+class FakeChatSessions:
+    async def get_active(self, **_kwargs):  # noqa: ANN003
+        return SimpleNamespace(chat_session_id=1, user_id=7, deleted_at=None)
+
+
 def settings(**overrides):
     base = {
         "agent_enabled": True,
@@ -74,6 +79,7 @@ def settings(**overrides):
         "agent_user_daily_limit": 50,
         "agent_llm_base_url": None,
         "agent_llm_plan_max_tokens": 8192,
+        "agent_skill_candidate_k": 3,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -91,9 +97,11 @@ async def test_plan_enqueue_returns_frontend_shape_and_sets_phase():
         plans=AgentPlanRepository(db),  # type: ignore[arg-type]
         settings_repo=AgentSettingsRepository(db),  # type: ignore[arg-type]
         work_sessions=AgentWorkSessionRepository(db),  # type: ignore[arg-type]
+        chat_sessions=FakeChatSessions(),  # type: ignore[arg-type]
     )
     payload = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "整理当前文件夹",
             "context": {
                 "rootFolderId": "root",
@@ -136,9 +144,11 @@ async def test_plan_enqueue_rejects_max_steps_above_server_limit_in_non_dev():
         plans=AgentPlanRepository(db),  # type: ignore[arg-type]
         settings_repo=AgentSettingsRepository(db),  # type: ignore[arg-type]
         work_sessions=AgentWorkSessionRepository(db),  # type: ignore[arg-type]
+        chat_sessions=FakeChatSessions(),  # type: ignore[arg-type]
     )
     payload = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "整理当前文件夹",
             "context": {
                 "rootFolderId": "root",
@@ -175,9 +185,11 @@ async def test_plan_enqueue_allows_max_steps_above_server_limit_in_dev():
         plans=AgentPlanRepository(db),  # type: ignore[arg-type]
         settings_repo=AgentSettingsRepository(db),  # type: ignore[arg-type]
         work_sessions=AgentWorkSessionRepository(db),  # type: ignore[arg-type]
+        chat_sessions=FakeChatSessions(),  # type: ignore[arg-type]
     )
     payload = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "整理当前文件夹",
             "context": {
                 "rootFolderId": "root",
@@ -644,9 +656,11 @@ async def test_execute_rejects_high_risk_plan_without_confirmation():
         jobs=FakeJobs(),  # type: ignore[arg-type]
         plans=plans,
         work_sessions=AgentWorkSessionRepository(db),  # type: ignore[arg-type]
+        chat_sessions=FakeChatSessions(),  # type: ignore[arg-type]
     )
     payload = ExecuteAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "planJobId": "99",
             "planHash": "sha256:test",
             "approval": {"confirmedBy": "7", "confirmedAt": datetime.now(UTC).isoformat()},
@@ -684,9 +698,11 @@ async def test_execute_enqueue_serializes_approval_datetime_as_json_string():
         jobs=jobs,  # type: ignore[arg-type]
         plans=plans,
         work_sessions=AgentWorkSessionRepository(db),  # type: ignore[arg-type]
+        chat_sessions=FakeChatSessions(),  # type: ignore[arg-type]
     )
     payload = ExecuteAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "planJobId": "99",
             "planHash": "sha256:test",
             "approval": {"confirmedBy": "7", "confirmedAt": "2026-05-25T10:00:00Z"},
@@ -737,9 +753,11 @@ async def test_execute_rejects_repeat_when_existing_execute_job_exists():
         jobs=jobs,  # type: ignore[arg-type]
         plans=plans,
         work_sessions=AgentWorkSessionRepository(db),  # type: ignore[arg-type]
+        chat_sessions=FakeChatSessions(),  # type: ignore[arg-type]
     )
     payload = ExecuteAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "planJobId": "99",
             "planHash": "sha256:test",
             "approval": {"confirmedBy": "7", "confirmedAt": "2026-05-25T10:00:00Z"},
@@ -757,7 +775,7 @@ async def test_execute_rejects_repeat_when_existing_execute_job_exists():
 
 @pytest.mark.asyncio
 async def test_plan_runner_generates_stable_hash(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -784,6 +802,7 @@ async def test_plan_runner_generates_stable_hash(monkeypatch: pytest.MonkeyPatch
     client = SimpleNamespace(create_plan=planner)
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "organize",
             "context": {
                 "rootFolderId": "root",
@@ -829,7 +848,7 @@ async def test_plan_runner_generates_stable_hash(monkeypatch: pytest.MonkeyPatch
 
 @pytest.mark.asyncio
 async def test_plan_runner_ignores_requested_max_steps_in_dev(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -855,6 +874,7 @@ async def test_plan_runner_ignores_requested_max_steps_in_dev(monkeypatch: pytes
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "organize",
             "context": {
                 "rootFolderId": "root",
@@ -895,7 +915,7 @@ async def test_plan_runner_ignores_requested_max_steps_in_dev(monkeypatch: pytes
 
 @pytest.mark.asyncio
 async def test_plan_runner_commits_after_upsert(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -910,6 +930,7 @@ async def test_plan_runner_commits_after_upsert(monkeypatch: pytest.MonkeyPatch)
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "organize",
             "context": {
                 "rootFolderId": "root",
@@ -940,7 +961,7 @@ async def test_plan_runner_commits_after_upsert(monkeypatch: pytest.MonkeyPatch)
 
 @pytest.mark.asyncio
 async def test_plan_runner_rolls_back_when_commit_fails(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -955,6 +976,7 @@ async def test_plan_runner_rolls_back_when_commit_fails(monkeypatch: pytest.Monk
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "organize",
             "context": {
                 "rootFolderId": "root",
@@ -989,7 +1011,7 @@ async def test_plan_runner_rolls_back_when_commit_fails(monkeypatch: pytest.Monk
 async def test_plan_runner_propagates_llm_output_errors_without_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1010,6 +1032,7 @@ async def test_plan_runner_propagates_llm_output_errors_without_fallback(
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "organize",
             "context": {
                 "rootFolderId": "root",
@@ -1039,10 +1062,65 @@ async def test_plan_runner_propagates_llm_output_errors_without_fallback(
 
 
 @pytest.mark.asyncio
+async def test_plan_runner_asks_then_replans_when_plan_is_not_executable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "rootFolderId": "root", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+    ask_mock = AsyncMock(return_value={"clarification": "Use the current folder."})
+    monkeypatch.setattr(PlanRunner, "_ask", ask_mock)
+
+    planner = AsyncMock(
+        side_effect=[
+            {"summary": "not executable"},
+            {"summary": "ok", "proposedActions": []},
+        ]
+    )
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=planner),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "chatSessionId": "1",
+            "input": "organize",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+        }
+    )
+    job = BackgroundJob(
+        job_id=331,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    result = await runner.run(db=DummyDb(), job=job)  # type: ignore[arg-type]
+
+    assert result.summary == "ok"
+    assert planner.await_count == 2
+    ask_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_plan_runner_uses_planner_returned_count_action_for_movie_question(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1068,6 +1146,7 @@ async def test_plan_runner_uses_planner_returned_count_action_for_movie_question
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "我上传了多少部电影？",
             "context": {
                 "rootFolderId": "root",
@@ -1102,7 +1181,7 @@ async def test_plan_runner_uses_planner_returned_count_action_for_movie_question
 async def test_plan_runner_uses_planner_returned_count_action_for_anime_question(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1128,6 +1207,7 @@ async def test_plan_runner_uses_planner_returned_count_action_for_anime_question
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "我上传了多少动漫？",
             "context": {
                 "rootFolderId": "root",
@@ -1163,7 +1243,7 @@ async def test_plan_runner_uses_planner_returned_count_action_for_anime_question
 async def test_plan_runner_delegates_count_question_with_search_term_to_planner(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1194,6 +1274,7 @@ async def test_plan_runner_delegates_count_question_with_search_term_to_planner(
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "我上传了几部银翼杀手？",
             "context": {
                 "rootFolderId": "root",
@@ -1231,7 +1312,7 @@ async def test_plan_runner_delegates_count_question_with_search_term_to_planner(
 async def test_plan_runner_blocks_write_tool_in_exploratory_loop_and_continues(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1273,6 +1354,7 @@ async def test_plan_runner_blocks_write_tool_in_exploratory_loop_and_continues(
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "整理文件",
             "context": {
                 "rootFolderId": "root",
@@ -1306,7 +1388,7 @@ async def test_plan_runner_blocks_write_tool_in_exploratory_loop_and_continues(
 async def test_plan_runner_passes_only_read_tools_to_planner_tool_use(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1328,6 +1410,7 @@ async def test_plan_runner_passes_only_read_tools_to_planner_tool_use(
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "整理当前文件夹",
             "context": {
                 "rootFolderId": "root",
@@ -1364,7 +1447,7 @@ async def test_plan_runner_passes_only_read_tools_to_planner_tool_use(
 async def test_plan_runner_uses_planner_returned_move_action_when_unique_matches(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1389,6 +1472,7 @@ async def test_plan_runner_uses_planner_returned_move_action_when_unique_matches
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "把银翼杀手电影放到银翼杀手文件夹下",
             "context": {
                 "rootFolderId": "root",
@@ -1425,7 +1509,7 @@ async def test_plan_runner_uses_planner_returned_move_action_when_unique_matches
 async def test_plan_runner_uses_planner_returned_create_then_move_when_target_missing(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1455,6 +1539,7 @@ async def test_plan_runner_uses_planner_returned_create_then_move_when_target_mi
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "把银翼杀手电影放到银翼杀手文件夹下",
             "context": {
                 "rootFolderId": "root",
@@ -1491,7 +1576,7 @@ async def test_plan_runner_uses_planner_returned_create_then_move_when_target_mi
 async def test_plan_runner_rewrites_write_summary_with_grounded_facts(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1526,6 +1611,7 @@ async def test_plan_runner_rewrites_write_summary_with_grounded_facts(
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "把银翼杀手两部，移到银翼杀手文件夹里",
             "context": {
                 "rootFolderId": "root",
@@ -1569,7 +1655,7 @@ async def test_plan_runner_rewrites_write_summary_with_grounded_facts(
 async def test_plan_runner_records_planning_evidence_from_read_tools(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1621,6 +1707,7 @@ async def test_plan_runner_records_planning_evidence_from_read_tools(
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "找出银翼杀手视频文件",
             "context": {
                 "rootFolderId": "root",
@@ -1660,7 +1747,7 @@ async def test_plan_runner_records_planning_evidence_from_read_tools(
 async def test_plan_runner_uses_planner_returned_read_only_candidates_when_ambiguous(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(plan_module, "_choose_skill", AsyncMock(return_value=None))
+    monkeypatch.setattr(plan_module, "_candidate_skills", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         plan_module,
         "_collect_context_metadata",
@@ -1685,6 +1772,7 @@ async def test_plan_runner_uses_planner_returned_read_only_candidates_when_ambig
     )
     request = PlanAgentRequest.model_validate(
         {
+            "chatSessionId": "1",
             "input": "把银翼杀手电影放到银翼杀手文件夹下",
             "context": {
                 "rootFolderId": "root",
@@ -1714,6 +1802,76 @@ async def test_plan_runner_uses_planner_returned_read_only_candidates_when_ambig
     assert action.tool == "drive.searchFiles"
     assert action.side_effect == "read"
     assert "ambiguous" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_plan_runner_injects_skill_menu_and_use_skill_tool(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    fake_candidate = SimpleNamespace(
+        skill_key="organizeByType",
+        name="Organize by Type",
+        description="Organize files by type",
+        triggers_text="organize",
+        tool_whitelist_json=["drive.listFolder", "drive.moveFile"],
+        plan_template_json={},
+        search_text="organize",
+    )
+    monkeypatch.setattr(
+        plan_module, "_candidate_skills", AsyncMock(return_value=[fake_candidate])
+    )
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "rootFolderId": "root", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+
+    captured: dict[str, Any] = {}
+
+    async def fake_create_plan(**kwargs):  # noqa: ANN003
+        captured["tools"] = kwargs.get("tools")
+        captured["system_prompt"] = kwargs.get("system_prompt")
+        return {"summary": "ok", "proposedActions": []}
+
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=fake_create_plan),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "chatSessionId": "1",
+            "input": "organize my files",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+            "executionPolicy": "confirm",
+        }
+    )
+    job = BackgroundJob(
+        job_id=360,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    await runner.run(db=DummyDb(), job=job)  # type: ignore[arg-type]
+
+    tools = captured["tools"]
+    assert tools is not None
+    tool_names = [t["name"] for t in tools]
+    assert "agent_use_skill" in tool_names  # provider name for agent.useSkill
+    system_prompt = captured["system_prompt"]
+    assert "Available skills" in system_prompt
+    assert "organizeByType" in system_prompt
 
 
 def test_normalize_actions_rejects_symbolic_placeholder_target_folder():
@@ -1972,6 +2130,7 @@ async def test_execute_runner_normalizes_tool_output_before_action_log(monkeypat
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "500",
             "planHash": "sha256:test",
             "approval": {
@@ -2053,6 +2212,7 @@ async def test_execute_runner_propagates_answer_model_errors(monkeypatch: pytest
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "510",
             "planHash": "sha256:test",
             "approval": {
@@ -2136,6 +2296,7 @@ async def test_execute_runner_returns_count_files_answer(monkeypatch: pytest.Mon
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "501",
             "planHash": "sha256:test",
             "approval": {
@@ -2220,6 +2381,7 @@ async def test_execute_runner_returns_count_files_answer_with_search_term(
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "502",
             "planHash": "sha256:test",
             "approval": {
@@ -2313,6 +2475,7 @@ async def test_execute_runner_returns_count_files_answer_with_names_when_asked(
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "504",
             "planHash": "sha256:test",
             "approval": {
@@ -2404,6 +2567,7 @@ async def test_execute_runner_lists_archive_names_for_read_only_archive_question
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "503",
             "planHash": "sha256:test",
             "approval": {
@@ -2518,6 +2682,7 @@ async def test_execute_runner_returns_search_files_candidate_answer(
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "505",
             "planHash": "sha256:test",
             "approval": {
@@ -2629,6 +2794,7 @@ def _execute_job_for_controls() -> BackgroundJob:
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "500",
             "planHash": "sha256:test",
             "approval": {
