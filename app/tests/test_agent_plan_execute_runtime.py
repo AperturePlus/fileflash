@@ -2957,3 +2957,130 @@ async def test_execute_runner_publish_tool_ignores_event_bus_failures():
     )
 
     assert bus.publish.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_denies_readfile_when_data_policy_disables_content(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    started = datetime.now(UTC)
+    job = BackgroundJob(
+        job_id=630,
+        task_type="agent.execute",
+        status="running",
+        payload={
+            "chatSessionId": "1",
+            "planJobId": "520",
+            "planHash": "sha256:test",
+            "approval": {
+                "confirmedBy": "7",
+                "confirmedAt": started.isoformat(),
+                "highRiskConfirmed": False,
+            },
+        },
+        result={},
+        requested_by=7,
+        scheduled_at=started,
+        created_at=started,
+        updated_at=started,
+    )
+    action = {
+        "step": 1,
+        "tool": "drive.readFile",
+        "input": {"fileId": "1", "maxBytes": 1024},
+        "sideEffect": "read",
+        "riskLevel": "low",
+        "requiresConfirmation": False,
+    }
+    plan = SimpleNamespace(
+        proposed_actions_json=[action],
+        execution_policy="confirm",
+        data_policy_json={"allowFileContent": False, "maxReadBytes": 1024, "allowedMimeTypes": ["*/*"]},
+        chosen_skill_id=None,
+        input_text="read the file",
+        context_json={},
+    )
+    db = DummyDb()
+    db.refresh = AsyncMock()
+
+    monkeypatch.setattr(
+        execute_module,
+        "AgentPlanRepository",
+        lambda _db: SimpleNamespace(
+            get_for_execute_binding=AsyncMock(return_value=plan)
+        ),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "AgentWorkSessionRepository",
+        lambda _db: SimpleNamespace(
+            create_for_job=AsyncMock(return_value=None),
+            close_session=AsyncMock(return_value=None),
+        ),
+    )
+    captured_steps: list[dict[str, object]] = []
+
+    def _capture_append(**kwargs):  # noqa: ANN003
+        captured_steps.append({"phase": "append", **kwargs})
+        return None
+
+    def _capture_finish(**kwargs):  # noqa: ANN003
+        captured_steps.append({"phase": "finish", **kwargs})
+        return None
+
+    monkeypatch.setattr(
+        execute_module,
+        "AgentActionLogRepository",
+        lambda _db: SimpleNamespace(
+            append_step=AsyncMock(side_effect=_capture_append),
+            finish_step=AsyncMock(side_effect=_capture_finish),
+        ),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "AgentSettingsRepository",
+        lambda _db: SimpleNamespace(get_by_user_id=AsyncMock(return_value=None)),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "AgentSkillRepository",
+        lambda _db: SimpleNamespace(get_by_key=AsyncMock(return_value=None)),
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "ToolRouter",
+        lambda **kwargs: SimpleNamespace(dispatch=AsyncMock(return_value={"content": "secret"})),
+    )
+    bus = _CaptureBus()
+
+    result = await ExecuteRunner(
+        event_bus=bus,
+        answer_client=SimpleNamespace(create_answer=AsyncMock(return_value="ok")),  # type: ignore[arg-type]
+    ).run(db=db, job=job)  # type: ignore[arg-type]
+
+    # Job did NOT fail: it completed with 0 applied and 1 skipped (denied) action.
+    assert result.applied_actions == 0
+    assert result.skipped_actions == 1
+    assert any("denied by policy" in w for w in result.warnings)
+
+    # ActionLog: append_step + finish_step both called with status="denied".
+    finish_calls = [c for c in captured_steps if c["phase"] == "finish"]
+    assert len(finish_calls) == 1
+    assert finish_calls[0]["status"] == "denied"
+    assert finish_calls[0]["step_no"] == 1
+    append_calls = [c for c in captured_steps if c["phase"] == "append"]
+    assert len(append_calls) == 1
+    assert append_calls[0]["status"] == "denied"
+
+    # tool.failed event published with denied: True.
+    failed_events = [e for e in bus.events if e.event_type == "tool.failed"]
+    assert len(failed_events) == 1
+    assert failed_events[0].payload["denied"] is True
+    assert failed_events[0].payload["tool"] == "drive.readFile"
+    assert "File content access disabled by dataPolicy." in failed_events[0].payload["reasons"]
+
+    # The tool dispatch was never called (denied before dispatch).
+    # ToolRouter is constructed once; verify dispatch not awaited by checking no
+    # tool.succeeded event exists.
+    succeeded_events = [e for e in bus.events if e.event_type == "tool.succeeded"]
+    assert succeeded_events == []

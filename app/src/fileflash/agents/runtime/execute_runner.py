@@ -17,13 +17,26 @@ from ...repositories import (
     AgentActionLogRepository,
     AgentInboxMessageRepository,
     AgentPlanRepository,
+    AgentSettingsRepository,
+    AgentSkillRepository,
     AgentWorkSessionRepository,
 )
-from ...schemas.agent import AgentExecutionResult, AgentProposedAction, ExecuteAgentRequest
+from ...schemas.agent import (
+    AgentDataPolicy,
+    AgentExecutionResult,
+    AgentProposedAction,
+    ExecuteAgentRequest,
+    PlanAgentRequest,
+)
 from ..harness.ask import AskProtocol
 from ..harness.event_bus import AgentEventBus, AgentEventEnvelope
+from ..harness.permission import (
+    PermissionResolver,
+    _apply_setting_defaults,
+)
 from ..harness.policy import PolicyGuard
 from ..harness.router import ToolCall, ToolRouter
+from ..harness.tool_registry import ToolContext
 from .llm import AnswerClient, AnthropicPlannerClient
 from .reference_rules import is_symbolic_id_placeholder, parse_step_reference
 
@@ -85,6 +98,32 @@ class ExecuteRunner:
             for item in (plan.proposed_actions_json or [])
         ]
         high_risk_confirmed = bool(request.approval.high_risk_confirmed)
+        # Build the effective permission from the plan row (execution_policy +
+        # data_policy_json) merged with the user's setting defaults (取最严).
+        setting = await AgentSettingsRepository(db).get_by_user_id(int(job.requested_by))
+        base_request = PlanAgentRequest.model_validate(
+            {
+                "chatSessionId": request.chat_session_id,
+                "input": str(getattr(plan, "input_text", "") or "") or "-",
+                "context": {"rootFolderId": "root"},
+                "executionPolicy": getattr(plan, "execution_policy", "confirm") or "confirm",
+                "dataPolicy": AgentDataPolicy.model_validate(
+                    getattr(plan, "data_policy_json", None) or {}
+                ).model_dump(by_alias=True, mode="json"),
+            }
+        )
+        base_request = _apply_setting_defaults(base_request, setting)
+        skill = None
+        if getattr(plan, "chosen_skill_id", None):
+            skill = await AgentSkillRepository(db).get_by_key(
+                skill_key=str(plan.chosen_skill_id), user_id=int(job.requested_by)
+            )
+        permission = await PermissionResolver().effective(
+            request=base_request,
+            setting=setting,
+            skill=skill,
+            high_risk_confirmed=high_risk_confirmed,
+        )
         router = ToolRouter(db=db, user_id=int(job.requested_by))
         action_logs = AgentActionLogRepository(db)
         step_outputs: dict[int, dict[str, Any]] = {}
@@ -115,17 +154,47 @@ class ExecuteRunner:
                 if skip_current:
                     continue
 
-            decision = await self.policy_guard.evaluate_tool_call(
-                tool_name=action.tool,
-                high_risk_confirmed=high_risk_confirmed,
+            decision = await self.policy_guard.evaluate(
+                ctx=ToolContext(
+                    db=db,
+                    user_id=int(job.requested_by),
+                    file_service=None,
+                    folder_service=None,
+                ),
+                action=action,
+                permission=permission,
+                phase="executing",
             )
             if not decision.allowed:
-                raise ApiError(
-                    status_code=409,
-                    code=409,
-                    message="High-risk action requires confirmation",
-                    data={"reasons": decision.reasons, "step": action.step, "tool": action.tool},
+                denied_started = datetime.now(UTC)
+                await action_logs.append_step(
+                    job_id=int(job.job_id),
+                    step_no=action.step,
+                    tool_name=action.tool,
+                    inputs_json=action.input,
+                    status="denied",
+                    started_at=denied_started,
                 )
+                await action_logs.finish_step(
+                    job_id=int(job.job_id),
+                    step_no=action.step,
+                    outputs_json={},
+                    status="denied",
+                    duration_ms=0,
+                    error_message="; ".join(decision.reasons)[:2000],
+                )
+                await db.commit()
+                await self._publish_tool(
+                    "tool.failed",
+                    job_id=int(job.job_id),
+                    step=action.step,
+                    tool=action.tool,
+                    payload={"denied": True, "reasons": decision.reasons},
+                )
+                warnings.append(
+                    f"Step {action.step} denied by policy: {'; '.join(decision.reasons)}"
+                )
+                continue
 
             started = datetime.now(UTC)
             try:
@@ -272,9 +341,22 @@ class ExecuteRunner:
                     await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
                     await self._publish_state("agent.resumed", job_id=int(job.job_id))
                 elif kind == AgentInboxKind.CONTROL_SKIP:
+                    if _control_step(ctrl) != action.step:
+                        continue
                     await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
                     warnings.append(f"Step {action.step} skipped by user")
                     skip_current = True
+                elif kind == AgentInboxKind.CONTROL_DENY:
+                    if _control_step(ctrl) != action.step:
+                        continue
+                    await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
+                    reason = _control_reason(ctrl) or "denied by user"
+                    warnings.append(f"Step {action.step} denied by user: {reason}")
+                    skip_current = True
+                elif kind == AgentInboxKind.CONTROL_APPROVE:
+                    if _control_step(ctrl) != action.step:
+                        continue
+                    await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
                 else:
                     await inbox_repo.mark_dropped(inbox_message_id=int(ctrl.inbox_message_id))
             await db.commit()
@@ -342,6 +424,29 @@ def _parse_job_id(raw: str) -> int:
     if value <= 0:
         raise ApiError(status_code=400, code=400, message="Invalid planJobId")
     return value
+
+
+def _control_metadata(ctrl: Any) -> dict[str, Any]:
+    payload = getattr(ctrl, "payload_json", None)
+    if not isinstance(payload, dict):
+        return {}
+    metadata = payload.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _control_step(ctrl: Any) -> int | None:
+    try:
+        value = int(_control_metadata(ctrl).get("step"))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _control_reason(ctrl: Any) -> str | None:
+    value = _control_metadata(ctrl).get("reason")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _resolve_references(
