@@ -80,3 +80,142 @@ async def test_effective_mime_intersection_empty_denies_content():
     )
     assert perm.data_policy.allowed_mime_types == []
     assert perm.deny_read_content is True
+
+
+# ---------------------------------------------------------------------------
+# Task 2: PolicyGuard.evaluate — single permission choke point
+# ---------------------------------------------------------------------------
+
+from datetime import datetime  # noqa: E402
+from unittest.mock import AsyncMock  # noqa: E402
+
+from fileflash.agents.harness.policy import PolicyGuard, PolicyDecision  # noqa: E402
+from fileflash.agents.harness.tool_registry import ToolContext  # noqa: E402
+from fileflash.schemas.agent import AgentProposedAction  # noqa: E402
+
+REGISTRY_NAMES = __import__(
+    "fileflash.agents.harness.tool_registry", fromlist=["REGISTRY"]
+).REGISTRY.all_names()
+
+
+def _ctx_with_mime(mime: str = "text/plain") -> ToolContext:
+    db = AsyncMock()
+    db.scalar = AsyncMock(
+        return_value=type(
+            "F",
+            (),
+            {"mime_type": mime, "file_ext": None, "file_name": "x.txt"},
+        )()
+    )
+    return ToolContext(
+        db=db, user_id=1, file_service=None, folder_service=None, storage_reader=None
+    )
+
+
+def _perm(
+    *,
+    allowed_tools=None,
+    deny_read=False,
+    allow_content=True,
+    mimes=None,
+    high_risk=False,
+    policy="confirm",
+):
+    from fileflash.agents.harness.permission import EffectivePermission
+    from fileflash.schemas.agent import AgentDataPolicy
+
+    return EffectivePermission(
+        execution_policy=policy,
+        data_policy=AgentDataPolicy(
+            allow_file_content=allow_content,
+            max_read_bytes=1048576,
+            allowed_mime_types=mimes if mimes is not None else ["*/*"],
+        ),
+        allowed_tools=frozenset(allowed_tools) if allowed_tools else frozenset(REGISTRY_NAMES),
+        skill_key=None,
+        deny_read_content=deny_read,
+        high_risk_confirmed=high_risk,
+    )
+
+
+@pytest.mark.asyncio
+async def test_evaluate_unknown_tool_denied():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(step=1, tool="drive.noSuch", input={}, side_effect="read"),
+        permission=_perm(),
+        phase="executing",
+    )
+    assert decision.allowed is False
+    assert any("unknown" in r.lower() or "unsupported" in r.lower() for r in decision.reasons)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_tool_not_in_whitelist_denied():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(step=1, tool="drive.deleteFile", input={"fileId": "1"}, side_effect="write"),
+        permission=_perm(allowed_tools=["drive.listFolder"]),
+        phase="executing",
+    )
+    assert decision.allowed is False
+    assert any("skill" in r.lower() or "permitted" in r.lower() for r in decision.reasons)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_readfile_blocked_when_content_disabled():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(step=1, tool="drive.readFile", input={"fileId": "1"}, side_effect="read"),
+        permission=_perm(deny_read=True, allowed_tools=["drive.readFile"]),
+        phase="executing",
+    )
+    assert decision.allowed is False
+    assert any("content" in r.lower() for r in decision.reasons)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_readfile_mime_not_allowed_denied():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(mime="application/pdf"),
+        action=AgentProposedAction(step=1, tool="drive.readFile", input={"fileId": "1"}, side_effect="read"),
+        permission=_perm(allowed_tools=["drive.readFile"], mimes=["text/*"]),
+        phase="executing",
+    )
+    assert decision.allowed is False
+    assert any("mime" in r.lower() for r in decision.reasons)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_high_risk_without_confirmation_denied():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(step=1, tool="drive.deleteFile", input={"fileId": "1"}, side_effect="write", risk_level="high"),
+        permission=_perm(allowed_tools=["drive.deleteFile"], high_risk=False),
+        phase="executing",
+    )
+    assert decision.allowed is False
+    assert any("confirmation" in r.lower() for r in decision.reasons)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_planonly_executing_denied():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(step=1, tool="drive.createFolder", input={"name": "x"}, side_effect="write", risk_level="medium"),
+        permission=_perm(allowed_tools=["drive.createFolder"], policy="planOnly"),
+        phase="executing",
+    )
+    assert decision.allowed is False
+    assert any("planonly" in r.lower() for r in decision.reasons)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_allowed_read_tool_passes():
+    decision = await PolicyGuard().evaluate(
+        ctx=_ctx_with_mime(),
+        action=AgentProposedAction(step=1, tool="drive.listFolder", input={"folderId": "root"}, side_effect="read"),
+        permission=_perm(allowed_tools=["drive.listFolder"]),
+        phase="executing",
+    )
+    assert decision.allowed is True

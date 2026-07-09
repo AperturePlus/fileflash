@@ -332,6 +332,10 @@ async def _find_duplicates(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
     }
 
 
+async def _read_file(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    raise NotImplementedError("drive.readFile handler is implemented in Task 3")
+
+
 def _active_files_query(ctx: ToolContext, *, folder_ids: list[int] | None):
     statement = select(File).where(
         and_(
@@ -872,6 +876,25 @@ REGISTRY.register(
         risk_level="low",
         requires_confirmation=False,
         handler=_find_duplicates,
+    )
+)
+
+REGISTRY.register(
+    ToolSpec(
+        name="drive.readFile",
+        description="Read a range of bytes from a file's content.",
+        input_schema=_schema(
+            {
+                "fileId": _FILE_ID,
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
+                "maxBytes": {"type": "integer", "minimum": 1, "maximum": 1048576, "default": 262144},
+            },
+            required=["fileId"],
+        ),
+        side_effect="read",
+        risk_level="low",
+        requires_confirmation=False,
+        handler=_read_file,
     )
 )
 
