@@ -436,7 +436,7 @@ class ToolContext:
 
 - [ ] **Step 4: Rewrite `PolicyGuard` in `policy.py`**
 
-Replace the `PolicyGuard` class body in `app/src/fileflash/agents/harness/policy.py` (keep `PolicyDecision`, `classify_tool_*`, `normalize_action_risk`):
+Replace the entire contents of `app/src/fileflash/agents/harness/policy.py` with the following (this keeps `PolicyDecision`, `classify_tool_risk`, `classify_tool_side_effect`, `normalize_action_risk` and replaces the old `PolicyGuard.evaluate_tool_call` with the new async `evaluate`):
 
 ```python
 from __future__ import annotations
@@ -445,10 +445,13 @@ import fnmatch
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from ...core.errors import ApiError
-from ...models import File
-from ...schemas.agent import AgentProposedAction
 from sqlalchemy import and_, select
+
+from ...core.errors import ApiError
+from ...core.mime import resolve_file_mime_type
+from ...models import File
+from ...models.enums import FileStatus
+from ...schemas.agent import AgentProposedAction
 from .permission import EffectivePermission
 from .tool_registry import REGISTRY, ToolContext
 
@@ -460,6 +463,38 @@ _Phase = Literal["planning", "executing"]
 class PolicyDecision:
     allowed: bool
     reasons: list[str] = field(default_factory=list)
+
+
+def classify_tool_side_effect(tool_name: str) -> str:
+    try:
+        return REGISTRY.get(tool_name).side_effect
+    except KeyError:
+        return "write"
+
+
+def classify_tool_risk(tool_name: str) -> str:
+    try:
+        return REGISTRY.get(tool_name).risk_level
+    except KeyError:
+        return "high"
+
+
+def normalize_action_risk(action: AgentProposedAction) -> AgentProposedAction:
+    risk_level = classify_tool_risk(action.tool)
+    requires_confirmation = action.requires_confirmation or risk_level == "high"
+    reason = action.confirmation_reason
+    if risk_level == "high" and not reason:
+        reason = (
+            "Deleting files or folders is a high-risk action and requires explicit confirmation."
+        )
+    return action.model_copy(
+        update={
+            "side_effect": classify_tool_side_effect(action.tool),
+            "risk_level": risk_level,
+            "requires_confirmation": requires_confirmation,
+            "confirmation_reason": reason,
+        }
+    )
 
 
 class PolicyGuard:
@@ -484,7 +519,9 @@ class PolicyGuard:
                 reasons=[f"Tool not permitted by active skill/policy: {action.tool}"],
             )
         if spec.side_effect == "read" and action.tool in _CONTENT_READ_TOOLS:
-            decision = self._check_content_read(ctx=ctx, action=action, permission=permission)
+            decision = await self._check_content_read(
+                ctx=ctx, action=action, permission=permission
+            )
             if decision is not None:
                 return decision
         if spec.risk_level == "high" and not permission.high_risk_confirmed:
@@ -499,101 +536,6 @@ class PolicyGuard:
             )
         return PolicyDecision(allowed=True)
 
-    def _check_content_read(
-        self,
-        *,
-        ctx: ToolContext,
-        action: AgentProposedAction,
-        permission: EffectivePermission,
-    ) -> PolicyDecision | None:
-        if permission.deny_read_content:
-            return PolicyDecision(
-                allowed=False,
-                reasons=["File content access disabled by dataPolicy."],
-            )
-        max_bytes = self._byte_range(action.input)
-        if max_bytes > permission.data_policy.max_read_bytes:
-            return PolicyDecision(
-                allowed=False,
-                reasons=[
-                    f"Requested bytes ({max_bytes}) exceed max_read_bytes "
-                    f"({permission.data_policy.max_read_bytes})."
-                ],
-            )
-        mime = _resolve_target_mime(ctx=ctx, action=action)
-        if mime is not None and not _mime_allowed(mime, permission.data_policy.allowed_mime_types):
-            return PolicyDecision(
-                allowed=False,
-                reasons=[f"File mime '{mime}' not in allowed_mime_types."],
-            )
-        return None
-
-    def _byte_range(self, action_input: dict[str, Any]) -> int:
-        max_bytes = int(action_input.get("maxBytes", 262144) or 262144)
-        offset = int(action_input.get("offset", 0) or 0)
-        return max_bytes + offset
-
-
-def _mime_allowed(mime: str, allowed: list[str]) -> bool:
-    lowered = mime.lower()
-    for pattern in allowed:
-        if fnmatch.fnmatch(lowered, pattern.lower()):
-            return True
-    return False
-
-
-def _resolve_target_mime(*, ctx: ToolContext, action: AgentProposedAction) -> str | None:
-    file_id = action.input.get("fileId") or action.input.get("id")
-    if file_id is None:
-        return None
-    try:
-        parsed = int(str(file_id))
-    except (TypeError, ValueError):
-        return None
-    from ...models.enums import FileStatus
-
-    row = ctx.db.scalar_result if hasattr(ctx.db, "scalar_result") else None  # placeholder
-    # Use a synchronous-style lookup via the db session's cached value set by tests,
-    # or fall back to a query. For production, query here:
-    import asyncio
-
-    async def _query() -> str | None:
-        row = await ctx.db.scalar(
-            select(File).where(
-                and_(
-                    File.file_id == parsed,
-                    File.owner_id == ctx.user_id,
-                    File.status == FileStatus.ACTIVE,
-                )
-            )
-        )
-        if row is None:
-            return None
-        from ...core.mime import resolve_file_mime_type
-        return resolve_file_mime_type(
-            mime_type=row.mime_type,
-            file_ext=row.file_ext,
-            file_name=row.file_name,
-        )
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return None
-    # We are already async (evaluate is awaited); query directly:
-    coro = _query()
-    # Evaluate synchronously is not possible; instead cache on ctx via attribute.
-    # See Step 5 note: tests mock ctx.db.scalar; production awaits the query.
-    return _await_or_cached(ctx, coro, parsed)
-```
-
-> **Note on the mime lookup:** `evaluate` is `async`, so we can `await` the DB query directly. The test mock sets `ctx.db.scalar` to an `AsyncMock` returning a fake row. To keep both production and test paths working, replace the `_resolve_target_mime` tail (the `_await_or_cached` line) with a direct await inside an `async` version. Because `_check_content_read` is called from the async `evaluate`, make `_check_content_read` async and `await` the query there. See Step 5 for the corrected async form.
-
-- [ ] **Step 5: Correct `_check_content_read` to be async and await the mime query**
-
-Replace the `_check_content_read` method and `_resolve_target_mime` with the async form:
-
-```python
     async def _check_content_read(
         self,
         *,
@@ -616,27 +558,29 @@ Replace the `_check_content_read` method and `_resolve_target_mime` with the asy
                 ],
             )
         mime = await _resolve_target_mime(ctx=ctx, action=action)
-        if mime is not None and not _mime_allowed(mime, permission.data_policy.allowed_mime_types):
+        if mime is not None and not _mime_allowed(
+            mime, permission.data_policy.allowed_mime_types
+        ):
             return PolicyDecision(
                 allowed=False,
                 reasons=[f"File mime '{mime}' not in allowed_mime_types."],
             )
         return None
-```
 
-And update the caller in `evaluate`:
+    def _byte_range(self, action_input: dict[str, Any]) -> int:
+        max_bytes = int(action_input.get("maxBytes", 262144) or 262144)
+        offset = int(action_input.get("offset", 0) or 0)
+        return max_bytes + offset
 
-```python
-        if spec.side_effect == "read" and action.tool in _CONTENT_READ_TOOLS:
-            decision = await self._check_content_read(ctx=ctx, action=action, permission=permission)
-            if decision is not None:
-                return decision
-```
 
-And replace the `_resolve_target_mime` function with:
+def _mime_allowed(mime: str, allowed: list[str]) -> bool:
+    lowered = mime.lower()
+    return any(fnmatch.fnmatch(lowered, pattern.lower()) for pattern in allowed)
 
-```python
-async def _resolve_target_mime(*, ctx: ToolContext, action: AgentProposedAction) -> str | None:
+
+async def _resolve_target_mime(
+    *, ctx: ToolContext, action: AgentProposedAction
+) -> str | None:
     file_id = action.input.get("fileId") or action.input.get("id")
     if file_id is None:
         return None
@@ -644,9 +588,6 @@ async def _resolve_target_mime(*, ctx: ToolContext, action: AgentProposedAction)
         parsed = int(str(file_id))
     except (TypeError, ValueError):
         return None
-    from ...core.mime import resolve_file_mime_type
-    from ...models.enums import FileStatus
-
     row = await ctx.db.scalar(
         select(File).where(
             and_(
@@ -663,16 +604,23 @@ async def _resolve_target_mime(*, ctx: ToolContext, action: AgentProposedAction)
         file_ext=row.file_ext,
         file_name=row.file_name,
     )
+
+
+__all__ = [
+    "PolicyDecision",
+    "PolicyGuard",
+    "classify_tool_risk",
+    "classify_tool_side_effect",
+    "normalize_action_risk",
+]
 ```
 
-Remove the now-dead `_await_or_cached` helper and the synchronous `_query` scaffolding from Step 4. Keep `classify_tool_risk`, `classify_tool_side_effect`, `normalize_action_risk` unchanged. Remove the old `evaluate_tool_call` method.
-
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd app && python -m pytest tests/test_agent_permission.py -v`
 Expected: PASS (all 11 tests — 4 resolver + 7 evaluate)
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add app/src/fileflash/agents/harness/policy.py app/src/fileflash/agents/harness/tool_registry.py app/tests/test_agent_permission.py
@@ -1159,34 +1107,6 @@ async def test_bind_skill_narrows_allowed_tools(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_bind_skill_unknown_key_returns_error():
-    repo = MagicMock()
-    repo.get_by_key = AsyncMock(return_value=None)
-    db = AsyncMock()
-    import fileflash.agents.runtime.plan_runner as plan_module
-    monkeypatch_setattr = pytest.MonkeyPatch()
-    import fileflash.agents.runtime.plan_runner as plan_module
-    monkeypatch_setattr.setattr(plan_module, "AgentSkillRepository", lambda d: repo)
-    base_perm = await PermissionResolver().effective(
-        request=_request(), setting=None, skill=None, high_risk_confirmed=False
-    )
-    _, payload = await bind_skill_in_planner(
-        db=db,
-        user_id=1,
-        skill_key="nope",
-        candidates=[],
-        request=_request(),
-        setting=None,
-        current_permission=base_perm,
-    )
-    assert payload["bound"] is False
-    assert "unknown" in payload["message"].lower() or "not found" in payload["message"].lower()
-```
-
-> Fix the duplicated `import`/`monkeypatch_setattr` typo in `test_bind_skill_unknown_key_returns_error` — write it cleanly as:
-
-```python
-@pytest.mark.asyncio
 async def test_bind_skill_unknown_key_returns_error(monkeypatch):
     repo = MagicMock()
     repo.get_by_key = AsyncMock(return_value=None)
@@ -1402,18 +1322,17 @@ from ...repositories import AgentSettingsRepository
             prefer_skill_id=request.hints.prefer_skill_id,
             k=self.settings.agent_skill_candidate_k,
         )
+        # If a preferred skill is forced via hint, bind it now; otherwise start
+        # unbound (full registry, read-only exploration) and let the LLM bind via
+        # agent.useSkill during planning.
+        forced_skill = candidates[0] if (request.hints.prefer_skill_id and candidates) else None
         permission = await PermissionResolver().effective(
             request=request,
             setting=setting,
-            skill=candidates[0] if (request.hints.prefer_skill_id and candidates) else None,
+            skill=forced_skill,
             high_risk_confirmed=False,
         )
-        # If a preferred skill is forced, it's already bound above; else start unbound.
-        if not (request.hints.prefer_skill_id and candidates):
-            permission = await PermissionResolver().effective(
-                request=request, setting=setting, skill=None, high_risk_confirmed=False
-            )
-        skill = candidates[0] if (request.hints.prefer_skill_id and candidates) else None
+        skill = forced_skill
         allowed_tools = tuple(sorted(permission.allowed_tools))
         allowed_tool_set = set(allowed_tools)
         exploration_tools = tuple(
