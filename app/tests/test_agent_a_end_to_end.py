@@ -31,6 +31,7 @@ def _execute_job() -> BackgroundJob:
         task_type="agent.execute",
         status="running",
         payload={
+            "chatSessionId": "1",
             "planJobId": "500",
             "planHash": "sha256:test",
             "approval": {

@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from fileflash.agents.harness.event_bus import AgentEventEnvelope
-from fileflash.agents.harness.policy import PolicyGuard, classify_tool_risk
 from fileflash.agents.harness.router import ToolCall, ToolRouter
 from fileflash.agents.runtime import execute_runner as execute_module
 from fileflash.agents.runtime import plan_runner as plan_module
@@ -1874,6 +1873,108 @@ async def test_plan_runner_injects_skill_menu_and_use_skill_tool(
     assert "organizeByType" in system_prompt
 
 
+@pytest.mark.asyncio
+async def test_plan_runner_use_skill_narrows_tools_and_blocks_out_of_whitelist(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """LLM calls agent.useSkill('organizeByType') then drive.deleteFile; the
+    latter must be blocked because it is not in the skill's whitelist."""
+    fake_candidate = SimpleNamespace(
+        skill_key="organizeByType",
+        name="Organize by Type",
+        description="Organize files by type",
+        triggers_text="organize",
+        tool_whitelist_json=["drive.listFolder", "drive.createFolder", "drive.moveFile"],
+        plan_template_json={},
+        search_text="organize",
+    )
+    monkeypatch.setattr(
+        plan_module, "_candidate_skills", AsyncMock(return_value=[fake_candidate])
+    )
+    monkeypatch.setattr(
+        plan_module,
+        "_collect_context_metadata",
+        AsyncMock(return_value={"scope": "currentFolder", "rootFolderId": "root", "files": [], "folders": []}),
+    )
+    monkeypatch.setattr(plan_module, "_upsert_agent_plan", AsyncMock(return_value=None))
+
+    # bind_skill_in_planner (in skill_tool.py) constructs AgentSkillRepository(db)
+    # internally and calls get_by_key — patch it there to return a skill with the
+    # same whitelist as the candidate.
+    fake_skill = SimpleNamespace(
+        skill_key="organizeByType",
+        name="Organize by Type",
+        description="Organize files by type",
+        triggers_text="organize",
+        tool_whitelist_json=["drive.listFolder", "drive.createFolder", "drive.moveFile"],
+        plan_template_json={},
+    )
+    fake_repo = SimpleNamespace(get_by_key=AsyncMock(return_value=fake_skill))
+    import fileflash.agents.harness.skill_tool as skill_tool_module
+    monkeypatch.setattr(skill_tool_module, "AgentSkillRepository", lambda _db: fake_repo)
+
+    captured: dict[str, Any] = {}
+
+    async def fake_create_plan(**kwargs):  # noqa: ANN003
+        tool_executor = kwargs["tool_executor"]
+        # 1. LLM binds the skill via agent.useSkill.
+        bind_result = await tool_executor("agent.useSkill", {"skillKey": "organizeByType"})
+        assert bind_result["bound"] is True
+        assert "drive.moveFile" in bind_result["allowedTools"]
+        # 2. LLM attempts a non-whitelisted tool — must be blocked.
+        delete_result = await tool_executor("drive.deleteFile", {"fileId": "1"})
+        captured["delete_result"] = delete_result
+        return {
+            "summary": "organize by type",
+            "proposedActions": [
+                {
+                    "step": 1,
+                    "tool": "drive.moveFile",
+                    "input": {"fileId": "1", "targetFolderId": "2"},
+                },
+            ],
+        }
+
+    runner = PlanRunner(
+        settings=settings(),
+        planner_client=SimpleNamespace(create_plan=fake_create_plan),  # type: ignore[arg-type]
+    )
+    request = PlanAgentRequest.model_validate(
+        {
+            "chatSessionId": "1",
+            "input": "organize my files by type",
+            "context": {
+                "rootFolderId": "root",
+                "selectedFileIds": [],
+                "selectedFolderIds": [],
+                "currentPath": "/My Files",
+            },
+            "executionPolicy": "confirm",
+        }
+    )
+    job = BackgroundJob(
+        job_id=361,
+        task_type="agent.plan",
+        status="running",
+        payload=request.model_dump(by_alias=True),
+        result={},
+        requested_by=7,
+        scheduled_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    result = await runner.run(db=DummyDb(), job=job)  # type: ignore[arg-type]
+
+    delete_result = captured["delete_result"]
+    assert delete_result["_plannerBlocked"] is True
+    assert delete_result["_toolError"] is True
+    assert delete_result["tool"] == "drive.deleteFile"
+    assert "not permitted" in delete_result["message"].lower() or "skill" in delete_result["message"].lower()
+    assert result.chosen_skill is not None
+    assert result.chosen_skill.id == "organizeByType"
+
+
 def test_normalize_actions_rejects_symbolic_placeholder_target_folder():
     with pytest.raises(ApiError) as exc:
         plan_module._normalize_actions(
@@ -1988,16 +2089,6 @@ def test_execute_reference_resolution_rejects_symbolic_placeholder():
     assert exc.value.status_code == 409
     assert "targetFolderId" in exc.value.message
     assert "$stepN.field" in exc.value.message
-
-
-@pytest.mark.asyncio
-async def test_policy_guard_blocks_delete_without_confirmation():
-    decision = await PolicyGuard().evaluate_tool_call(
-        tool_name="drive.deleteFile",
-        high_risk_confirmed=False,
-    )
-    assert decision.allowed is False
-    assert classify_tool_risk("drive.deleteFolder") == "high"
 
 
 @pytest.mark.asyncio

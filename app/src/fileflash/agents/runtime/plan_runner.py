@@ -380,45 +380,6 @@ class PlanRunner:
             ) from exc
 
 
-async def _choose_skill(
-    db: AsyncSession,
-    *,
-    user_id: int,
-    task_input: str,
-    prefer_skill_id: str | None,
-) -> AgentSkill | AgentSkillCatalogEntry | None:
-    repo = AgentSkillRepository(db)
-    if prefer_skill_id:
-        skill = await repo.get_by_key(skill_key=prefer_skill_id, user_id=user_id)
-        if skill is None:
-            raise ApiError(status_code=404, code=404, message="Preferred skill not found")
-        return skill
-
-    candidates = await repo.list_visible(user_id=user_id, limit=50)
-    if not candidates:
-        return None
-
-    normalized_input = task_input.lower()
-    best: tuple[int, AgentSkillCatalogEntry] | None = None
-    for candidate in candidates:
-        haystack = (
-            f"{candidate.skill_key} {candidate.name} {candidate.description} "
-            f"{candidate.triggers_text or ''} {candidate.search_text}"
-        ).lower()
-        score = 0
-        for token in _tokens(normalized_input):
-            if token in haystack:
-                score += 2 if token in {"organize", "整理", "classify", "分类"} else 1
-        if "整理" in normalized_input and "organize" in haystack:
-            score += 4
-        if best is None or score > best[0]:
-            best = (score, candidate)
-
-    if best is not None and best[0] > 0:
-        return best[1]
-    return candidates[0]
-
-
 async def _candidate_skills(
     db: AsyncSession,
     *,
@@ -512,26 +473,6 @@ def _skill_name(skill: AgentSkill | AgentSkillCatalogEntry | None) -> str | None
     if skill is None:
         return None
     return str(skill.name)
-
-
-def _skill_tool_whitelist(skill: AgentSkill | AgentSkillCatalogEntry | None) -> tuple[str, ...]:
-    raw: Any = None
-    if isinstance(skill, AgentSkill):
-        raw = skill.tool_whitelist_json
-    elif skill is not None:
-        raw = skill.tool_whitelist_json
-    if isinstance(raw, list) and raw:
-        tools = tuple(str(item) for item in raw if str(item).strip())
-        unknown = REGISTRY.unknown_names(tools)
-        if unknown:
-            raise ApiError(
-                status_code=422,
-                code=422,
-                message="Unknown agent tool in selected skill",
-                data={"unknownTools": sorted(unknown)},
-            )
-        return tools
-    return REGISTRY.all_names()
 
 
 def _chosen_skill(skill: AgentSkill | AgentSkillCatalogEntry | None) -> AgentChosenSkill | None:
