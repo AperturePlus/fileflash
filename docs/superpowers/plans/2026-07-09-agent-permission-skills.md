@@ -30,7 +30,7 @@
 - `app/tests/test_agent_permission.py` — unit tests for `PermissionResolver` + `PolicyGuard.evaluate`.
 - `app/tests/test_agent_read_file.py` — integration tests for `drive.readFile` handler + dataPolicy gating.
 - `app/tests/test_agent_use_skill.py` — integration tests for the `useSkill` interception flow.
-- `docker/flyway/migrations/V17__agent_builtin_skills.sql` — seed 3 builtin skill rows.
+- `docker/flyway/migrations/V17__agent_builtin_skills_extra.sql` — seed 2 additional builtin skill rows (dedupScan, listAndSummarize); organizeByType already exists via V13/V15.
 
 **Modify:**
 - `app/src/fileflash/agents/harness/tool_registry.py` — add `storage_reader` to `ToolContext`.
@@ -1677,75 +1677,80 @@ git commit -m "feat(agent): enforce PolicyGuard in execute and record denied act
 
 ---
 
-## Task 8: Seed 3 builtin skills (migration) + routes test
+## Task 8: Seed 2 additional builtin skills (migration) + routes test
+
+> **Plan correction (discovered during execution):** `V13__agent_builtin_skills.sql` already seeds `builtin:organizeByType` (with a working whitelist including deleteFile/deleteFolder), and `V15__agent_tool_registry_skills.sql` updates it. Do NOT re-seed organizeByType or create a conflicting migration. This task adds ONLY the two missing skills (`builtin:dedupScan`, `builtin:listAndSummarize`), matching V13's style (`builtin:` prefix, `ON CONFLICT (skill_key) DO UPDATE`).
 
 **Files:**
-- Create: `docker/flyway/migrations/V17__agent_builtin_skills.sql`
+- Create: `docker/flyway/migrations/V17__agent_builtin_skills_extra.sql`
 - Modify: `app/tests/test_agent_routes.py` (extend)
-- Modify: `app/src/fileflash/repositories/agent/__init__.py` if `AgentSettingsRepository` export missing
 
 **Interfaces:**
-- Produces: 3 builtin skill rows (`organizeByType`, `dedupScan`, `listAndSummarize`), `visibility='global'`, `owner_user_id=NULL`.
+- Produces: 2 new builtin skill rows (`builtin:dedupScan`, `builtin:listAndSummarize`), `visibility='global'`, `owner_user_id=NULL`. Leaves `builtin:organizeByType` (V13/V15) untouched.
 - Consumes: existing `agent_skill` table columns.
 
-- [ ] **Step 1: Verify the `agent_skill` table columns**
+- [ ] **Step 1: Verify the `agent_skill` table columns and existing seeds**
 
-Run: `cd app && python -c "from fileflash.models import AgentSkill; print([c.name for c in AgentSkill.__table__.columns])"`
-Expected: a list including `skill_key, name, description, triggers_text, tool_whitelist_json, plan_template_json, inputs_schema_json, outputs_schema_json, visibility, owner_user_id`.
+Run: `cd app && python -c "from fileflash.models import AgentSkill; from fileflash.models.enums import AgentSkillVisibility; print([c.name for c in AgentSkill.__table__.columns]); print([e.value for e in AgentSkillVisibility])"`
+Expected: columns include `skill_key, name, description, triggers_text, tool_whitelist_json, plan_template_json, inputs_schema_json, outputs_schema_json, visibility, owner_user_id`; visibility enum values are lowercase `['global', 'private']`.
 
-- [ ] **Step 2: Write the seed migration**
+Confirm `V13__agent_builtin_skills.sql` already seeds `builtin:organizeByType` — do NOT duplicate it.
 
-Create `docker/flyway/migrations/V17__agent_builtin_skills.sql`:
+- [ ] **Step 2: Write the seed migration (2 new skills only)**
+
+Create `docker/flyway/migrations/V17__agent_builtin_skills_extra.sql`:
 
 ```sql
-INSERT INTO agent_skill (skill_key, name, description, triggers_text, tool_whitelist_json, plan_template_json, inputs_schema_json, outputs_schema_json, visibility, owner_user_id, created_at, updated_at)
+INSERT INTO agent_skill (
+    skill_key,
+    name,
+    description,
+    triggers_text,
+    tool_whitelist_json,
+    plan_template_json,
+    inputs_schema_json,
+    outputs_schema_json,
+    visibility,
+    owner_user_id
+)
 VALUES
 (
-  'organizeByType',
-  '按类型整理',
-  '按文件类型整理指定文件夹：图片 / 视频 / 文档 / 其他',
-  '整理,归档,分类,organize,classify,按类型',
-  '["drive.listFolder","drive.getFileInfo","drive.createFolder","drive.moveFile"]'::jsonb,
-  '{}'::jsonb,
-  '{"type":"object","required":["sourceFolderId"],"properties":{"sourceFolderId":{"type":"string"},"targetFolderId":{"type":"string"}}}'::jsonb,
-  '{}'::jsonb,
-  'global',
-  NULL,
-  NOW(),
-  NOW()
+    'builtin:dedupScan',
+    'Dedup Scan',
+    'Find duplicate files by content hash or name+size and propose deletion of duplicates.',
+    'duplicate files, dedup, find duplicates, 重复文件, 去重',
+    '["drive.listFolder","drive.getFileInfo","drive.findDuplicates","drive.deleteFile"]'::jsonb,
+    '{"strategy":"Group duplicates by content hash; propose keeping the oldest and deleting the rest. Deletions are high risk and require explicit confirmation."}'::jsonb,
+    '{"type":"object","required":["sourceFolderId"],"properties":{"sourceFolderId":{"type":"string"},"by":{"type":"string","enum":["hash","nameSize"],"default":"hash"}}}'::jsonb,
+    '{"type":"object"}'::jsonb,
+    'global',
+    NULL
 ),
 (
-  'dedupScan',
-  '去重扫描',
-  '找出重复文件并给出删除建议',
-  '重复,去重,dedup,duplicate',
-  '["drive.listFolder","drive.getFileInfo","drive.findDuplicates","drive.deleteFile"]'::jsonb,
-  '{}'::jsonb,
-  '{}'::jsonb,
-  '{}'::jsonb,
-  'global',
-  NULL,
-  NOW(),
-  NOW()
-),
-(
-  'listAndSummarize',
-  '列出并摘要',
-  '列出某文件夹下的内容并给出统计摘要',
-  '列出,统计,摘要,list,summarize',
-  '["drive.listFolder","drive.countFiles","drive.getFileInfo","drive.statsByCategory"]'::jsonb,
-  '{}'::jsonb,
-  '{}'::jsonb,
-  '{}'::jsonb,
-  'global',
-  NULL,
-  NOW(),
-  NOW()
+    'builtin:listAndSummarize',
+    'List And Summarize',
+    'List the contents of a folder and produce a statistical summary by category.',
+    'list files, summarize, folder summary, statistics, 列出文件, 统计摘要',
+    '["drive.listFolder","drive.countFiles","drive.getFileInfo","drive.statsByCategory"]'::jsonb,
+    '{"strategy":"List direct children, then compute counts and sizes by category. Read-only; no writes."}'::jsonb,
+    '{"type":"object","required":["sourceFolderId"],"properties":{"sourceFolderId":{"type":"string"}}}'::jsonb,
+    '{"type":"object"}'::jsonb,
+    'global',
+    NULL
 )
-ON CONFLICT DO NOTHING;
+ON CONFLICT (skill_key) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    triggers_text = EXCLUDED.triggers_text,
+    tool_whitelist_json = EXCLUDED.tool_whitelist_json,
+    plan_template_json = EXCLUDED.plan_template_json,
+    inputs_schema_json = EXCLUDED.inputs_schema_json,
+    outputs_schema_json = EXCLUDED.outputs_schema_json,
+    visibility = EXCLUDED.visibility,
+    owner_user_id = EXCLUDED.owner_user_id;
 ```
 
-> Verify the `visibility` enum value `'global'` matches `AgentSkillVisibility` in `models/enums.py`. If the enum is uppercase or different, adjust. Confirm `agent_skill` has a unique constraint on `skill_key` — if so, `ON CONFLICT (skill_key) DO NOTHING`; else `ON CONFLICT DO NOTHING` (safe).
+> The `ON CONFLICT (skill_key) DO UPDATE` (upsert) matches V13's style and makes the migration idempotent/re-runnable. The `agent_skill` table has a UniqueConstraint on `skill_key` (verified).
 
 - [ ] **Step 3: Write the routes test**
 
@@ -1778,7 +1783,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docker/flyway/migrations/V17__agent_builtin_skills.sql app/tests/test_agent_routes.py
+git add docker/flyway/migrations/V17__agent_builtin_skills_extra.sql app/tests/test_agent_routes.py
 git commit -m "feat(agent): seed 3 builtin skills and cover dataPolicy plan flow"
 ```
 
