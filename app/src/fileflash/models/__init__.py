@@ -2,6 +2,7 @@ from .base import Base
 from .tables import (
     Acl,
     AgentActionLog,
+    AgentChatSession,
     AgentInboxMessage,
     AgentMcpServer,
     AgentMemory,
@@ -41,6 +42,7 @@ from .tables import (
 __all__ = [
     "Acl",
     "AgentActionLog",
+    "AgentChatSession",
     "AgentInboxMessage",
     "AgentMcpServer",
     "AgentMemory",

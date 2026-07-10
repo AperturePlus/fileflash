@@ -50,6 +50,7 @@ export interface AgentPlanContext {
 }
 
 export interface PlanAgentRequest {
+  chatSessionId: string;
   input: string;
   context: AgentPlanContext;
   executionPolicy: AgentExecutionPolicy;
@@ -103,6 +104,7 @@ export interface AgentPlanResult {
 }
 
 export interface ExecuteAgentRequest {
+  chatSessionId: string;
   planJobId: string;
   planHash: string;
   approval: {
@@ -145,6 +147,8 @@ export interface AgentJobEvent {
 export type AgentBackgroundJob<T = Record<string, any>> = BackgroundJob<T> & {
   agentPhase?: AgentJobPhase | null;
   cancelRequestedAt?: string | null;
+  chatSessionId?: string | null;
+  deletedAt?: string | null;
 };
 
 // ----------------- Inbox (upstream channel) -----------------
@@ -169,6 +173,63 @@ export interface AgentInboxMessageResponse {
   inboxMessageId: string;
   kind: AgentInboxMessageKind;
   acceptedAt: string;
+}
+
+export interface AgentChatMessage {
+  id: string;
+  role: 'user' | 'agent';
+  content: string;
+  status: string;
+  planJobId?: string | null;
+  planHash?: string | null;
+  planResult?: Record<string, any> | null;
+  executeJobId?: string | null;
+  executeResult?: Record<string, any> | null;
+  events: AgentJobEvent[];
+  errorMessage?: string | null;
+  timestamp: string;
+  pendingAsk?: Record<string, any> | null;
+}
+
+export interface AgentChatSessionItem {
+  chatSessionId: string;
+  title: string;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentChatSessionDetail extends AgentChatSessionItem {
+  messages: AgentChatMessage[];
+}
+
+export interface AgentChatSessionList {
+  items: AgentChatSessionItem[];
+  pagination: {
+    totalItems: number;
+    totalPages: number;
+    perPage: number;
+    currentPage: number;
+    hasPrev: boolean;
+    hasNext: boolean;
+  };
+}
+
+export interface CreateAgentChatSessionRequest {
+  title?: string | null;
+}
+
+export interface PatchAgentChatSessionRequest {
+  title?: string | null;
+  archived?: boolean | null;
+}
+
+export interface AttachAgentJobsRequest {
+  jobIds: string[];
+}
+
+export interface AttachAgentJobsResponse {
+  attachedCount: number;
 }
 
 // ----------------- New event payloads -----------------

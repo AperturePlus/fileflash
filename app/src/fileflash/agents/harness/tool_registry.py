@@ -17,6 +17,7 @@ class ToolContext:
     user_id: int
     file_service: Any
     folder_service: Any
+    storage_reader: Any = None
 
 
 ToolHandler = Callable[[ToolContext, dict[str, Any]], Awaitable[dict[str, Any]]]

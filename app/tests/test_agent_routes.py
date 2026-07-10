@@ -154,6 +154,7 @@ def test_plan_route_returns_response_shell():
     response = _client().post(
         "/api/v1/agent/plan",
         json={
+            "chatSessionId": "1",
             "input": "organize",
             "context": {
                 "rootFolderId": "root",
@@ -182,6 +183,7 @@ def test_execute_route_returns_response_shell():
     response = _client().post(
         "/api/v1/agent/execute",
         json={
+            "chatSessionId": "1",
             "planJobId": "10",
             "planHash": "sha256:test",
             "approval": {
@@ -216,6 +218,7 @@ def test_post_message_control_pause_returns_response_shell():
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
+    assert "current step finishes" in body["message"]
     assert body["data"]["kind"] == "control.pause"
     assert body["data"]["inboxMessageId"] == "1"
     assert db.messages[0].role == AgentInboxRole.USER
@@ -229,6 +232,7 @@ def test_job_events_route_streams_tool_and_final_answer_events():
     body = response.text
     assert "event: tool.started" in body
     assert "event: tool.succeeded" in body
+    assert "event: agent.progress" in body
     assert "event: job.succeeded" in body
     assert "正在读取名称包含" in body
     assert "银翼杀手" in body
@@ -282,3 +286,25 @@ def test_job_events_route_streams_event_bus_events_after_initial_replay():
     assert response.status_code == 200
     assert "event: agent.progress" in response.text
     assert "event: job.succeeded" in response.text
+
+
+def test_plan_request_with_data_policy_flows_through():
+    response = _client().post(
+        "/api/v1/agent/plan",
+        json={
+            "chatSessionId": "1",
+            "input": "list my files",
+            "context": {"rootFolderId": "root"},
+            "dataPolicy": {
+                "allowFileContent": True,
+                "maxReadBytes": 512000,
+                "allowedMimeTypes": ["text/*"],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["jobId"] == "10"
+    assert body["data"]["taskType"] == "agent.plan"

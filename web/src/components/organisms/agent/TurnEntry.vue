@@ -64,13 +64,16 @@ const activityEvents = computed(() =>
     .slice(-4),
 );
 
-const hasPlanRiskStep = computed(() =>
-  Boolean(
+const hasApprovableStep = computed(() => {
+  const step = props.turn.agent.progress?.step;
+  if (!step) return false;
+  return Boolean(
     props.turn.agent.planResult?.proposedActions?.some(
-      (action) => action.riskLevel === 'high' || action.requiresConfirmation,
+      (action) =>
+        action.step === step && (action.riskLevel === 'high' || action.requiresConfirmation),
     ),
-  ),
-);
+  );
+});
 
 const thinkingExpanded = ref(false);
 
@@ -232,7 +235,7 @@ const formatTime = (iso: string) => {
           <ControlBar
             v-if="isActive"
             :status="turn.agent.status"
-            :has-plan-risk-step="hasPlanRiskStep"
+            :has-approvable-step="hasApprovableStep"
             @pause="$emit('pause')"
             @resume="$emit('resume')"
             @skip="$emit('skip')"

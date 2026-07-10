@@ -5,7 +5,7 @@ import type { MsgStatus } from '../../../composables/useAgentSession';
 
 defineProps<{
   status: MsgStatus;
-  hasPlanRiskStep?: boolean;
+  hasApprovableStep?: boolean;
 }>();
 
 defineEmits<{
@@ -27,6 +27,7 @@ const t = localeStore.t;
       v-if="status === 'running'"
       variant="ghost"
       size="sm"
+      :title="t('agent.v2.turn.controls.boundaryHint')"
       @click.stop="$emit('pause')"
     >
       {{ t('agent.v2.turn.controls.pause') }}
@@ -45,16 +46,27 @@ const t = localeStore.t;
       v-if="status === 'running' || status === 'paused'"
       variant="ghost"
       size="sm"
+      :title="t('agent.v2.turn.controls.boundaryHint')"
       @click.stop="$emit('skip')"
     >
       {{ t('agent.v2.turn.controls.skip') }}
     </Button>
 
-    <template v-if="hasPlanRiskStep && status === 'running'">
-      <Button variant="primary" size="sm" @click.stop="$emit('approve')">
+    <template v-if="hasApprovableStep && status === 'running'">
+      <Button
+        variant="primary"
+        size="sm"
+        :title="t('agent.v2.turn.controls.boundaryHint')"
+        @click.stop="$emit('approve')"
+      >
         {{ t('agent.v2.turn.controls.approve') }}
       </Button>
-      <Button variant="ghost" size="sm" @click.stop="$emit('deny')">
+      <Button
+        variant="ghost"
+        size="sm"
+        :title="t('agent.v2.turn.controls.boundaryHint')"
+        @click.stop="$emit('deny')"
+      >
         {{ t('agent.v2.turn.controls.deny') }}
       </Button>
     </template>
@@ -68,6 +80,7 @@ const t = localeStore.t;
       "
       variant="ghost"
       size="sm"
+      :title="t('agent.v2.turn.controls.boundaryHint')"
       @click.stop="$emit('cancel')"
     >
       {{ t('agent.v2.turn.cancel') }}

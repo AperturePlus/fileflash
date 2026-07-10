@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from .common import CamelModel
+from .common import CamelModel, PaginatedData
 
 AgentExecutionPolicy = Literal["planOnly", "confirm", "autopilot"]
 AgentActionSideEffect = Literal["read", "write"]
@@ -60,6 +60,7 @@ class AgentPlanContext(CamelModel):
 
 
 class PlanAgentRequest(CamelModel):
+    chat_session_id: str = Field(min_length=1)
     input: str = Field(min_length=1, max_length=4_000)
     context: AgentPlanContext
     execution_policy: AgentExecutionPolicy = "confirm"
@@ -120,6 +121,7 @@ class AgentApproval(CamelModel):
 
 
 class ExecuteAgentRequest(CamelModel):
+    chat_session_id: str = Field(min_length=1)
     plan_job_id: str
     plan_hash: str
     approval: AgentApproval
@@ -129,12 +131,6 @@ class ExecuteAgentResponse(CamelModel):
     job_id: str
     status: str
     task_type: Literal["agent.execute"] = "agent.execute"
-
-
-class CancelAgentResponse(CamelModel):
-    job_id: str
-    status: str
-    canceled_at: datetime
 
 
 class AgentExecutionResult(CamelModel):
@@ -184,11 +180,63 @@ class AgentInboxMessageResponse(CamelModel):
     accepted_at: datetime
 
 
+class AgentChatMessage(CamelModel):
+    id: str
+    role: Literal["user", "agent"]
+    content: str = ""
+    status: str
+    plan_job_id: str | None = None
+    plan_hash: str | None = None
+    plan_result: dict[str, Any] | None = None
+    execute_job_id: str | None = None
+    execute_result: dict[str, Any] | None = None
+    events: list[AgentJobEvent] = Field(default_factory=list)
+    error_message: str | None = None
+    timestamp: datetime
+    pending_ask: dict[str, Any] | None = None
+
+
+class AgentChatSessionItem(CamelModel):
+    chat_session_id: str
+    title: str
+    archived: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class AgentChatSessionDetail(AgentChatSessionItem):
+    messages: list[AgentChatMessage] = Field(default_factory=list)
+
+
+AgentChatSessionList = PaginatedData[AgentChatSessionItem]
+
+
+class CreateAgentChatSessionRequest(CamelModel):
+    title: str | None = Field(default=None, max_length=255)
+
+
+class PatchAgentChatSessionRequest(CamelModel):
+    title: str | None = Field(default=None, max_length=255)
+    archived: bool | None = None
+
+
+class AttachAgentJobsRequest(CamelModel):
+    job_ids: list[str] = Field(default_factory=list)
+
+
+class AttachAgentJobsResponse(CamelModel):
+    attached_count: int = Field(ge=0)
+
+
 __all__ = [
     "AgentActionSideEffect",
     "AgentApproval",
     "AgentChosenSkill",
     "AgentCostEstimate",
+    "AgentChatMessage",
+    "AgentChatSessionDetail",
+    "AgentChatSessionItem",
+    "AgentChatSessionList",
     "AgentDataPolicy",
     "AgentExecutionPolicy",
     "AgentExecutionResult",
@@ -205,9 +253,12 @@ __all__ = [
     "AgentProposedAction",
     "AgentReasoningEffort",
     "AgentRiskLevel",
-    "CancelAgentResponse",
+    "AttachAgentJobsRequest",
+    "AttachAgentJobsResponse",
+    "CreateAgentChatSessionRequest",
     "ExecuteAgentRequest",
     "ExecuteAgentResponse",
+    "PatchAgentChatSessionRequest",
     "PlanAgentRequest",
     "PlanAgentResponse",
 ]

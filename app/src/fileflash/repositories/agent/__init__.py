@@ -1,4 +1,5 @@
 from .action_log import AgentActionLogRepository
+from .chat_session import AgentChatSessionRepository
 from .contracts import AgentMcpCatalogEntry, AgentMemoryActiveEntry, AgentSkillCatalogEntry
 from .inbox import AgentInboxMessageRepository
 from .mcp import AgentMcpRepository
@@ -10,6 +11,7 @@ from .work_session import AgentWorkSessionRepository
 
 __all__ = [
     "AgentActionLogRepository",
+    "AgentChatSessionRepository",
     "AgentInboxMessageRepository",
     "AgentMcpCatalogEntry",
     "AgentMcpRepository",

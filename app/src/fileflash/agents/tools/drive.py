@@ -332,6 +332,96 @@ async def _find_duplicates(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
     }
 
 
+_TEXT_MIME_ALLOWLIST = (
+    "text/",
+    "application/json",
+    "application/xml",
+    "application/x-yaml",
+    "application/javascript",
+    "application/x-sh",
+    "application/pdf",
+)
+
+
+async def _read_file(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    file_id = _parse_positive_int(_required_text(args, "fileId", "id"), "fileId")
+    max_bytes = _int_arg(args.get("maxBytes"), default=262144, minimum=1, maximum=1_048_576)
+    offset = _int_arg(args.get("offset"), default=0, minimum=0)
+
+    row = await ctx.db.scalar(
+        select(File).where(
+            and_(
+                File.file_id == file_id,
+                File.owner_id == ctx.user_id,
+                File.status == FileStatus.ACTIVE,
+                File.is_latest.is_(True),
+            )
+        )
+    )
+    if row is None:
+        raise ApiError(status_code=404, code=404, message="File not found")
+
+    storage = await ctx.db.scalar(
+        select(StorageObject).where(StorageObject.object_id == row.storage_object_id)
+    )
+    if storage is None or ctx.storage_reader is None:
+        raise ApiError(status_code=503, code=503, message="Object storage unavailable")
+
+    mime = _resolved_mime(row)
+    object_key = str(storage.object_key)
+    stat = await ctx.storage_reader.stat_object(object_key=object_key)
+    size = int(stat.size)
+
+    if not mime.lower().startswith(_TEXT_MIME_ALLOWLIST):
+        return {
+            "fileId": str(file_id),
+            "name": str(row.file_name),
+            "mime": mime,
+            "size": size,
+            "truncated": True,
+            "bytesReturned": 0,
+            "note": "Binary content not sent to model.",
+        }
+
+    # Empty file or offset beyond end of file: return clean empty content.
+    if size == 0 or offset >= size:
+        return {
+            "fileId": str(file_id),
+            "name": str(row.file_name),
+            "mime": mime,
+            "size": size,
+            "content": "",
+            "truncated": False,
+            "bytesReturned": 0,
+            "offset": offset,
+        }
+
+    end = min(offset + max_bytes - 1, size - 1) if size > 0 else 0
+    chunks: list[bytes] = []
+    received = 0
+    async for chunk in ctx.storage_reader.iter_object_range(
+        object_key=object_key, start=offset, end=end
+    ):
+        chunks.append(chunk)
+        received += len(chunk)
+    content_bytes = b"".join(chunks)
+    try:
+        content = content_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        content = content_bytes.decode("latin-1", errors="replace")
+
+    return {
+        "fileId": str(file_id),
+        "name": str(row.file_name),
+        "mime": mime,
+        "size": size,
+        "content": content,
+        "truncated": (offset + received) < size,
+        "bytesReturned": received,
+        "offset": offset,
+    }
+
+
 def _active_files_query(ctx: ToolContext, *, folder_ids: list[int] | None):
     statement = select(File).where(
         and_(
@@ -872,6 +962,33 @@ REGISTRY.register(
         risk_level="low",
         requires_confirmation=False,
         handler=_find_duplicates,
+    )
+)
+
+REGISTRY.register(
+    ToolSpec(
+        name="drive.readFile",
+        description=(
+            "Read text content of a file the user owns. Returns up to maxBytes; "
+            "binary files are not returned directly. Subject to dataPolicy."
+        ),
+        input_schema=_schema(
+            {
+                "fileId": _FILE_ID,
+                "maxBytes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1048576,
+                    "default": 262144,
+                },
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
+            },
+            required=["fileId"],
+        ),
+        side_effect="read",
+        risk_level="medium",
+        requires_confirmation=False,
+        handler=_read_file,
     )
 )
 

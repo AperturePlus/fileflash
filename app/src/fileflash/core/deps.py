@@ -11,6 +11,7 @@ from ..models.enums import UserRole
 from ..models.tables_identity import User
 from ..repositories import (
     AgentActionLogRepository,
+    AgentChatSessionRepository,
     AgentMcpRepository,
     AgentMemoryRepository,
     AgentPlanRepository,
@@ -271,6 +272,10 @@ def get_agent_action_log_repository(db: AsyncSession = Depends(get_db)) -> Agent
     return AgentActionLogRepository(db)
 
 
+def get_agent_chat_session_repository(db: AsyncSession = Depends(get_db)) -> AgentChatSessionRepository:
+    return AgentChatSessionRepository(db)
+
+
 def get_agent_work_session_repository(db: AsyncSession = Depends(get_db)) -> AgentWorkSessionRepository:
     return AgentWorkSessionRepository(db)
 
@@ -282,6 +287,7 @@ def get_agent_plan_service(
     plans: AgentPlanRepository = Depends(get_agent_plan_repository),
     settings_repo: AgentSettingsRepository = Depends(get_agent_settings_repository),
     work_sessions: AgentWorkSessionRepository = Depends(get_agent_work_session_repository),
+    chat_sessions: AgentChatSessionRepository = Depends(get_agent_chat_session_repository),
 ) -> PlanService:
     return PlanService(
         db=db,
@@ -290,6 +296,7 @@ def get_agent_plan_service(
         plans=plans,
         settings_repo=settings_repo,
         work_sessions=work_sessions,
+        chat_sessions=chat_sessions,
     )
 
 
@@ -299,6 +306,7 @@ def get_agent_execute_service(
     jobs: BackgroundJobService = Depends(get_agent_background_job_service),
     plans: AgentPlanRepository = Depends(get_agent_plan_repository),
     work_sessions: AgentWorkSessionRepository = Depends(get_agent_work_session_repository),
+    chat_sessions: AgentChatSessionRepository = Depends(get_agent_chat_session_repository),
 ) -> ExecuteService:
     return ExecuteService(
         db=db,
@@ -306,6 +314,7 @@ def get_agent_execute_service(
         jobs=jobs,
         plans=plans,
         work_sessions=work_sessions,
+        chat_sessions=chat_sessions,
     )
 
 
@@ -335,10 +344,19 @@ def get_agent_mcp_service(
 
 
 def get_agent_session_service(
+    db: AsyncSession = Depends(get_db),
+    event_bus: AgentEventBus = Depends(get_agent_event_bus),
+    chat_sessions: AgentChatSessionRepository = Depends(get_agent_chat_session_repository),
     action_logs: AgentActionLogRepository = Depends(get_agent_action_log_repository),
     work_sessions: AgentWorkSessionRepository = Depends(get_agent_work_session_repository),
 ) -> SessionService:
-    return SessionService(action_logs=action_logs, work_sessions=work_sessions)
+    return SessionService(
+        db=db,
+        event_bus=event_bus,
+        chat_sessions=chat_sessions,
+        action_logs=action_logs,
+        work_sessions=work_sessions,
+    )
 
 
 async def get_current_user(

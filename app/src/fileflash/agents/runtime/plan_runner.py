@@ -15,7 +15,6 @@ from ...core.settings import Settings, get_settings
 from ...models import AgentPlan, AgentSkill, BackgroundJob, File, Folder
 from ...models.enums import AgentExecutionPolicy as DbAgentExecutionPolicy
 from ...models.enums import FileStatus, FolderStatus, FolderType
-from ...repositories import AgentSkillRepository
 from ...repositories.agent.contracts import AgentSkillCatalogEntry
 from ...schemas.agent import (
     AgentChosenSkill,
@@ -25,13 +24,20 @@ from ...schemas.agent import (
     AgentProposedAction,
     PlanAgentRequest,
 )
-from ..harness.ask import AskProtocol
+from ..harness.ask import AskProtocol, AskTimedOut
 from ..harness.event_bus import AgentEventBus
-from ..harness.policy import classify_tool_side_effect, normalize_action_risk
+from ..harness.permission import (
+    EffectivePermission,
+    PermissionResolver,
+    _apply_setting_defaults,
+)
+from ..harness.policy import PolicyGuard, classify_tool_side_effect, normalize_action_risk
 from ..harness.router import ToolCall, ToolRouter
-from ..harness.tool_registry import REGISTRY
+from ..harness.skill_tool import bind_skill_in_planner  # noqa: F401  (registers agent.useSkill)
+from ..harness.tool_registry import REGISTRY, ToolContext
 from .llm import AnthropicPlannerClient, PlannerClient
 from .reference_rules import is_symbolic_id_placeholder, parse_step_reference
+from ...repositories import AgentSettingsRepository, AgentSkillRepository
 
 
 class PlanRunner:
@@ -69,26 +75,46 @@ class PlanRunner:
 
         request = PlanAgentRequest.model_validate(dict(job.payload or {}))
         user_id = int(job.requested_by)
-        skill = await _choose_skill(
+        setting_repo = AgentSettingsRepository(db)
+        setting = await setting_repo.get_by_user_id(user_id)
+        request = _apply_setting_defaults(request, setting)
+        candidates = await _candidate_skills(
             db,
             user_id=user_id,
             task_input=request.input,
             prefer_skill_id=request.hints.prefer_skill_id,
+            k=self.settings.agent_skill_candidate_k,
         )
         metadata = await _collect_context_metadata(db, user_id=user_id, request=request)
-        allowed_tools = _skill_tool_whitelist(skill)
+        # If a preferred skill is forced via hint, bind it now; otherwise start
+        # unbound (full registry, read-only exploration) and let the LLM bind via
+        # agent.useSkill during planning.
+        forced_skill = candidates[0] if (request.hints.prefer_skill_id and candidates) else None
+        permission = await PermissionResolver().effective(
+            request=request,
+            setting=setting,
+            skill=forced_skill,
+            high_risk_confirmed=False,
+        )
+        skill = forced_skill
+        allowed_tools = tuple(sorted(permission.allowed_tools))
         allowed_tool_set = set(allowed_tools)
         exploration_tools = tuple(
-            tool_name for tool_name in allowed_tools if REGISTRY.get(tool_name).side_effect == "read"
+            tool_name
+            for tool_name in allowed_tools
+            if REGISTRY.get(tool_name).side_effect == "read"
         )
         exploration_tool_set = set(exploration_tools)
+        # Include the useSkill meta-tool for the LLM during planning:
+        planning_exploration_tools = exploration_tools + ("agent.useSkill",)
         planner_router = ToolRouter(db=db, user_id=user_id)
+        policy_guard = PolicyGuard()
         tool_call_budget = min(self.settings.agent_job_max_tool_calls, 32)
         planned_tool_calls = 0
         planning_evidence: list[AgentPlanningEvidence] = []
 
         async def _planning_tool_executor(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-            nonlocal planned_tool_calls
+            nonlocal planned_tool_calls, permission, skill, allowed_tools, allowed_tool_set, exploration_tools, planning_exploration_tools
             planned_tool_calls += 1
             if planned_tool_calls > tool_call_budget:
                 raise ApiError(
@@ -96,10 +122,53 @@ class PlanRunner:
                     code=400,
                     message="Planner exceeded exploratory tool-call budget",
                 )
-            if tool_name not in allowed_tool_set:
+            # Intercept the useSkill meta-tool — never dispatch it.
+            if tool_name == "agent.useSkill":
+                new_perm, payload = await bind_skill_in_planner(
+                    db=db,
+                    user_id=user_id,
+                    skill_key=str(args.get("skillKey", "")),
+                    candidates=candidates,
+                    request=request,
+                    setting=setting,
+                    current_permission=permission,
+                )
+                if payload.get("bound"):
+                    permission = new_perm
+                    skill = next(
+                        (c for c in candidates if getattr(c, "skill_key", None) == payload["skillKey"]),
+                        skill,
+                    )
+                    allowed_tools = tuple(sorted(permission.allowed_tools))
+                    allowed_tool_set = set(allowed_tools)
+                    exploration_tools = tuple(
+                        tool_name
+                        for tool_name in allowed_tools
+                        if REGISTRY.get(tool_name).side_effect == "read"
+                    )
+                    planning_exploration_tools = exploration_tools + ("agent.useSkill",)
+                if len(planning_evidence) < 12:
+                    planning_evidence.append(
+                        AgentPlanningEvidence(
+                            step=planned_tool_calls,
+                            tool=tool_name,
+                            input=_evidence_mapping(args),
+                            output_preview=_evidence_preview(payload),
+                        )
+                    )
+                return payload
+            # All other tools: gate via PolicyGuard (phase=planning denies content-read; writes blocked below).
+            decision = await policy_guard.evaluate(
+                ctx=ToolContext(db=db, user_id=user_id, file_service=None, folder_service=None),
+                action=AgentProposedAction(
+                    step=planned_tool_calls, tool=tool_name, input=args, side_effect=classify_tool_side_effect(tool_name)
+                ),
+                permission=permission,
+                phase="planning",
+            )
+            if not decision.allowed:
                 blocked = _blocked_planning_tool_result(
-                    tool_name=tool_name,
-                    reason="Planner attempted a tool that is not allowed by the selected skill.",
+                    tool_name=tool_name, reason="; ".join(decision.reasons)
                 )
                 if len(planning_evidence) < 12:
                     planning_evidence.append(
@@ -111,6 +180,7 @@ class PlanRunner:
                         )
                     )
                 return blocked
+            # Deny write tools during planning exploration — they belong in proposedActions.
             if tool_name not in exploration_tool_set:
                 blocked = _blocked_planning_tool_result(
                     tool_name=tool_name,
@@ -141,21 +211,71 @@ class PlanRunner:
                 )
             return output
 
-        llm_payload = await self.planner_client.create_plan(
-            system_prompt=_system_prompt(),
-            user_prompt=_user_prompt(
-                request=request,
-                skill=skill,
-                allowed_tools=allowed_tools,
-                exploration_tools=exploration_tools,
-                metadata=metadata,
-            ),
-            max_tokens=request.hints.budget_tokens,
-            reasoning_effort=request.hints.reasoning_effort,
-            tools=REGISTRY.anthropic_tools_for(exploration_tools),
-            tool_executor=_planning_tool_executor,
-            max_tool_roundtrips=6,
-        )
+        async def _create_plan(metadata_payload: dict[str, Any]) -> dict[str, Any]:
+            return await self.planner_client.create_plan(
+                system_prompt=_system_prompt(candidates=candidates),
+                user_prompt=_user_prompt(
+                    request=request,
+                    skill=skill,
+                    allowed_tools=allowed_tools,
+                    exploration_tools=exploration_tools,
+                    metadata=metadata_payload,
+                ),
+                max_tokens=request.hints.budget_tokens,
+                reasoning_effort=request.hints.reasoning_effort,
+                tools=REGISTRY.anthropic_tools_for(planning_exploration_tools),
+                tool_executor=_planning_tool_executor,
+                max_tool_roundtrips=6,
+            )
+
+        async def _ask_and_replan(
+            *,
+            prompt: str,
+            schema: dict[str, Any],
+            reason: str,
+        ) -> dict[str, Any] | None:
+            answer = await self._ask(ask=ask, prompt=prompt, schema=schema)
+            if answer is None:
+                return None
+            clarified_metadata = dict(metadata)
+            clarified_metadata["clarification"] = {
+                "prompt": prompt,
+                "answer": answer,
+                "reason": reason,
+            }
+            return await _create_plan(clarified_metadata)
+
+        asked_for_clarification = False
+        try:
+            llm_payload = await _create_plan(metadata)
+        except ApiError as exc:
+            if not _is_planning_clarification_error(exc):
+                raise
+            replanned_payload = await _ask_and_replan(
+                prompt=_normalization_clarification_prompt(exc),
+                schema={"type": "object", "properties": {"clarification": {"type": "string"}}},
+                reason=exc.message,
+            )
+            if replanned_payload is None:
+                raise
+            asked_for_clarification = True
+            llm_payload = replanned_payload
+        clarification = _clarification_request(llm_payload)
+        if clarification is not None:
+            replanned_payload = await _ask_and_replan(
+                prompt=clarification["prompt"],
+                schema=clarification["schema"],
+                reason="planner_requested_clarification",
+            )
+            if replanned_payload is None:
+                raise ApiError(
+                    status_code=409,
+                    code=409,
+                    message="Agent needs clarification before planning",
+                    data=clarification,
+                )
+            asked_for_clarification = True
+            llm_payload = replanned_payload
 
         effective_max_steps: int | None
         if self.settings.is_development_env:
@@ -166,11 +286,28 @@ class PlanRunner:
                 self.settings.agent_job_max_tool_calls,
             )
 
-        actions = _normalize_actions(
-            llm_payload=llm_payload,
-            allowed_tools=allowed_tools,
-            max_steps=effective_max_steps,
-        )
+        try:
+            actions = _normalize_actions(
+                llm_payload=llm_payload,
+                allowed_tools=allowed_tools,
+                max_steps=effective_max_steps,
+            )
+        except ApiError as exc:
+            if asked_for_clarification or not _is_planning_clarification_error(exc):
+                raise
+            replanned_payload = await _ask_and_replan(
+                prompt=_normalization_clarification_prompt(exc),
+                schema={"type": "object", "properties": {"clarification": {"type": "string"}}},
+                reason=exc.message,
+            )
+            if replanned_payload is None:
+                raise
+            llm_payload = replanned_payload
+            actions = _normalize_actions(
+                llm_payload=llm_payload,
+                allowed_tools=allowed_tools,
+                max_steps=effective_max_steps,
+            )
         chosen_skill = _chosen_skill(skill)
         llm_summary = str(
             llm_payload.get("summary") or f"Prepared {len(actions)} file action(s)."
@@ -228,33 +365,40 @@ class PlanRunner:
     ) -> Any | None:
         if ask is None:
             return None
-        return await ask.ask(
-            prompt=prompt,
-            schema=schema,
-            timeout_sec=float(self.settings.agent_inbox_ask_timeout_sec),
-        )
+        try:
+            return await ask.ask(
+                prompt=prompt,
+                schema=schema,
+                timeout_sec=float(self.settings.agent_inbox_ask_timeout_sec),
+            )
+        except AskTimedOut as exc:
+            raise ApiError(
+                status_code=408,
+                code=408,
+                message="Agent clarification timed out",
+                data={"askId": str(exc.ask_id)},
+            ) from exc
 
 
-async def _choose_skill(
+async def _candidate_skills(
     db: AsyncSession,
     *,
     user_id: int,
     task_input: str,
     prefer_skill_id: str | None,
-) -> AgentSkill | AgentSkillCatalogEntry | None:
+    k: int = 3,
+) -> list[Any]:
     repo = AgentSkillRepository(db)
     if prefer_skill_id:
         skill = await repo.get_by_key(skill_key=prefer_skill_id, user_id=user_id)
         if skill is None:
             raise ApiError(status_code=404, code=404, message="Preferred skill not found")
-        return skill
-
+        return [skill]
     candidates = await repo.list_visible(user_id=user_id, limit=50)
     if not candidates:
-        return None
-
+        return []
     normalized_input = task_input.lower()
-    best: tuple[int, AgentSkillCatalogEntry] | None = None
+    scored: list[tuple[int, Any]] = []
     for candidate in candidates:
         haystack = (
             f"{candidate.skill_key} {candidate.name} {candidate.description} "
@@ -266,16 +410,57 @@ async def _choose_skill(
                 score += 2 if token in {"organize", "整理", "classify", "分类"} else 1
         if "整理" in normalized_input and "organize" in haystack:
             score += 4
-        if best is None or score > best[0]:
-            best = (score, candidate)
-
-    if best is not None and best[0] > 0:
-        return best[1]
-    return candidates[0]
+        scored.append((score, candidate))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    positive = [pair for pair in scored if pair[0] > 0]
+    if not positive:
+        return []  # no skill forced; LLM may still pick via useSkill
+    return [pair[1] for pair in positive[: max(1, k)]]
 
 
 def _tokens(text: str) -> list[str]:
     return [token.strip(" ,.;:!?，。；：！？") for token in text.split() if token.strip()]
+
+
+def _clarification_request(payload: dict[str, Any]) -> dict[str, Any] | None:
+    raw = payload.get("clarificationRequest") or payload.get("clarification_request")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        prompt = raw.strip()
+        schema: dict[str, Any] = {}
+    elif isinstance(raw, dict):
+        prompt = str(raw.get("prompt") or raw.get("question") or "").strip()
+        raw_schema = raw.get("schema")
+        schema = raw_schema if isinstance(raw_schema, dict) else {}
+    else:
+        return None
+    if not prompt:
+        return None
+    return {"prompt": prompt, "schema": schema}
+
+
+def _is_planning_clarification_error(error: ApiError) -> bool:
+    if error.status_code not in {400, 502}:
+        return False
+    message = error.message
+    return (
+        message == "Agent plan JSON missing proposedActions"
+        or message == "Agent LLM returned an invalid response"
+        or message == "Agent LLM returned an empty response"
+        or message == "Agent LLM did not return valid JSON"
+        or message == "Agent LLM JSON must be an object"
+        or message.startswith("Agent action")
+        or message.startswith("Invalid plan action")
+        or "unresolved placeholder" in message
+    )
+
+
+def _normalization_clarification_prompt(error: ApiError) -> str:
+    return (
+        "I could not turn the draft plan into executable steps. "
+        f"Please clarify the missing target folder, file, or constraint. Issue: {error.message}"
+    )
 
 
 def _skill_key(skill: AgentSkill | AgentSkillCatalogEntry | None) -> str | None:
@@ -288,26 +473,6 @@ def _skill_name(skill: AgentSkill | AgentSkillCatalogEntry | None) -> str | None
     if skill is None:
         return None
     return str(skill.name)
-
-
-def _skill_tool_whitelist(skill: AgentSkill | AgentSkillCatalogEntry | None) -> tuple[str, ...]:
-    raw: Any = None
-    if isinstance(skill, AgentSkill):
-        raw = skill.tool_whitelist_json
-    elif skill is not None:
-        raw = skill.tool_whitelist_json
-    if isinstance(raw, list) and raw:
-        tools = tuple(str(item) for item in raw if str(item).strip())
-        unknown = REGISTRY.unknown_names(tools)
-        if unknown:
-            raise ApiError(
-                status_code=422,
-                code=422,
-                message="Unknown agent tool in selected skill",
-                data={"unknownTools": sorted(unknown)},
-            )
-        return tools
-    return REGISTRY.all_names()
 
 
 def _chosen_skill(skill: AgentSkill | AgentSkillCatalogEntry | None) -> AgentChosenSkill | None:
@@ -477,14 +642,37 @@ def _folder_metadata(row: Folder) -> dict[str, Any]:
     }
 
 
-def _system_prompt() -> str:
+def _system_prompt(*, candidates: list[Any] | None = None) -> str:
+    menu = _skill_menu(candidates or [])
     return (
         "You are FileFlash Agent Planner. Build plans from tool-grounded facts, not assumptions. "
         "If you need facts, first call read-only tools; then output one final JSON object that matches outputSchema. "
-        "Do not read or infer file contents. Deletions are high risk and must be explicit. "
+        "Do not read or infer file contents unless you call drive.readFile and dataPolicy allows it. "
+        "Deletions are high risk and must be explicit. "
         "Cross-step dependencies must use '$stepN.field' references only and never symbolic placeholders "
-        "like 'newFolderId'."
+        "like 'newFolderId'. "
+        + menu
     )
+
+
+def _skill_menu(candidates: list[Any]) -> str:
+    if not candidates:
+        return ""
+    lines = [
+        "You may use one of these skills if it fits the task. Each skill restricts which tools you may use. "
+        "To adopt a skill, call agent.useSkill with its key. You may also proceed without a skill "
+        "(free planning), but then only read-only exploration tools are available during planning.",
+        "",
+        "Available skills:",
+    ]
+    for c in candidates:
+        key = getattr(c, "skill_key", "?")
+        name = getattr(c, "name", key)
+        desc = getattr(c, "description", "") or ""
+        wl = getattr(c, "tool_whitelist_json", None) or []
+        wl_str = ", ".join(str(t) for t in wl) if wl else "(all tools)"
+        lines.append(f"- {key} ({name}): {desc}. tools: {wl_str}")
+    return "\n".join(lines) + "\n"
 
 
 def _user_prompt(
