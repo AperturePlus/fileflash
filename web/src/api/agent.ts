@@ -1,15 +1,62 @@
 import http from '../utils/http';
 import { useUserStore } from '../store/user';
 import type {
+  AgentChatSessionDetail,
+  AgentChatSessionItem,
+  AgentChatSessionList,
   AgentBackgroundJob,
+  AttachAgentJobsRequest,
+  AttachAgentJobsResponse,
+  CreateAgentChatSessionRequest,
   AgentInboxMessageRequest,
   AgentInboxMessageResponse,
   AgentJobEvent,
   ExecuteAgentRequest,
   ExecuteAgentResponse,
+  PatchAgentChatSessionRequest,
   PlanAgentRequest,
   PlanAgentResponse,
 } from '../types/agent';
+
+export const createAgentChatSession = (data: CreateAgentChatSessionRequest = {}) => {
+  return http.post<AgentChatSessionItem>('/agent/chat-sessions', data);
+};
+
+export const listAgentChatSessions = (params: { page?: number; perPage?: number } = {}) => {
+  return http.get<AgentChatSessionList>('/agent/chat-sessions', params);
+};
+
+export const getAgentChatSession = (chatSessionId: string) => {
+  return http.get<AgentChatSessionDetail>(
+    `/agent/chat-sessions/${encodeURIComponent(chatSessionId)}`,
+  );
+};
+
+export const patchAgentChatSession = (
+  chatSessionId: string,
+  data: PatchAgentChatSessionRequest,
+) => {
+  return http.patch<AgentChatSessionItem>(
+    `/agent/chat-sessions/${encodeURIComponent(chatSessionId)}`,
+    data,
+  );
+};
+
+export const deleteAgentChatSession = (chatSessionId: string) => {
+  return http.delete<AgentChatSessionItem>(
+    `/agent/chat-sessions/${encodeURIComponent(chatSessionId)}`,
+  );
+};
+
+export const attachAgentChatSessionJobs = (
+  chatSessionId: string,
+  data: AttachAgentJobsRequest,
+) => {
+  return http.post<AttachAgentJobsResponse>(
+    `/agent/chat-sessions/${encodeURIComponent(chatSessionId)}/attach-jobs`,
+    data,
+  );
+};
 
 export const planAgentTask = (data: PlanAgentRequest) => {
   return http.post<PlanAgentResponse>('/agent/plan', data);
@@ -41,14 +88,14 @@ export const pauseAgentJob = (jobId: string) =>
 export const resumeAgentJob = (jobId: string) =>
   sendAgentMessage(jobId, { kind: 'control.resume' });
 
-export const approveAgentStep = (jobId: string) =>
-  sendAgentMessage(jobId, { kind: 'control.approve' });
+export const approveAgentStep = (jobId: string, step: number) =>
+  sendAgentMessage(jobId, { kind: 'control.approve', metadata: { step } });
 
-export const denyAgentStep = (jobId: string) =>
-  sendAgentMessage(jobId, { kind: 'control.deny' });
+export const denyAgentStep = (jobId: string, step: number, reason?: string) =>
+  sendAgentMessage(jobId, { kind: 'control.deny', metadata: { step, ...(reason ? { reason } : {}) } });
 
-export const skipAgentStep = (jobId: string) =>
-  sendAgentMessage(jobId, { kind: 'control.skip' });
+export const skipAgentStep = (jobId: string, step: number) =>
+  sendAgentMessage(jobId, { kind: 'control.skip', metadata: { step } });
 
 export const cancelAgentTurn = (jobId: string) =>
   sendAgentMessage(jobId, { kind: 'control.cancel' });

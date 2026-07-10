@@ -2,18 +2,178 @@ import Mock from 'mockjs';
 import { createMockId, getCurrentUser, mockJobs } from '../state';
 import type {
   AgentBackgroundJob,
+  AgentChatMessage,
+  AgentChatSessionDetail,
+  AgentChatSessionItem,
   AgentExecutionResult,
   AgentInboxMessageRequest,
   AgentInboxMessageResponse,
   AgentPlanResult,
   AgentProposedAction,
+  AttachAgentJobsRequest,
+  CreateAgentChatSessionRequest,
   ExecuteAgentRequest,
+  PatchAgentChatSessionRequest,
   PlanAgentRequest,
 } from '../../types/agent';
 
 const nowIso = () => new Date().toISOString();
 
+type MockAgentChatSession = AgentChatSessionItem & {
+  userId: string;
+  deletedAt: string | null;
+};
+
+const mockChatSessions: Record<string, MockAgentChatSession> = {};
+
+const parseUrl = (url: string) => new URL(url, 'http://localhost');
+
+const response = (data: unknown, message = 'OK', code = 200) => ({
+  success: true,
+  code,
+  message,
+  data,
+  timestamp: nowIso(),
+});
+
+const errorResponse = (code: number, message: string) => ({
+  success: false,
+  code,
+  message,
+  data: null,
+  timestamp: nowIso(),
+});
+
 const isTerminal = (status: string) => ['succeeded', 'failed', 'canceled'].includes(status);
+
+const sessionItem = (session: MockAgentChatSession): AgentChatSessionItem => ({
+  chatSessionId: session.chatSessionId,
+  title: session.title,
+  archived: session.archived,
+  createdAt: session.createdAt,
+  updatedAt: session.updatedAt,
+});
+
+const getSession = (chatSessionId: string): MockAgentChatSession | null => {
+  const session = mockChatSessions[chatSessionId];
+  if (!session || session.deletedAt || session.userId !== getCurrentUser().userId) return null;
+  return session;
+};
+
+const touchSession = (chatSessionId: string) => {
+  const session = mockChatSessions[chatSessionId];
+  if (!session || session.deletedAt) return;
+  session.updatedAt = nowIso();
+};
+
+const createChatSession = (payload: CreateAgentChatSessionRequest = {}): AgentChatSessionItem => {
+  const timestamp = nowIso();
+  const chatSessionId = createMockId('chat');
+  const title = String(payload.title || 'New session').trim() || 'New session';
+  const session: MockAgentChatSession = {
+    chatSessionId,
+    title: title.slice(0, 255),
+    archived: false,
+    userId: getCurrentUser().userId,
+    deletedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  mockChatSessions[chatSessionId] = session;
+  return sessionItem(session);
+};
+
+const chatSessionJobs = (chatSessionId: string) =>
+  Object.values(mockJobs)
+    .filter((job) => {
+      const agentJob = job as AgentBackgroundJob;
+      return agentJob.chatSessionId === chatSessionId && !agentJob.deletedAt;
+    })
+    .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
+
+const jobStatus = (job: AgentBackgroundJob): AgentChatMessage['status'] => {
+  if (job.status === 'pending' || job.status === 'running' || job.status === 'succeeded') return job.status;
+  if (job.status === 'failed' || job.status === 'canceled' || job.status === 'paused') return job.status;
+  return 'running';
+};
+
+const sessionMessages = (chatSessionId: string): AgentChatMessage[] => {
+  const jobs = chatSessionJobs(chatSessionId);
+  const messages: AgentChatMessage[] = [];
+  const planMessages = new Map<string, AgentChatMessage>();
+
+  jobs.forEach((job) => {
+    const agentJob = job as AgentBackgroundJob;
+    if (agentJob.taskType !== 'agent.plan') return;
+    const payload = agentJob.payload as Partial<PlanAgentRequest>;
+    const result = agentJob.status === 'succeeded' ? (agentJob.result as AgentPlanResult) : null;
+    const userMessage: AgentChatMessage = {
+      id: `job-${agentJob.jobId}:user`,
+      role: 'user',
+      content: String(payload.input || ''),
+      status: 'succeeded',
+      events: [],
+      timestamp: agentJob.createdAt,
+    };
+    const agentMessage: AgentChatMessage = {
+      id: `job-${agentJob.jobId}:agent`,
+      role: 'agent',
+      content: '',
+      status: jobStatus(agentJob),
+      planJobId: agentJob.jobId,
+      planHash: result?.planHash || null,
+      planResult: result as any,
+      executeJobId: null,
+      executeResult: null,
+      events: [],
+      errorMessage: agentJob.errorMessage || null,
+      timestamp: agentJob.createdAt,
+      pendingAsk: null,
+    };
+    messages.push(userMessage, agentMessage);
+    planMessages.set(agentJob.jobId, agentMessage);
+  });
+
+  jobs.forEach((job) => {
+    const agentJob = job as AgentBackgroundJob;
+    if (agentJob.taskType !== 'agent.execute') return;
+    const payload = agentJob.payload as Partial<ExecuteAgentRequest>;
+    let agentMessage = planMessages.get(String(payload.planJobId || ''));
+    if (!agentMessage) {
+      agentMessage = {
+        id: `job-${agentJob.jobId}:agent`,
+        role: 'agent',
+        content: '',
+        status: jobStatus(agentJob),
+        events: [],
+        errorMessage: agentJob.errorMessage || null,
+        timestamp: agentJob.createdAt,
+      };
+      messages.push(agentMessage);
+    }
+    agentMessage.executeJobId = agentJob.jobId;
+    agentMessage.status = jobStatus(agentJob);
+    if (agentJob.status === 'succeeded') {
+      agentMessage.executeResult = agentJob.result as any;
+    }
+    if (agentJob.errorMessage) {
+      agentMessage.errorMessage = agentJob.errorMessage;
+    }
+  });
+
+  return messages;
+};
+
+const sessionDetail = (session: MockAgentChatSession): AgentChatSessionDetail => ({
+  ...sessionItem(session),
+  messages: sessionMessages(session.chatSessionId),
+});
+
+const validateControlStep = (payload: AgentInboxMessageRequest) => {
+  if (!['control.skip', 'control.approve', 'control.deny'].includes(payload.kind)) return true;
+  const step = Number(payload.metadata?.step);
+  return Number.isInteger(step) && step > 0;
+};
 
 const extractCountSearch = (input: string) => {
   let text = input.replace(/[?？!！。.,，;；:：]/g, ' ').trim();
@@ -195,6 +355,8 @@ const createAgentJob = (taskType: 'agent.plan' | 'agent.execute', payload: Recor
     traceId: `trace-${jobId}`,
     idempotencyKey: null,
     cancelRequestedAt: null,
+    chatSessionId: typeof payload.chatSessionId === 'string' ? payload.chatSessionId : null,
+    deletedAt: null,
     requestedBy,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -364,64 +526,149 @@ const mockExecutionAnswer = (plan: AgentPlanResult) => {
 };
 
 export const setupAgentMocks = () => {
+  Mock.mock(/\/api\/v1\/agent\/chat-sessions(?:\?.*)?$/, 'post', (options) => {
+    const payload = JSON.parse(options.body || '{}') as CreateAgentChatSessionRequest;
+    return response(createChatSession(payload), 'Agent chat session created');
+  });
+
+  Mock.mock(/\/api\/v1\/agent\/chat-sessions(?:\?.*)?$/, 'get', (options) => {
+    const url = parseUrl(options.url);
+    const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+    const perPage = Math.max(1, Number(url.searchParams.get('perPage') || 20));
+    const items = Object.values(mockChatSessions)
+      .filter((session) => !session.deletedAt && session.userId === getCurrentUser().userId)
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+      .map(sessionItem);
+    const start = (page - 1) * perPage;
+    const sliced = items.slice(start, start + perPage);
+    const totalPages = Math.max(1, Math.ceil(items.length / perPage));
+    return response(
+      {
+        items: sliced,
+        pagination: {
+          totalItems: items.length,
+          totalPages,
+          perPage,
+          currentPage: page,
+          hasPrev: page > 1,
+          hasNext: page < totalPages,
+        },
+      },
+      'Agent chat sessions loaded',
+    );
+  });
+
+  Mock.mock(/\/api\/v1\/agent\/chat-sessions\/([^/?]+)$/, 'get', (options) => {
+    const chatSessionId = (options.url.match(/\/api\/v1\/agent\/chat-sessions\/([^/?]+)/) || [])[1];
+    const session = chatSessionId ? getSession(chatSessionId) : null;
+    if (!session) return errorResponse(404, 'Agent chat session not found');
+    return response(sessionDetail(session), 'Agent chat session loaded');
+  });
+
+  Mock.mock(/\/api\/v1\/agent\/chat-sessions\/([^/?]+)$/, 'patch', (options) => {
+    const chatSessionId = (options.url.match(/\/api\/v1\/agent\/chat-sessions\/([^/?]+)/) || [])[1];
+    const session = chatSessionId ? getSession(chatSessionId) : null;
+    if (!session) return errorResponse(404, 'Agent chat session not found');
+    const payload = JSON.parse(options.body || '{}') as PatchAgentChatSessionRequest;
+    if (typeof payload.title === 'string') {
+      const title = payload.title.trim();
+      if (title) session.title = title.slice(0, 255);
+    }
+    if (typeof payload.archived === 'boolean') {
+      session.archived = payload.archived;
+    }
+    session.updatedAt = nowIso();
+    return response(sessionItem(session), 'Agent chat session updated');
+  });
+
+  Mock.mock(/\/api\/v1\/agent\/chat-sessions\/([^/?]+)$/, 'delete', (options) => {
+    const chatSessionId = (options.url.match(/\/api\/v1\/agent\/chat-sessions\/([^/?]+)/) || [])[1];
+    const session = chatSessionId ? getSession(chatSessionId) : null;
+    if (!session) return errorResponse(404, 'Agent chat session not found');
+    const timestamp = nowIso();
+    session.deletedAt = timestamp;
+    session.updatedAt = timestamp;
+    chatSessionJobs(chatSessionId).forEach((job) => {
+      const agentJob = job as AgentBackgroundJob;
+      agentJob.deletedAt = timestamp;
+      agentJob.updatedAt = timestamp;
+      if (!isTerminal(agentJob.status)) {
+        agentJob.cancelRequestedAt = agentJob.cancelRequestedAt || timestamp;
+        finishJobCanceled(agentJob);
+      }
+    });
+    return response(sessionItem(session), 'Agent chat session deleted');
+  });
+
+  Mock.mock(/\/api\/v1\/agent\/chat-sessions\/([^/?]+)\/attach-jobs$/, 'post', (options) => {
+    const chatSessionId = (options.url.match(/\/api\/v1\/agent\/chat-sessions\/([^/?]+)\/attach-jobs/) || [])[1];
+    const session = chatSessionId ? getSession(chatSessionId) : null;
+    if (!session) return errorResponse(404, 'Agent chat session not found');
+    const payload = JSON.parse(options.body || '{}') as AttachAgentJobsRequest;
+    let attachedCount = 0;
+    (payload.jobIds || []).forEach((jobId) => {
+      const job = getJobById(String(jobId));
+      if (!job || job.requestedBy !== getCurrentUser().userId || job.deletedAt) return;
+      if (job.chatSessionId && job.chatSessionId !== chatSessionId) return;
+      if (job.chatSessionId !== chatSessionId) {
+        job.chatSessionId = chatSessionId;
+        job.updatedAt = nowIso();
+        attachedCount += 1;
+      }
+    });
+    touchSession(chatSessionId);
+    return response({ attachedCount }, 'Agent jobs attached');
+  });
+
   Mock.mock(/\/api\/v1\/agent\/plan$/, 'post', (options) => {
     const payload = JSON.parse(options.body || '{}') as PlanAgentRequest;
     const input = String(payload?.input || '').trim();
     if (!input) {
-      return {
-        success: false,
-        code: 400,
-        message: 'input is required',
-        data: null,
-      };
+      return errorResponse(400, 'input is required');
+    }
+    if (!payload.chatSessionId || !getSession(payload.chatSessionId)) {
+      return errorResponse(404, 'Agent chat session not found');
     }
 
     const job = createAgentJob('agent.plan', payload as Record<string, any>);
+    touchSession(payload.chatSessionId);
     schedulePlanLifecycle(job, payload);
 
-    return {
-      success: true,
-      code: 200,
-      message: 'Plan job created',
-      data: {
+    return response(
+      {
         jobId: job.jobId,
         status: job.status,
         taskType: 'agent.plan',
       },
-    };
+      'Plan job created',
+    );
   });
 
   Mock.mock(/\/api\/v1\/agent\/execute$/, 'post', (options) => {
     const payload = JSON.parse(options.body || '{}') as ExecuteAgentRequest;
     const planJobId = String(payload?.planJobId || '');
     const planHash = String(payload?.planHash || '');
+    if (!payload.chatSessionId || !getSession(payload.chatSessionId)) {
+      return errorResponse(404, 'Agent chat session not found');
+    }
     if (!planJobId || !planHash) {
-      return {
-        success: false,
-        code: 400,
-        message: 'planJobId and planHash are required',
-        data: null,
-      };
+      return errorResponse(400, 'planJobId and planHash are required');
     }
 
     const planJob = getJobById(planJobId);
-    if (!planJob || planJob.taskType !== 'agent.plan' || planJob.status !== 'succeeded') {
-      return {
-        success: false,
-        code: 404,
-        message: 'Plan job not found',
-        data: null,
-      };
+    if (
+      !planJob ||
+      planJob.taskType !== 'agent.plan' ||
+      planJob.status !== 'succeeded' ||
+      planJob.chatSessionId !== payload.chatSessionId ||
+      planJob.deletedAt
+    ) {
+      return errorResponse(404, 'Plan job not found');
     }
 
     const planResult = planResultByJobId.get(planJobId);
     if (!planResult || planResult.planHash !== planHash) {
-      return {
-        success: false,
-        code: 409,
-        message: 'planHash mismatch',
-        data: null,
-      };
+      return errorResponse(409, 'planHash mismatch');
     }
     const highRiskActions = planResult.proposedActions.filter((action) => action.riskLevel === 'high' || action.requiresConfirmation);
     if (highRiskActions.length && !payload.approval?.highRiskConfirmed) {
@@ -434,39 +681,37 @@ export const setupAgentMocks = () => {
     }
 
     const executeJob = createAgentJob('agent.execute', {
+      chatSessionId: payload.chatSessionId,
       planJobId,
       planHash,
       approval: payload.approval || null,
     });
+    touchSession(payload.chatSessionId);
 
     const sourceInput = String((planJob.payload as PlanAgentRequest)?.input || '');
     scheduleExecuteLifecycle(executeJob, planResult, shouldSimulateFailure(sourceInput));
 
-    return {
-      success: true,
-      code: 200,
-      message: 'Execute job created',
-      data: {
+    return response(
+      {
         jobId: executeJob.jobId,
         status: executeJob.status,
         taskType: 'agent.execute',
       },
-    };
+      'Execute job created',
+    );
   });
 
   Mock.mock(/\/api\/v1\/agent\/jobs\/([^/?]+)\/messages$/, 'post', (options) => {
     const jobId = (options.url.match(/\/api\/v1\/agent\/jobs\/([^/?]+)\/messages/) || [])[1];
     const job = jobId ? getJobById(jobId) : null;
     if (!job) {
-      return {
-        success: false,
-        code: 404,
-        message: 'Job not found',
-        data: null,
-      };
+      return errorResponse(404, 'Job not found');
     }
 
     const payload = JSON.parse(options.body || '{}') as AgentInboxMessageRequest;
+    if (!validateControlStep(payload)) {
+      return errorResponse(422, `${payload.kind} requires metadata.step`);
+    }
     if (payload.kind === 'control.cancel') {
       finishJobCanceled(job);
     } else if (payload.kind === 'control.pause') {
@@ -475,17 +720,12 @@ export const setupAgentMocks = () => {
       resumeJob(job);
     }
 
-    const response: AgentInboxMessageResponse = {
+    const accepted: AgentInboxMessageResponse = {
       inboxMessageId: createMockId('inbox'),
       kind: payload.kind,
       acceptedAt: nowIso(),
     };
 
-    return {
-      success: true,
-      code: 200,
-      message: 'Agent message accepted',
-      data: response,
-    };
+    return response(accepted, 'Agent message accepted');
   });
 };
