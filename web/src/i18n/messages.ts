@@ -520,6 +520,7 @@ export type LocaleKey =
   | 'agent.v2.turn.controls.skip'
   | 'agent.v2.turn.controls.approve'
   | 'agent.v2.turn.controls.deny'
+  | 'agent.v2.turn.controls.boundaryHint'
   | 'agent.v2.turn.ask.placeholder'
   | 'agent.v2.turn.ask.send'
   | 'agent.v2.turn.ask.timeout'
@@ -1115,6 +1116,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.turn.controls.skip': '跳过此步',
     'agent.v2.turn.controls.approve': '批准',
     'agent.v2.turn.controls.deny': '拒绝',
+    'agent.v2.turn.controls.boundaryHint': '将在当前步骤结束后生效。',
     'agent.v2.turn.ask.placeholder': '输入回答…',
     'agent.v2.turn.ask.send': '发送',
     'agent.v2.turn.ask.timeout': '剩余 {value}',
@@ -1705,6 +1707,7 @@ export const LOCALE_MESSAGES: Record<AppLanguage, LocaleMessages> = {
     'agent.v2.turn.controls.skip': 'Skip step',
     'agent.v2.turn.controls.approve': 'Approve',
     'agent.v2.turn.controls.deny': 'Deny',
+    'agent.v2.turn.controls.boundaryHint': 'Takes effect after the current step finishes.',
     'agent.v2.turn.ask.placeholder': 'Type your answer…',
     'agent.v2.turn.ask.send': 'Send',
     'agent.v2.turn.ask.timeout': '{value} left',

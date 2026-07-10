@@ -3,6 +3,12 @@ import { nextTick } from 'vue';
 import type { ChatMessage } from './useAgentSession';
 
 vi.mock('../api/agent', () => ({
+  attachAgentChatSessionJobs: vi.fn(),
+  createAgentChatSession: vi.fn(),
+  deleteAgentChatSession: vi.fn(),
+  getAgentChatSession: vi.fn(),
+  listAgentChatSessions: vi.fn(),
+  patchAgentChatSession: vi.fn(),
   planAgentTask: vi.fn(),
   executeAgentPlan: vi.fn(),
   cancelAgentTurn: vi.fn(),
@@ -28,6 +34,17 @@ vi.mock('../store/locale', () => ({
 import * as agentApi from '../api/agent';
 
 const STORAGE_KEY = 'fileflash.agent.sessions.v1';
+
+let sessionCounter = 0;
+
+const mockSession = (id = `session-${++sessionCounter}`, title = 'New session') => ({
+  chatSessionId: id,
+  title,
+  archived: false,
+  messages: [],
+  createdAt: '2026-05-20T00:00:00Z',
+  updatedAt: '2026-05-20T00:00:00Z',
+});
 
 const planResult = {
   planJobId: 'job-1',
@@ -119,7 +136,29 @@ describe('useAgentSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionCounter = 0;
     vi.useFakeTimers();
+    vi.mocked(agentApi.createAgentChatSession).mockImplementation(async (data = {}) =>
+      mockSession(undefined, data.title || 'New session'),
+    );
+    vi.mocked(agentApi.listAgentChatSessions).mockResolvedValue({
+      items: [],
+      pagination: {
+        totalItems: 0,
+        totalPages: 1,
+        perPage: 100,
+        currentPage: 1,
+        hasPrev: false,
+        hasNext: false,
+      },
+    });
+    vi.mocked(agentApi.getAgentChatSession).mockImplementation(async (id) => mockSession(id));
+    vi.mocked(agentApi.deleteAgentChatSession).mockImplementation(async (id) => mockSession(id));
+    vi.mocked(agentApi.attachAgentChatSessionJobs).mockResolvedValue({ attachedCount: 0 });
+    vi.mocked(agentApi.patchAgentChatSession).mockImplementation(async (id, data) => ({
+      ...mockSession(id, data.title || 'New session'),
+      archived: Boolean(data.archived),
+    }));
     vi.mocked(agentApi.streamAgentJobEvents).mockRejectedValue(new Error('stream unavailable'));
   });
 
@@ -132,20 +171,18 @@ describe('useAgentSession', () => {
   it('createSession adds a session, sets active, persists to localStorage', async () => {
     const { default: useAgentSession } = await loadComposable();
     const { sessions, activeSessionId, createSession } = useAgentSession();
-    createSession();
+    await createSession();
     expect(sessions.value.length).toBe(1);
     expect(activeSessionId.value).toBe(sessions.value[0].id);
     await nextTick();
-    const stored = localStorage.getItem(STORAGE_KEY);
-    expect(stored).toBeTruthy();
-    expect(JSON.parse(stored!).length).toBe(1);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it('createSession reuses existing empty session and does not grow list', async () => {
     const { default: useAgentSession } = await loadComposable();
     const { sessions, activeSessionId, createSession } = useAgentSession();
-    const first = createSession();
-    const second = createSession();
+    const first = await createSession();
+    const second = await createSession();
 
     expect(sessions.value.length).toBe(1);
     expect(second.id).toBe(first.id);
@@ -167,18 +204,18 @@ describe('useAgentSession', () => {
     const { default: useAgentSession } = await loadComposable();
     const { sessions, taskInput, sendMessage, createSession } = useAgentSession();
 
-    createSession();
+    await createSession();
     taskInput.value = 'hello';
     await sendMessage();
 
     expect(sessions.value.length).toBe(1);
     const firstId = sessions.value[0].id;
 
-    const created = createSession();
+    const created = await createSession();
     expect(sessions.value.length).toBe(2);
     expect(created.id).not.toBe(firstId);
 
-    const reused = createSession();
+    const reused = await createSession();
     expect(sessions.value.length).toBe(2);
     expect(reused.id).toBe(created.id);
   });
@@ -564,7 +601,11 @@ describe('useAgentSession', () => {
     taskInput.value = 'hello';
 
     const sendTask = sendMessage();
-    await Promise.resolve();
+    // Flush microtasks until the turn is pushed (it appears before planAgentTask
+    // resolves, which is gated by planGate, so the turn is still pre-plan here).
+    for (let i = 0; i < 20 && !activeTurns.value[0]; i += 1) {
+      await Promise.resolve();
+    }
     const turn = activeTurns.value[0];
     await cancel(turn.agent);
     expect(turn.agent.status).toBe('canceled');
@@ -600,7 +641,9 @@ describe('useAgentSession', () => {
     taskInput.value = 'hello';
 
     const sendTask = sendMessage();
-    for (let i = 0; i < 6 && vi.mocked(agentApi.getAgentJob).mock.calls.length === 0; i += 1) {
+    // Flush microtasks until the poll loop has issued its first getAgentJob
+    // request (the poll is gated by firstPoll, so the turn is in-flight here).
+    for (let i = 0; i < 20 && vi.mocked(agentApi.getAgentJob).mock.calls.length === 0; i += 1) {
       await Promise.resolve();
     }
     const turn = activeTurns.value[0];
@@ -720,7 +763,7 @@ describe('useAgentSession', () => {
 
     const { default: useAgentSession } = await loadComposable();
     const { createSession, replyToAsk } = useAgentSession();
-    const session = createSession();
+    const session = await createSession();
     const msg: ChatMessage = {
       id: 'msg-e2e',
       role: 'agent',
@@ -760,7 +803,7 @@ describe('useAgentSession', () => {
 
     const { default: useAgentSession } = await loadComposable();
     const { createSession, pauseTurn, resumeTurn } = useAgentSession();
-    const session = createSession();
+    const session = await createSession();
     const msg: ChatMessage = {
       id: 'msg-pp',
       role: 'agent',
@@ -799,7 +842,7 @@ describe('useAgentSession', () => {
 
     const { default: useAgentSession } = await loadComposable();
     const { createSession, approveStep, denyStep, skipStep } = useAgentSession();
-    const session = createSession();
+    const session = await createSession();
     const msg: ChatMessage = {
       id: 'msg-controls',
       role: 'agent',
@@ -808,6 +851,7 @@ describe('useAgentSession', () => {
       events: [],
       timestamp: new Date().toISOString(),
       planJobId: '66',
+      progress: { step: 2, total: 3 },
     };
     session.messages.push(msg);
 
@@ -815,25 +859,50 @@ describe('useAgentSession', () => {
     await denyStep(msg);
     await skipStep(msg);
 
-    expect(agentApi.approveAgentStep).toHaveBeenCalledWith('66');
-    expect(agentApi.denyAgentStep).toHaveBeenCalledWith('66');
-    expect(agentApi.skipAgentStep).toHaveBeenCalledWith('66');
+    expect(agentApi.approveAgentStep).toHaveBeenCalledWith('66', 2);
+    expect(agentApi.denyAgentStep).toHaveBeenCalledWith('66', 2);
+    expect(agentApi.skipAgentStep).toHaveBeenCalledWith('66', 2);
   });
 
-  it('reload — sessions persist via localStorage', async () => {
+  it('reload loads sessions from backend', async () => {
+    vi.mocked(agentApi.listAgentChatSessions).mockResolvedValue({
+      items: [
+        {
+          chatSessionId: 'server-1',
+          title: 'TestRun',
+          archived: false,
+          createdAt: '2026-05-20T00:00:00Z',
+          updatedAt: '2026-05-20T00:00:00Z',
+        },
+      ],
+      pagination: {
+        totalItems: 1,
+        totalPages: 1,
+        perPage: 100,
+        currentPage: 1,
+        hasPrev: false,
+        hasNext: false,
+      },
+    });
+    vi.mocked(agentApi.getAgentChatSession).mockResolvedValue(mockSession('server-1', 'TestRun'));
+
     const { default: useAgentSession, __resetForTests } = await loadComposable();
-    const a = useAgentSession();
-    a.createSession();
-    a.sessions.value[0].title = 'TestRun';
+    useAgentSession();
+    await Promise.resolve();
     await nextTick();
 
     __resetForTests();
     const b = useAgentSession();
+    // The backend load (listAgentChatSessions -> getAgentChatSession) is
+    // fire-and-forget; flush microtasks until it completes (isLoaded flips).
+    for (let i = 0; i < 20 && !b.isLoaded.value; i += 1) {
+      await Promise.resolve();
+    }
     expect(b.sessions.value.length).toBe(1);
     expect(b.sessions.value[0].title).toBe('TestRun');
   });
 
-  it('reload deduplicates multiple empty sessions from localStorage', async () => {
+  it('migrates old localStorage sessions then removes the legacy key', async () => {
     const now = '2026-05-20T00:00:00Z';
     localStorage.setItem(
       STORAGE_KEY,
@@ -845,10 +914,12 @@ describe('useAgentSession', () => {
 
     const { default: useAgentSession } = await loadComposable();
     const { sessions, activeSessionId } = useAgentSession();
+    await Promise.resolve();
+    await nextTick();
 
-    expect(sessions.value.length).toBe(1);
-    expect(sessions.value[0].id).toBe('s-1');
-    expect(activeSessionId.value).toBe('s-1');
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')).toHaveLength(1);
+    expect(agentApi.createAgentChatSession).toHaveBeenCalled();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(sessions.value.length).toBe(0);
+    expect(activeSessionId.value).toBeNull();
   });
 });

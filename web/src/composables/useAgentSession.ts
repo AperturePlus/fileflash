@@ -1,10 +1,16 @@
-import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
+import { computed, onScopeDispose, ref, type Ref } from 'vue';
 import {
+  attachAgentChatSessionJobs,
   approveAgentStep,
   cancelAgentTurn,
+  createAgentChatSession,
+  deleteAgentChatSession,
   denyAgentStep,
   executeAgentPlan,
+  getAgentChatSession,
   getAgentJob,
+  listAgentChatSessions,
+  patchAgentChatSession,
   pauseAgentJob,
   planAgentTask,
   resumeAgentJob,
@@ -17,8 +23,10 @@ import { useLocaleStore } from '../store/locale';
 import { ui } from '../utils/ui';
 import type {
   AgentAskPayload,
+  AgentChatSessionDetail,
   AgentExecutionPolicy,
   AgentExecutionResult,
+  AgentChatMessage,
   AgentJobEvent,
   AgentPlanResult,
   AgentProgressPayload,
@@ -161,18 +169,8 @@ const loadSessions = (): { sessions: Session[]; shouldPersist: boolean } => {
   }
 };
 
-const persistSessions = (sessions: Session[]) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-  } catch {
-    // quota or privacy-mode: ignore
-  }
-};
-
 let msgCounter = 0;
 const nextMsgId = () => `msg-${Date.now()}-${++msgCounter}`;
-const nextSessionId = () =>
-  `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 interface SessionState {
   sessions: Ref<Session[]>;
@@ -185,6 +183,9 @@ interface SessionState {
   pollSleepTimers: Map<string, ReturnType<typeof setTimeout>>;
   streamControllers: Map<string, AbortController>;
   canceledTurns: Set<string>;
+  isLoaded: Ref<boolean>;
+  loadPromise: Promise<void> | null;
+  legacySessions: Session[];
 }
 
 let _state: SessionState | null = null;
@@ -192,7 +193,7 @@ let _state: SessionState | null = null;
 const getState = (): SessionState => {
   if (_state) return _state;
   const loaded = loadSessions();
-  const sessions = ref<Session[]>(loaded.sessions);
+  const sessions = ref<Session[]>([]);
   const activeSessionId = ref<string | null>(sessions.value[0]?.id ?? null);
   const policy = ref<AgentExecutionPolicy>('confirm');
   const reasoningEffort = ref<AgentReasoningEffort>('adaptive');
@@ -202,9 +203,7 @@ const getState = (): SessionState => {
   const pollSleepTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const streamControllers = new Map<string, AbortController>();
   const canceledTurns = new Set<string>();
-
-  watch(sessions, (v) => persistSessions(v), { deep: true });
-  if (loaded.shouldPersist) persistSessions(sessions.value);
+  const isLoaded = ref<boolean>(false);
 
   _state = {
     sessions,
@@ -217,6 +216,9 @@ const getState = (): SessionState => {
     pollSleepTimers,
     streamControllers,
     canceledTurns,
+    isLoaded,
+    loadPromise: null,
+    legacySessions: loaded.sessions,
   };
   return _state;
 };
@@ -234,10 +236,12 @@ export const __resetForTests = () => {
 };
 
 const buildPlanPayload = (
+  chatSessionId: string,
   input: string,
   policy: AgentExecutionPolicy,
   reasoningEffort: AgentReasoningEffort,
 ): PlanAgentRequest => ({
+  chatSessionId,
   input,
   context: {
     rootFolderId: 'root',
@@ -272,6 +276,31 @@ const extractErrorMessage = (error: unknown, fallback: string): string => {
     }
   }
   return fallback;
+};
+
+const toLocalMessage = (message: AgentChatMessage): ChatMessage => ({
+  id: message.id,
+  role: message.role,
+  content: message.content || '',
+  status: (message.status as MsgStatus) || 'succeeded',
+  planJobId: message.planJobId || undefined,
+  planHash: message.planHash || undefined,
+  planResult: message.planResult as AgentPlanResult | undefined,
+  executeJobId: message.executeJobId || undefined,
+  executeResult: message.executeResult as AgentExecutionResult | undefined,
+  events: Array.isArray(message.events) ? message.events : [],
+  errorMessage: message.errorMessage || undefined,
+  timestamp: message.timestamp,
+  pendingAsk: message.pendingAsk as PendingAsk | undefined,
+});
+
+const firstJobIds = (session: Session): string[] => {
+  const out: string[] = [];
+  for (const message of session.messages) {
+    if (message.planJobId) out.push(message.planJobId);
+    if (message.executeJobId) out.push(message.executeJobId);
+  }
+  return [...new Set(out)];
 };
 
 export default function useAgentSession() {
@@ -333,6 +362,60 @@ export default function useAgentSession() {
   const ensureTurnNotCanceled = (msg: ChatMessage): boolean =>
     !isTurnCanceled(msg) && msg.status !== 'canceled';
 
+  const sessionFromDetail = (detail: AgentChatSessionDetail): Session => ({
+    id: detail.chatSessionId,
+    title: detail.title,
+    messages: (detail.messages || []).map(toLocalMessage),
+    createdAt: detail.createdAt,
+    updatedAt: detail.updatedAt,
+  });
+
+  const migrateLegacySessions = async (): Promise<void> => {
+    if (!s.legacySessions.length) return;
+    const legacy = [...s.legacySessions];
+    for (const oldSession of legacy) {
+      const created = await createAgentChatSession({ title: oldSession.title });
+      const jobIds = firstJobIds(oldSession);
+      if (jobIds.length) {
+        await attachAgentChatSessionJobs(created.chatSessionId, { jobIds });
+      }
+    }
+    localStorage.removeItem(STORAGE_KEY);
+    s.legacySessions = [];
+  };
+
+  const ensureLoaded = async (): Promise<void> => {
+    if (s.isLoaded.value) return;
+    if (s.loadPromise) return s.loadPromise;
+    s.loadPromise = (async () => {
+      try {
+        await migrateLegacySessions();
+        const list = await listAgentChatSessions({ page: 1, perPage: 100 });
+        const details = await Promise.all(
+          list.items.map((item) =>
+            getAgentChatSession(item.chatSessionId).catch(() => null),
+          ),
+        );
+        const next = details
+          .filter((item): item is AgentChatSessionDetail => Boolean(item))
+          .map(sessionFromDetail);
+        s.sessions.value = next;
+        s.activeSessionId.value = next[0]?.id ?? null;
+      } catch {
+        if (s.legacySessions.length) {
+          s.sessions.value = s.legacySessions;
+          s.activeSessionId.value = s.sessions.value[0]?.id ?? null;
+        }
+      } finally {
+        s.isLoaded.value = true;
+        s.loadPromise = null;
+      }
+    })();
+    return s.loadPromise;
+  };
+
+  void ensureLoaded();
+
   const startPollLoop = async (
     key: string,
     msg: ChatMessage,
@@ -362,7 +445,8 @@ export default function useAgentSession() {
     await run();
   };
 
-  const createSession = () => {
+  const createSession = async (): Promise<Session> => {
+    await ensureLoaded();
     const empty = s.sessions.value.find(isEmptySession);
     if (empty) {
       stopAllPolling();
@@ -371,32 +455,46 @@ export default function useAgentSession() {
       return empty;
     }
 
-    const id = nextSessionId();
+    const created = await createAgentChatSession({ title: 'New session' });
     const now = new Date().toISOString();
     const session: Session = {
-      id,
-      title: 'New session',
+      id: created.chatSessionId,
+      title: created.title,
       messages: [],
-      createdAt: now,
-      updatedAt: now,
+      createdAt: created.createdAt || now,
+      updatedAt: created.updatedAt || now,
     };
     s.sessions.value.unshift(session);
-    s.activeSessionId.value = id;
+    s.activeSessionId.value = session.id;
     s.taskInput.value = '';
     stopAllPolling();
-    return session;
+    // Return the reactive proxy (not the raw local object) so that mutations
+    // like session.messages.push(...) are tracked by Vue's reactivity system.
+    return s.sessions.value[0];
   };
 
-  const switchSession = (id: string) => {
+  const switchSession = async (id: string): Promise<void> => {
+    await ensureLoaded();
     if (s.activeSessionId.value === id) return;
     stopAllPolling();
     s.activeSessionId.value = id;
     s.taskInput.value = '';
+    const target = s.sessions.value.find((session) => session.id === id);
+    if (target && target.messages.length === 0) {
+      try {
+        const detail = await getAgentChatSession(id);
+        Object.assign(target, sessionFromDetail(detail));
+      } catch {
+        // keep existing summary-only item
+      }
+    }
   };
 
-  const deleteSession = (id: string) => {
+  const deleteSession = async (id: string): Promise<void> => {
+    await ensureLoaded();
     const idx = s.sessions.value.findIndex((c) => c.id === id);
     if (idx === -1) return;
+    await deleteAgentChatSession(id);
     const target = s.sessions.value[idx];
     target.messages.forEach((msg) => {
       clearTurnCanceled(msg);
@@ -429,7 +527,7 @@ export default function useAgentSession() {
     s.isSending.value = false;
   };
 
-  const ensureSession = (): Session => activeSession.value ?? createSession();
+  const ensureSession = async (): Promise<Session> => activeSession.value ?? createSession();
 
   const appendAgentEvent = (msg: ChatMessage, event: AgentJobEvent) => {
     if (msg.events.some((item) => item.id === event.id)) return;
@@ -601,9 +699,10 @@ export default function useAgentSession() {
   }
 
   async function sendMessage(): Promise<void> {
+    await ensureLoaded();
     const input = s.taskInput.value.trim();
     if (!input || s.isSending.value) return;
-    const session = ensureSession();
+    const session = await ensureSession();
     s.isSending.value = true;
 
     const now = new Date().toISOString();
@@ -627,6 +726,9 @@ export default function useAgentSession() {
     session.updatedAt = now;
     if (session.title === 'New session') {
       session.title = input.slice(0, 40) + (input.length > 40 ? '…' : '');
+      void patchAgentChatSession(session.id, { title: session.title }).catch(() => {
+        // Local title stays responsive; the next session load will reconcile backend state.
+      });
     }
     s.taskInput.value = '';
 
@@ -634,7 +736,9 @@ export default function useAgentSession() {
     clearTurnCanceled(reactiveAgent);
 
     try {
-      const res = await planAgentTask(buildPlanPayload(input, s.policy.value, s.reasoningEffort.value));
+      const res = await planAgentTask(
+        buildPlanPayload(session.id, input, s.policy.value, s.reasoningEffort.value),
+      );
       reactiveAgent.planJobId = res.jobId;
       if (isTurnCanceled(reactiveAgent) || reactiveAgent.status === 'canceled') {
         try {
@@ -661,6 +765,8 @@ export default function useAgentSession() {
   }
 
   async function runExecute(msg: ChatMessage): Promise<void> {
+    const session = activeSession.value;
+    if (!session) return;
     if (!msg.planResult || !msg.planHash) return;
     if (msg.executeJobId) return;
     if (msg.status !== 'succeeded') return;
@@ -689,6 +795,7 @@ export default function useAgentSession() {
 
     try {
       const res = await executeAgentPlan({
+        chatSessionId: session.id,
         planJobId: msg.planResult.planJobId,
         planHash: msg.planHash,
         approval: {
@@ -720,6 +827,13 @@ export default function useAgentSession() {
 
   const activeJobId = (msg: ChatMessage): string | undefined =>
     msg.executeJobId || msg.planJobId;
+
+  const currentControlStep = (msg: ChatMessage): number | null => {
+    if (msg.progress?.step) return msg.progress.step;
+    const actions = msg.planResult?.proposedActions || [];
+    const risky = actions.find((action) => action.riskLevel === 'high' || action.requiresConfirmation);
+    return risky?.step || actions[0]?.step || null;
+  };
 
   async function replyToAsk(msg: ChatMessage, value: unknown): Promise<void> {
     const jobId = activeJobId(msg);
@@ -761,8 +875,10 @@ export default function useAgentSession() {
   async function approveStep(msg: ChatMessage): Promise<void> {
     const jobId = activeJobId(msg);
     if (!jobId) return;
+    const step = currentControlStep(msg);
+    if (!step) return;
     try {
-      await approveAgentStep(jobId);
+      await approveAgentStep(jobId, step);
     } catch (error) {
       msg.errorMessage = extractErrorMessage(error, 'Approve failed.');
     }
@@ -771,8 +887,10 @@ export default function useAgentSession() {
   async function denyStep(msg: ChatMessage): Promise<void> {
     const jobId = activeJobId(msg);
     if (!jobId) return;
+    const step = currentControlStep(msg);
+    if (!step) return;
     try {
-      await denyAgentStep(jobId);
+      await denyAgentStep(jobId, step);
     } catch (error) {
       msg.errorMessage = extractErrorMessage(error, 'Deny failed.');
     }
@@ -781,8 +899,10 @@ export default function useAgentSession() {
   async function skipStep(msg: ChatMessage): Promise<void> {
     const jobId = activeJobId(msg);
     if (!jobId) return;
+    const step = currentControlStep(msg);
+    if (!step) return;
     try {
-      await skipAgentStep(jobId);
+      await skipAgentStep(jobId, step);
     } catch (error) {
       msg.errorMessage = extractErrorMessage(error, 'Skip failed.');
     }
@@ -821,6 +941,7 @@ export default function useAgentSession() {
     reasoningEffort: s.reasoningEffort,
     taskInput: s.taskInput,
     isSending: s.isSending,
+    isLoaded: s.isLoaded,
     createSession,
     switchSession,
     deleteSession,
