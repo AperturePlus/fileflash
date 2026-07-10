@@ -61,6 +61,11 @@ class BackgroundJob(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(255))
     agent_phase: Mapped[str | None] = mapped_column(String(32))
     cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime)
+    chat_session_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("agent_chat_session.chat_session_id", ondelete="CASCADE"),
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
     requested_by: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("user.user_id", ondelete="SET NULL"),

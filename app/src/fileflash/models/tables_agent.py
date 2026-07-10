@@ -348,6 +348,38 @@ class AgentWorkSession(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class AgentChatSession(Base):
+    __tablename__ = "agent_chat_session"
+    __table_args__ = (
+        Index(
+            "idx_agent_chat_session_user_deleted_updated",
+            "user_id",
+            "deleted_at",
+            text("updated_at DESC"),
+        ),
+    )
+
+    chat_session_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("user.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("FALSE"))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
 class AgentInboxMessage(Base):
     __tablename__ = "agent_inbox_message"
     __table_args__ = (
@@ -396,6 +428,7 @@ class AgentInboxMessage(Base):
 
 __all__ = [
     "AgentActionLog",
+    "AgentChatSession",
     "AgentInboxMessage",
     "AgentMcpServer",
     "AgentMemory",
