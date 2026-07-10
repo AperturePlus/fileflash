@@ -37,6 +37,8 @@ class AgentWorkerConsumer:
         self._event_bus = event_bus or build_agent_event_bus(settings=self._settings)
 
     async def run(self) -> None:
+        if not self._settings.redis_url:
+            raise RuntimeError("REDIS_URL is required for agent worker event streaming")
         logger.info(
             "Agent worker started queue=%s group=%s concurrency=%s",
             self._settings.agent_queue_stream,

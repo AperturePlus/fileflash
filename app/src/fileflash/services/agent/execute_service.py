@@ -7,7 +7,7 @@ from ...agents.harness.policy import classify_tool_risk
 from ...core.errors import ApiError
 from ...core.settings import Settings
 from ...models import BackgroundJob
-from ...repositories import AgentPlanRepository, AgentWorkSessionRepository
+from ...repositories import AgentChatSessionRepository, AgentPlanRepository, AgentWorkSessionRepository
 from ...schemas.agent import AgentProposedAction, ExecuteAgentRequest, ExecuteAgentResponse
 from ..background_jobs import BackgroundJobService
 
@@ -21,12 +21,14 @@ class ExecuteService:
         jobs: BackgroundJobService,
         plans: AgentPlanRepository,
         work_sessions: AgentWorkSessionRepository,
+        chat_sessions: AgentChatSessionRepository,
     ) -> None:
         self.db = db
         self.settings = settings
         self.jobs = jobs
         self.plans = plans
         self.work_sessions = work_sessions
+        self.chat_sessions = chat_sessions
 
     async def enqueue_execute(
         self,
@@ -37,6 +39,14 @@ class ExecuteService:
         if not self.settings.agent_enabled:
             raise ApiError(status_code=503, code=503, message="Agent runtime is disabled")
 
+        chat_session_id = _parse_chat_session_id(payload.chat_session_id)
+        chat_session = await self.chat_sessions.get_active(
+            chat_session_id=chat_session_id,
+            user_id=user_id,
+        )
+        if chat_session is None:
+            raise ApiError(status_code=404, code=404, message="Agent chat session not found")
+
         plan_job_id = _parse_job_id(payload.plan_job_id)
         plan_job = await self.db.scalar(
             select(BackgroundJob).where(
@@ -44,6 +54,8 @@ class ExecuteService:
                     BackgroundJob.job_id == plan_job_id,
                     BackgroundJob.requested_by == user_id,
                     BackgroundJob.task_type == "agent.plan",
+                    BackgroundJob.chat_session_id == chat_session_id,
+                    BackgroundJob.deleted_at.is_(None),
                 )
             )
         )
@@ -98,6 +110,7 @@ class ExecuteService:
             max_attempts=1,
             priority=100,
             agent_phase="executing",
+            chat_session_id=chat_session_id,
         )
         return ExecuteAgentResponse(
             job_id=str(job.job_id),
@@ -113,6 +126,16 @@ def _parse_job_id(raw: str) -> int:
         raise ApiError(status_code=400, code=400, message="Invalid planJobId") from exc
     if value <= 0:
         raise ApiError(status_code=400, code=400, message="Invalid planJobId")
+    return value
+
+
+def _parse_chat_session_id(raw: str) -> int:
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ApiError(status_code=400, code=400, message="Invalid chatSessionId") from exc
+    if value <= 0:
+        raise ApiError(status_code=400, code=400, message="Invalid chatSessionId")
     return value
 
 
