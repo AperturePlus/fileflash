@@ -1,5 +1,5 @@
-from .registry import UnknownTaskTypeError, dispatch_task
 from .archive import run_archive_extract, run_archive_preview
+from .registry import UnknownTaskTypeError, dispatch_task
 from .scan import run_dangerous_file_scan
 from .transcode import run_media_transcode
 

@@ -10,7 +10,13 @@ import pytest
 from fileflash.core.errors import ApiError
 from fileflash.core.settings import Settings
 from fileflash.models.enums import UploadPartStatus, UploadTaskStatus
-from fileflash.models.tables_storage import File, FileMediaMetadata, StorageObject, UploadTask, UploadTaskPart
+from fileflash.models.tables_storage import (
+    File,
+    FileMediaMetadata,
+    StorageObject,
+    UploadTask,
+    UploadTaskPart,
+)
 from fileflash.s3.minio_client import ObjectStat, ObjectStorageAuthError, ObjectWriteResult
 from fileflash.schemas.file import MergeChunksRequest, MergeChunksResponse, UploadPreflightRequest
 from fileflash.services.upload import UploadService

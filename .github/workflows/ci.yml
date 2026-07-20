@@ -50,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-groups
 
+      - name: Lint (ruff)
+        run: uv run ruff check src tests
+
       - name: Start PostgreSQL and run migrations
         working-directory: ${{ github.workspace }}
         run: |
@@ -84,7 +87,7 @@ jobs:
           docker inspect --format='{{json .State.Health.Status}}' redis | grep healthy > /dev/null || (docker compose -f docker/redis/docker-compose.yaml logs redis && exit 1)
 
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest --cov=fileflash --cov-report=term-missing
 
       - name: Stop infrastructure
         if: ${{ always() }}
@@ -95,7 +98,7 @@ jobs:
           docker compose -f docker/postgresql-16/docker-compose.yaml down -v --remove-orphans
 
   web:
-    name: Web (typecheck + build)
+    name: Web (typecheck + test + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -124,6 +127,9 @@ jobs:
 
       - name: Type check
         run: bun run check
+
+      - name: Run tests
+        run: bun run test
 
       - name: Build
         run: bun run build

@@ -5,10 +5,8 @@ import hashlib
 import io
 import logging
 import os
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
-from typing import Iterable
-
-from collections.abc import AsyncIterator
 
 from minio import Minio
 from minio.commonconfig import ComposeSource
@@ -69,7 +67,7 @@ class MinioObjectStorageClient:
         )
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> "MinioObjectStorageClient":
+    def from_settings(cls, settings: Settings) -> MinioObjectStorageClient:
         return cls(
             endpoint=settings.object_storage_endpoint,
             access_key=settings.object_storage_access_key,

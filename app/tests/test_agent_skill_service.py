@@ -9,7 +9,12 @@ from fileflash.core.errors import ApiError
 from fileflash.models import AgentSkill
 from fileflash.models.enums import AgentSkillVisibility
 from fileflash.repositories import AgentSkillRepository
-from fileflash.schemas.agent_skill import CreateAgentSkillRequest, ImportAgentSkillItem, ImportAgentSkillsRequest, UpdateAgentSkillRequest
+from fileflash.schemas.agent_skill import (
+    CreateAgentSkillRequest,
+    ImportAgentSkillItem,
+    ImportAgentSkillsRequest,
+    UpdateAgentSkillRequest,
+)
 from fileflash.services.agent.skill_service import SkillService
 
 

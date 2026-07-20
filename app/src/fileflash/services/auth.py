@@ -9,7 +9,13 @@ from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
-from ..core.security import create_access_token, create_refresh_token, get_password_hash, hash_token, verify_password
+from ..core.security import (
+    create_access_token,
+    create_refresh_token,
+    get_password_hash,
+    hash_token,
+    verify_password,
+)
 from ..core.settings import Settings
 from ..db.transaction import (
     apply_local_lock_timeout,
@@ -27,7 +33,12 @@ from ..models.tables_identity import (
     UserSession,
 )
 from ..models.tables_storage import File, Folder
-from ..schemas.auth import ForgotPasswordResponse, RegisterRequest, RegisterResponseData, TokenResponse
+from ..schemas.auth import (
+    ForgotPasswordResponse,
+    RegisterRequest,
+    RegisterResponseData,
+    TokenResponse,
+)
 from ..schemas.common import PaginatedData, PaginationMeta
 from ..schemas.user import (
     ActivityItem,
@@ -38,11 +49,19 @@ from ..schemas.user import (
     UpdateAvatarRequest,
     UpdateProfileRequest,
     UpdateUserPreferenceRequest,
-    User as UserSchema,
-    UserPreference as UserPreferenceSchema,
     UserProfile,
 )
-from .email_delivery import EmailDeliveryConfigurationError, EmailDeliveryError, VerificationEmailDeliveryService
+from ..schemas.user import (
+    User as UserSchema,
+)
+from ..schemas.user import (
+    UserPreference as UserPreferenceSchema,
+)
+from .email_delivery import (
+    EmailDeliveryConfigurationError,
+    EmailDeliveryError,
+    VerificationEmailDeliveryService,
+)
 from .messaging import AuthEventPublisher
 from .rate_limiter import RedisRateLimiter
 from .registration_email_domain_rule import RegistrationEmailDomainRuleService

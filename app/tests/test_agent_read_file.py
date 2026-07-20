@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from fileflash.agents.harness.router import ToolCall, ToolRouter
 from fileflash.agents.harness.tool_registry import REGISTRY
 from fileflash.core.errors import ApiError
 

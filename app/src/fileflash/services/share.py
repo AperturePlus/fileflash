@@ -38,10 +38,12 @@ from ..schemas.share import (
     GetSharesQuery,
     SaveShareRequest,
     SaveShareResponse,
-    Share as ShareSchema,
     SharedItemInfo,
     ShareSettings,
     UpdateShareSettingsRequest,
+)
+from ..schemas.share import (
+    Share as ShareSchema,
 )
 
 logger = logging.getLogger(__name__)

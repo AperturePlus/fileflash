@@ -6,7 +6,13 @@ from ..core.deps import get_auth_service, get_current_user, get_settings_dep
 from ..core.errors import api_success
 from ..core.settings import Settings
 from ..models.tables_identity import User
-from ..schemas.user import ChangePasswordRequest, GetActivityLogQuery, UpdateAvatarRequest, UpdateProfileRequest, UpdateUserPreferenceRequest
+from ..schemas.user import (
+    ChangePasswordRequest,
+    GetActivityLogQuery,
+    UpdateAvatarRequest,
+    UpdateProfileRequest,
+    UpdateUserPreferenceRequest,
+)
 from ..services.auth import AuthService
 
 router = APIRouter(prefix="/me", tags=["me"])

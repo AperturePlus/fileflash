@@ -6,7 +6,12 @@ from datetime import UTC, datetime, timedelta
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from fileflash.core.deps import get_current_user, get_file_service, get_folder_service, get_settings_dep
+from fileflash.core.deps import (
+    get_current_user,
+    get_file_service,
+    get_folder_service,
+    get_settings_dep,
+)
 from fileflash.core.errors import ApiError, api_error_handler
 from fileflash.core.security import create_file_preview_token
 from fileflash.core.settings import Settings

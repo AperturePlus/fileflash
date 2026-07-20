@@ -15,6 +15,7 @@ from ...core.settings import Settings, get_settings
 from ...models import AgentPlan, AgentSkill, BackgroundJob, File, Folder
 from ...models.enums import AgentExecutionPolicy as DbAgentExecutionPolicy
 from ...models.enums import FileStatus, FolderStatus, FolderType
+from ...repositories import AgentSettingsRepository, AgentSkillRepository
 from ...repositories.agent.contracts import AgentSkillCatalogEntry
 from ...schemas.agent import (
     AgentChosenSkill,
@@ -27,7 +28,6 @@ from ...schemas.agent import (
 from ..harness.ask import AskProtocol, AskTimedOut
 from ..harness.event_bus import AgentEventBus
 from ..harness.permission import (
-    EffectivePermission,
     PermissionResolver,
     _apply_setting_defaults,
 )
@@ -37,7 +37,6 @@ from ..harness.skill_tool import bind_skill_in_planner  # noqa: F401  (registers
 from ..harness.tool_registry import REGISTRY, ToolContext
 from .llm import AnthropicPlannerClient, PlannerClient
 from .reference_rules import is_symbolic_id_placeholder, parse_step_reference
-from ...repositories import AgentSettingsRepository, AgentSkillRepository
 
 
 class PlanRunner:

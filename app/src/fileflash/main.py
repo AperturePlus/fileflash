@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 import logging
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
@@ -9,7 +9,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .core import api_error_handler, get_settings, http_exception_handler, validation_exception_handler
+from .core import (
+    api_error_handler,
+    get_settings,
+    http_exception_handler,
+    validation_exception_handler,
+)
 from .core.deps import get_object_storage, get_rate_limiter
 from .core.errors import ApiError, api_success
 from .core.middleware import EmailVerificationGateMiddleware

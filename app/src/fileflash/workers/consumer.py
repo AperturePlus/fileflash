@@ -19,8 +19,7 @@ from ..services.upload import UploadService
 from .bootstrap import WorkerRuntimeConfig, build_worker_runtime_config, create_process_pool
 from .contracts import WorkerJobMessage
 from .dispatcher import PicklableRemoteTaskError, execute_task
-from .effects import apply_task_effects
-from .effects import mark_transcode_failed, mark_transcode_running
+from .effects import apply_task_effects, mark_transcode_failed, mark_transcode_running
 from .repository import (
     get_retry_delay_seconds,
     mark_job_failed_or_retrying,

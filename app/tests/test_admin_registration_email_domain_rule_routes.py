@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 
 from fileflash.core.deps import get_registration_email_domain_rule_service, require_admin
 from fileflash.core.errors import ApiError, api_error_handler
-from fileflash.schemas.registration_email_domain_rule import RegistrationEmailDomainRuleItem
 from fileflash.routers.admin_registration_email_domain_rules import router as admin_router
+from fileflash.schemas.registration_email_domain_rule import RegistrationEmailDomainRuleItem
 
 
 class StubRuleService:

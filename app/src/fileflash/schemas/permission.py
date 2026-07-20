@@ -16,7 +16,7 @@ class CreatePermissionRequest(CamelModel):
     permission: Literal["read", "write", "admin"]
 
     @model_validator(mode="after")
-    def validate_target(self) -> "CreatePermissionRequest":
+    def validate_target(self) -> CreatePermissionRequest:
         has_file = self.file_id is not None
         has_folder = self.folder_id is not None
         has_user = self.user_id is not None

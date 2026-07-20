@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File as FileParam, Form, UploadFile
+from fastapi import APIRouter, Depends, Form, UploadFile
+from fastapi import File as FileParam
 
 from ..core.deps import get_current_user, get_upload_service
 from ..core.errors import api_success

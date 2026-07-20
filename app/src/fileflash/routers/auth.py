@@ -1,10 +1,17 @@
 from __future__ import annotations
+
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from ..core.deps import get_auth_service, get_client_ip, get_current_user, get_settings_dep, get_user_agent
+from ..core.deps import (
+    get_auth_service,
+    get_client_ip,
+    get_current_user,
+    get_settings_dep,
+    get_user_agent,
+)
 from ..core.errors import ApiError, api_success
 from ..core.settings import Settings
 from ..models.tables_identity import User

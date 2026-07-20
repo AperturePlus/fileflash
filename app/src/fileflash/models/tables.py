@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from .pg import pg_enum
 from .tables_access_share import (
     Acl,
     FavoriteItem,

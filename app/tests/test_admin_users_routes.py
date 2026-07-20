@@ -9,7 +9,11 @@ from fastapi.testclient import TestClient
 from fileflash.core.deps import get_admin_users_service, require_admin
 from fileflash.core.errors import ApiError, api_error_handler
 from fileflash.routers.admin_users import router as admin_users_router
-from fileflash.schemas.admin.users import AdminUserItem, AdminUserUsageStats, UpdateUserStatusResponse
+from fileflash.schemas.admin.users import (
+    AdminUserItem,
+    AdminUserUsageStats,
+    UpdateUserStatusResponse,
+)
 from fileflash.schemas.common import PaginatedData, PaginationMeta
 
 

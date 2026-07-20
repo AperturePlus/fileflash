@@ -22,6 +22,11 @@
 *.ruff_cache/
 *.pytest_cache/
 
+# Coverage data produced by pytest-cov
+*.coverage
+.coverage.*
+htmlcov/
+
 # Local agent / test caches
 /.tmp/
 /.uv-cache/
