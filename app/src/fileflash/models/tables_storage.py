@@ -4,9 +4,9 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    CHAR,
     BigInteger,
     Boolean,
-    CHAR,
     ForeignKey,
     Identity,
     Index,

@@ -31,7 +31,7 @@ class PicklableRemoteTaskError(Exception):
         original_type: str,
         message: str,
         retryable_hint: bool | None,
-    ) -> "PicklableRemoteTaskError":
+    ) -> PicklableRemoteTaskError:
         return cls(
             original_type=original_type,
             message=message,

@@ -3,11 +3,11 @@ from __future__ import annotations
 import os
 import tempfile
 import zipfile
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import AsyncIterator, Literal
+from typing import Literal
 
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,14 @@ from ..db.transaction import (
     run_with_transaction_retry,
     to_retryable_concurrency_error,
 )
-from ..models.enums import FavoriteItemType, FileStatus, FolderStatus, FolderType, ShareStatus, UploadStatus
+from ..models.enums import (
+    FavoriteItemType,
+    FileStatus,
+    FolderStatus,
+    FolderType,
+    ShareStatus,
+    UploadStatus,
+)
 from ..models.tables_access_share import FavoriteItem, Share
 from ..models.tables_identity import User
 from ..models.tables_storage import File, FileMediaMetadata, Folder, StorageObject
@@ -33,9 +40,9 @@ from ..schemas.file import (
     BatchFilesRequest,
     BatchFilesResponse,
     BatchMoveItemResult,
+    ContentItem,
     DeleteFileResponse,
     DeleteFolderResponse,
-    ContentItem,
     FileDetails,
     FileItem,
     GetFilesQuery,

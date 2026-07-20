@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import quote
 
-from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType, MultipartSubtypeEnum
+from fastapi_mail import (
+    ConnectionConfig,
+    FastMail,
+    MessageSchema,
+    MessageType,
+    MultipartSubtypeEnum,
+)
 
 from ..core.settings import Settings
 

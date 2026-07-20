@@ -1,5 +1,6 @@
-from .engine import engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from .engine import engine
 
 SessionLocal = async_sessionmaker(
     bind=engine,

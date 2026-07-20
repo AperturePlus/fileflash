@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 from redis.asyncio import Redis
-from sqlalchemy import Float, and_, case, func, select
+from sqlalchemy import Float, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.errors import ApiError

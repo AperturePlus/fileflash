@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any
 
 from minio import Minio
 from minio.error import S3Error

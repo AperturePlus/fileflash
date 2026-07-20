@@ -11,7 +11,6 @@ from ..models.tables_storage import File, Folder, StorageObject
 from ..schemas.archive import ArchiveExtractRequest
 from .background_jobs import BackgroundJobService
 
-
 SupportedArchiveConflictStrategy = Literal["rename", "overwrite", "skip"]
 
 

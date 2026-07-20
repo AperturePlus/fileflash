@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.errors import ApiError
 from ...core.settings import Settings, get_settings
+from ...s3.minio_client import MinioObjectStorageClient
 from ...services.file import FileService
 from ...services.folder import FolderService
-from ...s3.minio_client import MinioObjectStorageClient
 from .tool_registry import REGISTRY, ToolContext
 
 

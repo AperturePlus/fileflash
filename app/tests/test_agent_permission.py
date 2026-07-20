@@ -88,7 +88,7 @@ async def test_effective_mime_intersection_empty_denies_content():
 
 from unittest.mock import AsyncMock  # noqa: E402
 
-from fileflash.agents.harness.policy import PolicyGuard, PolicyDecision  # noqa: E402
+from fileflash.agents.harness.policy import PolicyGuard  # noqa: E402
 from fileflash.agents.harness.tool_registry import ToolContext  # noqa: E402
 from fileflash.schemas.agent import AgentProposedAction  # noqa: E402
 
@@ -120,7 +120,6 @@ def _perm(
     high_risk=False,
     policy="confirm",
 ):
-    from fileflash.agents.harness.permission import EffectivePermission
     from fileflash.schemas.agent import AgentDataPolicy
 
     return EffectivePermission(

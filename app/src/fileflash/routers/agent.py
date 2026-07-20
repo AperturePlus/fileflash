@@ -24,12 +24,12 @@ from ..models.enums import AgentInboxKind, AgentInboxStatus
 from ..models.tables_identity import User
 from ..schemas.agent import (
     AgentChatSessionList,
-    AttachAgentJobsRequest,
-    CreateAgentChatSessionRequest,
     AgentInboxMessageRequest,
     AgentInboxMessageResponse,
     AgentJobEvent,
     AgentJobEventType,
+    AttachAgentJobsRequest,
+    CreateAgentChatSessionRequest,
     ExecuteAgentRequest,
     PatchAgentChatSessionRequest,
     PlanAgentRequest,

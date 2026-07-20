@@ -7,7 +7,11 @@ from ...agents.harness.policy import classify_tool_risk
 from ...core.errors import ApiError
 from ...core.settings import Settings
 from ...models import BackgroundJob
-from ...repositories import AgentChatSessionRepository, AgentPlanRepository, AgentWorkSessionRepository
+from ...repositories import (
+    AgentChatSessionRepository,
+    AgentPlanRepository,
+    AgentWorkSessionRepository,
+)
 from ...schemas.agent import AgentProposedAction, ExecuteAgentRequest, ExecuteAgentResponse
 from ..background_jobs import BackgroundJobService
 

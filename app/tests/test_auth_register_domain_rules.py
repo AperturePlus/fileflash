@@ -8,8 +8,8 @@ import pytest
 
 from fileflash.core.errors import ApiError
 from fileflash.core.settings import Settings
-from fileflash.schemas.user import User, UserPreference
 from fileflash.schemas.auth import RegisterRequest
+from fileflash.schemas.user import User, UserPreference
 from fileflash.services.auth import AuthService
 
 

@@ -30,7 +30,14 @@ from ..models.enums import (
     UploadStatus,
     UploadTaskStatus,
 )
-from ..models.tables_storage import File, FileMediaMetadata, Folder, StorageObject, UploadTask, UploadTaskPart
+from ..models.tables_storage import (
+    File,
+    FileMediaMetadata,
+    Folder,
+    StorageObject,
+    UploadTask,
+    UploadTaskPart,
+)
 from ..models.tables_worker import BackgroundJob
 from ..s3.minio_client import MinioObjectStorageClient, ObjectStorageError
 from ..schemas.file import (

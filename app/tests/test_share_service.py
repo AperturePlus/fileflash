@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 

@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends
 from ..core.deps import get_agent_skill_service, get_current_user, require_admin
 from ..core.errors import api_success
 from ..models.tables_identity import User
-from ..schemas.agent_skill import CreateAgentSkillRequest, ImportAgentSkillsRequest, ListAgentSkillsQuery, UpdateAgentSkillRequest
+from ..schemas.agent_skill import (
+    CreateAgentSkillRequest,
+    ImportAgentSkillsRequest,
+    ListAgentSkillsQuery,
+    UpdateAgentSkillRequest,
+)
 from ..services.agent.skill_service import SkillService
 
 router = APIRouter(prefix="/agent", tags=["agent"])

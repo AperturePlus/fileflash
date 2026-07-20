@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.errors import ApiError
